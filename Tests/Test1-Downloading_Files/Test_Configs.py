@@ -51,8 +51,7 @@ if __name__ == "__main__":
 
 """
 
-System_Context = """"""
-Model_Configs = """"""
+Model_Configs = ["docker build --tag=exercise-1 .","docker run --name exercise-1 -d exercise-1:latest",]
 Output_File_Location = """"""
 
 
