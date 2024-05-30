@@ -25,33 +25,12 @@ the zip file.
    Python package aiohttp. Also try using ThreadPoolExecutor in 
    Python to download the files. Also write unit tests to improve your skills.
 
-#### Download URIs are listed in the main.py file as follows:
-
-import requests
-
-download_uris = [
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2018_Q4.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q1.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q2.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q3.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q4.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2020_Q1.zip",
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2220_Q1.zip",
-]
-
-
-def main():
-    # your code here
-    pass
-
-
-if __name__ == "__main__":
-    main()
+#### Download URIs are listed in the main.py file
 
 
 """
 
-Model_Configs = ["docker build --tag=exercise-1 .","docker run --name exercise-1 -d exercise-1:latest",]
+Model_Configs = ""
 Output_File_Location = """"""
 
 
