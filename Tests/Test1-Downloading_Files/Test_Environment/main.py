@@ -12,7 +12,7 @@ download_uris = [
 
 
 def main():
-    print("IT DID STUFF")
+    print()
 
 
 if __name__ == "__main__":

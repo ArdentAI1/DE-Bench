@@ -2,7 +2,6 @@
 import docker
 import os
 import time
-from model import load_model
 
 def inc(x):
     return x + 1
@@ -53,7 +52,7 @@ def test_file_downloading():
 
     #import the model here
 
-    load_model(container_root, access_shell)
+    model.run_model()
 
 
     returned = access_shell(container, "python main.py")
