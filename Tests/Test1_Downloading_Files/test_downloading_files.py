@@ -2,13 +2,20 @@
 import docker
 import os
 import time
+import sys
+sys.path.append("C:/Users/schen/Documents/Ardent_AI/DE-Bench")
+
+from model import model_store
+from Tests.Test1_Downloading_Files import Test_Configs
 
 def inc(x):
     return x + 1
 
 
-def access_shell(container, command):
+def access_shell(container, command = None):
     # Start an interactive shell session in the container
+    if command is None:
+        return
     exec_id = container.exec_run(
         cmd=command)
 
@@ -20,10 +27,13 @@ def access_shell(container, command):
 
 
 def test_file_downloading():
+
+    
+
     # Create a Docker client object
     client = docker.from_env()
 
-    host_dir = os.path.abspath("Tests/Test1-Downloading_Files/Test_Environment")
+    host_dir = os.path.abspath("Tests/Test1_Downloading_Files/Test_Environment")
     container_root = "/app"
 
 
@@ -52,7 +62,9 @@ def test_file_downloading():
 
     #import the model here
 
-    model.run_model()
+    
+
+    model_store.run_model(user_input=Test_Configs.User_Input,code_environment_location = "/Test_Environment",shell_access=access_shell(container=container))
 
 
     returned = access_shell(container, "python main.py")

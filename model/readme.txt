@@ -1,1 +1,0 @@
-Use this folder to drop in your model. Export your model to the model.py file. That is grabbed by all the tests
