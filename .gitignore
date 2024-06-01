@@ -1,7 +1,9 @@
 __pycache__
 venv
-# Ignore everything in your_model
-your_model/*
+model/your_model/*
 
-# exception to the rule
-!your_model/.gitkeep 
+# But don't ignore the directory itself
+!model/your_model/
+
+# And don't ignore the placeholder file
+!model/your_model/.gitkeep
