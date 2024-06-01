@@ -3,6 +3,7 @@ import docker
 import os
 import time
 import sys
+from functools import partial
 sys.path.append("C:/Users/schen/Documents/Ardent_AI/DE-Bench")
 
 from model import model_store
@@ -62,9 +63,9 @@ def test_file_downloading():
 
     #import the model here
 
-    
+    shell_access_var = partial(access_shell, container)
 
-    model_store.run_model(user_input=Test_Configs.User_Input,code_environment_location = "/Test_Environment",shell_access=access_shell(container=container))
+    model_store.run_model(user_input=Test_Configs.User_Input,code_environment_location = "/Test_Environment",shell_access=shell_access_var)
 
 
     returned = access_shell(container, "echo hello world")
