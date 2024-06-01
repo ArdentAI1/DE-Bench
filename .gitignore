@@ -1,5 +1,6 @@
 __pycache__
 venv
+
 model/your_model/*
 
 # But don't ignore the directory itself
