@@ -6,7 +6,7 @@ import sys
 sys.path.append("C:/Users/schen/Documents/Ardent_AI/DE-Bench")
 
 from model import model_store
-from Tests.Test1_Downloading_Files import Test_Configs
+from Tests.Test4_Convert_Json_To_CSV_Ragged_Dir import Test_Configs
 
 def inc(x):
     return x + 1
@@ -33,7 +33,7 @@ def test_file_downloading():
     # Create a Docker client object
     client = docker.from_env()
 
-    host_dir = os.path.abspath("Tests/Test1_Downloading_Files/Test_Environment")
+    host_dir = os.path.abspath("Tests/Test4_Convert_Json_To_CSV_Ragged_Dir/Test_Environment")
     container_root = "/app"
 
 
@@ -78,7 +78,6 @@ def test_file_downloading():
     # Retrieve and print container logs
     logs = container.logs()
     print(f"Container logs:\n{logs}")
-
 
     container.stop()
     container.remove()
