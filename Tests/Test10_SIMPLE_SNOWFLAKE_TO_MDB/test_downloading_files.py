@@ -8,9 +8,13 @@ from dotenv import load_dotenv
 import importlib
 import pytest
 
+
 load_dotenv()
 sys.path.append(os.getenv('YOUR_ROOT_DIR'))
 current_dir = os.path.dirname(os.path.abspath(__file__))
+
+print("current dir")
+print(current_dir)
 
 from model import model_store
 
@@ -20,6 +24,7 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 
 Test_Configs = importlib.import_module(module_path)
+
 
 def inc(x):
     return x + 1
@@ -38,7 +43,7 @@ def access_shell(container, command = None):
 
    
 
-@pytest.mark.three
+@pytest.mark.ten
 def test_file_downloading():
 
     
@@ -91,6 +96,7 @@ def test_file_downloading():
     # Retrieve and print container logs
     logs = container.logs()
     print(f"Container logs:\n{logs}")
+
 
     container.stop()
     container.remove()

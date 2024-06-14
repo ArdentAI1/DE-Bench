@@ -12,9 +12,21 @@ import pytest
 load_dotenv()
 sys.path.append(os.getenv('YOUR_ROOT_DIR'))
 current_dir = os.path.dirname(os.path.abspath(__file__))
+print("current dir")
+print(current_dir)
 
 from model import model_store
-from Tests.Test7_DB_Migration_MDB_PostGre import Test_Configs
+
+
+# Construct the module path dynamically
+parent_dir_name = os.path.basename(current_dir)
+print()
+print(parent_dir_name)
+
+module_path = f"Tests.{parent_dir_name}.Test_Configs"
+
+Test_Configs = importlib.import_module(module_path)
+
 
 def inc(x):
     return x + 1
