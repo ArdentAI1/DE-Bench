@@ -5,6 +5,7 @@ import sys
 from functools import partial
 from dotenv import load_dotenv
 import importlib
+import pytest
 
 
 # Load environment variables from .env file
@@ -41,7 +42,7 @@ except ModuleNotFoundError:
 def inc(x):
     return x + 1
 
-
+@pytest.mark.one
 def access_shell(container, command=None):
     # Start an interactive shell session in the container
     if command is None:

@@ -6,6 +6,8 @@ import sys
 from functools import partial
 from dotenv import load_dotenv
 import importlib
+import pytest
+
 
 load_dotenv()
 sys.path.append(os.getenv('YOUR_ROOT_DIR'))
@@ -31,7 +33,7 @@ def access_shell(container, command = None):
 
    
 
-
+@pytest.mark.seven
 def test_file_downloading():
 
     
