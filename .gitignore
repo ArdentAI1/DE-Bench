@@ -8,3 +8,5 @@ model/your_model/*
 
 # And don't ignore the placeholder file
 !model/your_model/.gitkeep
+
+.env

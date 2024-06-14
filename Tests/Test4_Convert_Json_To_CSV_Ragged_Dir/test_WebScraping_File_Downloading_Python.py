@@ -14,7 +14,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 from model import model_store
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Construct the module path dynamically
 parent_dir_name = os.path.basename(current_dir)
