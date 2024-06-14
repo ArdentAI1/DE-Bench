@@ -4,11 +4,22 @@ import os
 import time
 import sys
 from functools import partial
+from dotenv import load_dotenv
+import importlib
 
-sys.path.append("C:/Users/schen/Documents/Ardent_AI/DE-Bench")
+load_dotenv()
+sys.path.append(os.getenv('YOUR_ROOT_DIR'))
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
 from model import model_store
-from Tests.Test2_WebScraping_File_Downloading_Python import Test_Configs
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct the module path dynamically
+parent_dir_name = os.path.basename(current_dir)
+module_path = f"Tests.{parent_dir_name}.Test_Configs"
+
+Test_Configs = importlib.import_module(module_path)
 
 def inc(x):
     return x + 1
@@ -35,7 +46,7 @@ def test_file_downloading():
     # Create a Docker client object
     client = docker.from_env()
 
-    host_dir = os.path.abspath("Tests/Test2_WebScraping_File_Downloading_Python/Test_Environment")
+    host_dir = os.path.abspath(f"Tests/{os.path.basename(current_dir)}/Test_Environment")
     container_root = "/app"
 
 

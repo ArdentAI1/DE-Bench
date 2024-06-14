@@ -4,7 +4,12 @@ import os
 import time
 import sys
 from functools import partial
-sys.path.append("C:/Users/schen/Documents/Ardent_AI/DE-Bench")
+from dotenv import load_dotenv
+import importlib
+
+load_dotenv()
+sys.path.append(os.getenv('YOUR_ROOT_DIR'))
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
 from model import model_store
 from Tests.Test7_DB_Migration_MDB_PostGre import Test_Configs
@@ -34,7 +39,7 @@ def test_file_downloading():
     # Create a Docker client object
     client = docker.from_env()
 
-    host_dir = os.path.abspath("Tests/Test1_Downloading_Files/Test_Environment")
+    host_dir = os.path.abspath(f"Tests/{os.path.basename(current_dir)}/Test_Environment")
     container_root = "/app"
 
 
