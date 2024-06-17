@@ -3,8 +3,6 @@ DE Bench: Can Agents Solve Real-World Data Engineering Problems?
 
 This is repository of real world problems for Data Engineering Agents to solve
 
-To see the results of our runs: https://ardentai.io/progress
-
 There is a README within each test folder to explain the problem and the tests
 
 To Run this testing yourself:
