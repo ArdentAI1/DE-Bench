@@ -3,7 +3,4 @@ venv
 
 # Ignore all files and subdirectories in the Model folder
 
-Model/Run_Model.py
-
-
 .env

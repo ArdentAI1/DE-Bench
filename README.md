@@ -19,6 +19,20 @@ To Run this testing yourself:
 5. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the neccesary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind
 
 
+Here's a block to copy
+
+<pre>
+<code>
+BENCHMARK_ROOT = ""
+MODEL_PATH = ""
+
+#Provider Stuff
+
+
+
+</code>
+</pre>
+
 
 
 
