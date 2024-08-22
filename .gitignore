@@ -1,14 +1,21 @@
-__pycache__
-venv
-
 # Ignore all files and subdirectories in the Model folder
 Model/**
 
 # But don't ignore the directory itself
 !Model/
 
+# But don't ignore the specific file that we need to track
+!Model/Run_Model.py
+
+# Ignore changes to the specific file
+Model/Run_Model.py
+
 # And don't ignore the placeholder file
 !Model/.gitkeep
 
+# Ignore other common files and directories
+__pycache__/
+venv/
 
+# Ignore environment configuration files
 .env

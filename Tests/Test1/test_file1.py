@@ -1,7 +1,7 @@
 # src/Tests/Test1_Subfolder/test_file1.py
 
 # Import from the Model directory
-from Model.some_module import run_model
+from Model.Run_Model import run_model
 
 # Import from the Functions directory
 from Functions.utility import helper_function
