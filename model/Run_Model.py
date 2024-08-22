@@ -6,12 +6,15 @@ import sys
 #import your AI model into this file
 
 
-def run_model():
+def run_model(container,task):
     #A Wrapper for your model to do things. 
+
+
+    print(task)
     
     
     
-    return "Model Output"
+    return "AI model prediction"
     
     
 
