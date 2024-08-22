@@ -2,13 +2,7 @@ __pycache__
 venv
 
 # Ignore all files and subdirectories in the Model folder
-Model/**
 
-# But don't ignore the directory itself
-!Model/
-
-# And don't ignore the placeholder file
-!Model/.gitkeep
 
 
 .env
