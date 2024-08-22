@@ -7,12 +7,20 @@ There is a README within each test folder to explain the problem and the tests
 
 To Run this testing yourself:
 
-1. Clone the repo
-2. Drop your model into the model/your_model folder. Link this model to be used by run_model in model/model_store
-3. Change the absolute path in the tests to your local
-4. MAKE SURE YOU HAVE DOCKER DESKTOP RUNNING (I forget this all the time)
-5. Run pytest -s to run the tests
-6. To run specific tests do pytest -m "number" where number is the test you want to run.
-  a. pytest -m "one" runs test 1   
+1. Clone the repo into wherever you want. Ideally a tests folder
+2. Set Environment variables
+  a. Set BENCHMARK_ROOT to the full path of the folder you clone the repo into
+  b. Set MODEL_PATH to the path to your model
+
+3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
+
+4. Use pytest to run. Pytest -m "TESTNAME" where TESTNAME is the name of the test to run a specific test
+
+5. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the neccesary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind
+
+
+
+
+
 
 
