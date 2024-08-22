@@ -4,15 +4,14 @@ import os
 import sys
 
 #import your AI model into this file
-from ai_model import predict 
 
 
 def run_model():
-    #a wrapper for you to drop your model in
+    #A Wrapper for your model to do things. 
 
-    answer = predict()
     
-    return answer
+    
+    return "Model Output"
     
     
 
