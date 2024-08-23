@@ -11,7 +11,7 @@ def load_docker(input_directory):
     dockerfile_path = os.path.join(script_dir, 'Dockerfile')
 
 
-    print(dockerfile_path)
+    #print(dockerfile_path)
     #Build the Docker image from the script's directory
     image, _ = client.images.build(path=script_dir, dockerfile=dockerfile_path, rm=True)
 

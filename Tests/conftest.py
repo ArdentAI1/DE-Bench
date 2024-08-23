@@ -1,6 +1,8 @@
+# conftest.py
 import sys
 import os
 from dotenv import load_dotenv
+import pytest
 
 def pytest_configure(config):
     print("Configuring pytest...")
@@ -19,3 +21,14 @@ def pytest_configure(config):
         model_path = os.path.abspath(model_path)
         if model_path not in sys.path:
             sys.path.insert(0, model_path)
+
+    # Imports part 2
+    from Functions.AWS.AWS_Initialize import initialize_aws # Import Initialize
+
+    # Initialize AWS resources for the test session
+    initialize_aws()
+
+def pytest_sessionfinish(session, exitstatus):
+    # Perform cleanup after all tests
+    from Functions.AWS.AWS_Cleanup import cleanup_aws
+    cleanup_aws()  # Call your cleanup function

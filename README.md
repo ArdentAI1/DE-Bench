@@ -14,7 +14,9 @@ To Run this testing yourself:
 
 3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
 
-4. Use pytest to run. Pytest -m "TESTNAME" where TESTNAME is the name of the test to run a specific test
+4. Install requirements.txt with pip install -r requirements.txt
+
+4. Use pytest to run. Pytest to run all or pytest -m "category" to run all tests of a specific category. Pytest supports and and or operators too. Something like pytest -m "one and two" will work.
 
 5. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the neccesary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind
 

@@ -6,7 +6,7 @@ import sys
 #import your AI model into this file
 
 
-def run_model(container,task):
+def run_model(container,task,configs):
     #A Wrapper for your model to do things. 
 
 
