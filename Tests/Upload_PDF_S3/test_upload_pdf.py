@@ -1,7 +1,7 @@
 # src/Tests/Test1_Subfolder/test_file1.py
 
 # Import from the Model directory
-from Model.Run_Model import run_model
+from model.Run_Model import run_model
 import os
 import importlib
 import pytest
@@ -35,7 +35,7 @@ def test_Download_File():
 
     aws_access_key_id = os.getenv('ACCESS_KEY_ID_AWS')
     aws_secret_access_key = os.getenv('SECRET_ACCESS_KEY_AWS')
-    aws_region = os.getenv('REGION_AWS')
+    aws_region = 'us-east-1'
 
 
     upload_script = f'''

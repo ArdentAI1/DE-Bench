@@ -6,29 +6,31 @@ import pytest
 
 def pytest_configure(config):
     print("Configuring pytest...")
+
     load_dotenv()  # Load environment variables from the .env file
 
-    # Get and set the test root directory
-    test_root = os.getenv('BENCHMARK_ROOT')
-    if test_root:
-        test_root = os.path.abspath(test_root)
-        if test_root not in sys.path:
-            sys.path.insert(0, test_root)
 
-    # Get and set the model path directory
-    model_path = os.getenv('MODEL_PATH')
-    if model_path:
-        model_path = os.path.abspath(model_path)
-        if model_path not in sys.path:
-            sys.path.insert(0, model_path)
+    #This allows absolute imports to work correctly by setting the current working directory to the root of the project
+    #This fixes import errors and make sure the directory doesn't shift when pytest runs
 
-    # Imports part 2
-    from Functions.AWS.AWS_Initialize import initialize_aws # Import Initialize
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.exists(project_root):
+            raise FileNotFoundError(f"Project root path does not exist: {project_root}")
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+    except Exception as e:
+        raise Exception(f"Error setting project root path: {str(e)}")
 
-    # Initialize AWS resources for the test session
-    initialize_aws()
+
+
+
+
+
 
 def pytest_sessionfinish(session, exitstatus):
-    # Perform cleanup after all tests
-    from Functions.AWS.AWS_Cleanup import cleanup_aws
-    cleanup_aws()  # Call your cleanup function
+
+
+    
+
+    print("Session finished")
