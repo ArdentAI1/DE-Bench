@@ -8,6 +8,7 @@ There is a README within each test folder to explain the problem and the tests
 To Run this testing yourself:
 
 1. Clone the repo into wherever you want. Ideally a tests folder
+
 2. Set Environment variables
   a. Set BENCHMARK_ROOT to the full path of the folder you clone the repo into
   b. Set MODEL_PATH to the path to your model
@@ -16,27 +17,17 @@ To Run this testing yourself:
 
 4. Install requirements.txt with pip install -r requirements.txt
 
-4. Use pytest to run. Pytest to run all or pytest -m "category" to run all tests of a specific category. Pytest supports and and or operators too. Something like pytest -m "one and two" will work.
+5. Configure your tools and permissions:
 
-5. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the neccesary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind
+MongoDB:
+- Required Role: dbAdmin
+- Permissions needed:
+  - Create/Delete Collections
+  - Create/Delete Databases
+  - Read/Write to Collections
 
+6. Use pytest to run. Pytest to run all or pytest -m "category" to run all tests of a specific category. Pytest supports and and or operators too. Something like pytest -m "one and two" will work.
 
-Here's a block to copy
+7. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the necessary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind.
 
-<pre>
-<code>
-BENCHMARK_ROOT = ""
-MODEL_PATH = ""
-
-#Provider Stuff
-
-
-
-</code>
-</pre>
-
-
-
-
-
-
+Environment Variables Template:

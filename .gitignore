@@ -1,6 +1,15 @@
 __pycache__
 venv
+dev_venv/
+
+Results/Test_Results.json
+Results/visualizations/
 
 # Ignore all files and subdirectories in the Model folder
 
 .env
+
+ardent-sdk/
+**/ardent_sdk/
+
+requirements-dev.txt
