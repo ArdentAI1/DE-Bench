@@ -1,34 +1,86 @@
 # conftest.py
 import sys
 import os
-from dotenv import load_dotenv
 import pytest
+import json
+from datetime import datetime
+from multiprocessing import Manager
+from dotenv import load_dotenv
+
+
+# Initialize a manager for a thread-safe list to store test results
+manager = Manager()
+test_results = manager.list()
 
 def pytest_configure(config):
     print("Configuring pytest...")
-    load_dotenv()  # Load environment variables from the .env file
 
-    # Get and set the test root directory
-    test_root = os.getenv('BENCHMARK_ROOT')
-    if test_root:
-        test_root = os.path.abspath(test_root)
-        if test_root not in sys.path:
-            sys.path.insert(0, test_root)
+    # Load environment variables from the .env file
+    load_dotenv()
 
-    # Get and set the model path directory
-    model_path = os.getenv('MODEL_PATH')
-    if model_path:
-        model_path = os.path.abspath(model_path)
-        if model_path not in sys.path:
-            sys.path.insert(0, model_path)
+    # Set the current working directory to the root of the project
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.exists(project_root):
+            raise FileNotFoundError(f"Project root path does not exist: {project_root}")
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+    except Exception as e:
+        raise Exception(f"Error setting project root path: {str(e)}")
 
-    # Imports part 2
-    from Functions.AWS.AWS_Initialize import initialize_aws # Import Initialize
+    # Initialize the model
+    from model.Initialize_Model import initialize_model
 
-    # Initialize AWS resources for the test session
-    initialize_aws()
+    initialize_model()
+
+def pytest_runtest_logreport(report):
+    #print("Report")
+    #print(report)
+    if report.when == 'call':
+        test_result = {
+            'nodeid': report.nodeid,
+            'outcome': report.outcome,
+            'duration': report.duration,
+            'longrepr': str(report.longrepr) if report.failed else None
+        }
+        test_results.append(test_result)
 
 def pytest_sessionfinish(session, exitstatus):
-    # Perform cleanup after all tests
-    from Functions.AWS.AWS_Cleanup import cleanup_aws
-    cleanup_aws()  # Call your cleanup function
+    from Configs.ArdentConfig import Ardent_Client
+
+    # Only the main process should aggregate and display results
+    if os.environ.get("PYTEST_XDIST_WORKER") is None:
+        total = len(test_results)
+        passed = sum(1 for result in test_results if result['outcome'] == 'passed')
+        failed = sum(1 for result in test_results if result['outcome'] == 'failed')
+        skipped = sum(1 for result in test_results if result['outcome'] == 'skipped')
+        total_duration = sum(result['duration'] for result in test_results)
+
+        #print("\nTest Session Summary:")
+        #print(f"Total tests: {total}")
+        #print(f"Passed: {passed}")
+        #print(f"Failed: {failed}")
+        #print(f"Skipped: {skipped}")
+        #print(f"Total duration: {total_duration:.2f} seconds")
+
+        #print("\nDetailed Test Results:")
+
+
+        results_json = {
+            "session_id": Ardent_Client.session_id,
+            "test_results": list(test_results)
+        }
+
+        for result in test_results:
+            #print("Result Object")
+            #print(result)
+
+
+            status = result['outcome'].capitalize()
+            #print(f"{status}: {result['nodeid']} ({result['duration']:.2f} seconds)")
+            #if result['longrepr']:
+            #    print(f"  Failure Reason: {result['longrepr']}")
+
+        # Optionally, save detailed results to a JSON file
+        with open("Results/Test_Results.json", "w") as f:
+            json.dump(results_json, f, indent=4)

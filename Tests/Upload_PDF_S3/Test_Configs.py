@@ -1,17 +1,3 @@
-import os
-from dotenv import load_dotenv
+User_Input = "Upload a pdf file to an S3 bucket. The file is located in the Tests/Upload_PDF_S3/test_file.pdf file. The bucket name is test-bucket-123. The file should be uploaded to the root of the bucket."
 
-
-User_Input = "Take the file test.pdf and upload it to the de-bench-testing s3 bucket"
-
-Configs = f"""
-
-Here are the configs for AWS: 
-
-Access Key: {os.getenv("ACCESS_KEY_ID_AWS")}
-
-Secret Key:{os.getenv("SECRET_ACCESS_KEY_AWS")}
-
-Region: {os.getenv("REGION_AWS")}
-
-"""
+Configs = ""
