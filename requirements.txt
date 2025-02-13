@@ -20,6 +20,7 @@ jmespath==1.0.1
 kiwisolver==1.4.7
 matplotlib==3.9.4
 motor==3.7.0
+mysql-connector-python==9.2.0
 numpy==2.0.2
 packaging==24.0
 pandas==2.2.3

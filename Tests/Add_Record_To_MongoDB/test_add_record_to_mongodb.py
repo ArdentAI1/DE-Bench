@@ -72,6 +72,8 @@ def test_add_mongodb_record():
 
 
 
+
+
     #we then check the record was added
     collection = db['test_collection']
     record = collection.find_one({"name": "John Doe", "age": 30})
@@ -79,6 +81,7 @@ def test_add_mongodb_record():
     assert record["name"] == "John Doe", "Name in record does not match"
     assert record["age"] == 30, "Age in record does not match"
     #assert True
+
 
     #now clean up
     db.drop_collection('test_collection')

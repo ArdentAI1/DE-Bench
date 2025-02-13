@@ -31,3 +31,13 @@ MongoDB:
 7. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the necessary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind.
 
 Environment Variables Template:
+
+
+
+
+
+
+
+Notes:
+
+-Tigerbeetle must be set up with VOPR for testing.
