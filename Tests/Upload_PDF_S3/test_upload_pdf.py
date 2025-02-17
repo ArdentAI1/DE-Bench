@@ -12,6 +12,7 @@ import os
 import importlib
 import pytest
 import boto3
+import time
 
 from Configs.ArdentConfig import Ardent_Client
 
@@ -34,7 +35,7 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.AWS
 @pytest.mark.S3
 @pytest.mark.Data_Env_Search
-def test_Download_File():
+def test_Download_File(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
     #we can add an option to do local runs with this container
@@ -83,7 +84,16 @@ def test_Download_File():
     #container.stop()
     
     # Validate the upload
-    assert True
     #assert file_exists_in_s3, "Uploaded file not found in the S3 bucket"
     #print("File was successfully uploaded and verified in S3.")
+   
+    #SECTION 2: RUN THE MODEL
+    start_time = time.time()
+    run_model(container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs)
+    end_time = time.time()
+    request.node.user_properties.append(("model_runtime", end_time - start_time))
+
+
+    assert True
+
    

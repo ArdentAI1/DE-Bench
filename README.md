@@ -41,3 +41,7 @@ Environment Variables Template:
 Notes:
 
 -Tigerbeetle must be set up with VOPR for testing.
+-Mongo must have permisions to create and drop collections and databases
+-Airflow must be set up with git sync enabled to the repo you provide
+-make sure your mySQL password and username are up to date. AWS sets defaults to rotate once a week...
+-Postgres must have the postgres db in it to function (i mean u shouldn't have deleted this anyway)

@@ -19,13 +19,13 @@ def create_visualizations(results):
     fig = plt.figure(figsize=(15, 10))
     fig.suptitle(f'Test Results Analysis\nSession ID: {results["session_id"]}', fontsize=14)
 
-    # 1. Test Duration Bar Chart
+    # 1. Model Runtime Bar Chart
     ax1 = plt.subplot(2, 2, 1)
     test_names = [result['nodeid'].split("::")[-1] for result in results['test_results']]
-    durations = [result['duration'] for result in results['test_results']]
+    model_runtimes = [result['model_runtime'] for result in results['test_results']]
     
-    sns.barplot(x=durations, y=test_names, ax=ax1)
-    ax1.set_title('Test Execution Duration')
+    sns.barplot(x=model_runtimes, y=test_names, ax=ax1)
+    ax1.set_title('Model Execution Duration')
     ax1.set_xlabel('Duration (seconds)')
     ax1.set_ylabel('Test Name')
 
@@ -48,23 +48,29 @@ def create_visualizations(results):
             autopct='%1.1f%%')
     ax2.set_title('Test Outcomes Distribution')
 
-    # 3. Test Duration Distribution
+    # 3. Model Runtime Distribution
     ax3 = plt.subplot(2, 2, 3)
-    sns.histplot(durations, ax=ax3, bins=10)
-    ax3.set_title('Test Duration Distribution')
+    sns.histplot(model_runtimes, ax=ax3, bins=10)
+    ax3.set_title('Model Runtime Distribution')
     ax3.set_xlabel('Duration (seconds)')
     ax3.set_ylabel('Count')
 
     # 4. Summary Statistics
     ax4 = plt.subplot(2, 2, 4)
     ax4.axis('off')
+    
+    # Calculate both total and model runtimes
+    total_durations = [result['duration'] for result in results['test_results']]
+    model_runtimes = [result['model_runtime'] for result in results['test_results']]
+    
     summary_text = (
         f"Summary Statistics\n\n"
         f"Total Tests: {len(results['test_results'])}\n"
-        f"Total Duration: {sum(durations):.2f}s\n"
-        f"Average Duration: {sum(durations)/len(durations):.2f}s\n"
-        f"Max Duration: {max(durations):.2f}s\n"
-        f"Min Duration: {min(durations):.2f}s\n"
+        f"Total Test Duration: {sum(total_durations):.2f}s\n"
+        f"Total Model Runtime: {sum(model_runtimes):.2f}s\n"
+        f"Average Model Runtime: {sum(model_runtimes)/len(model_runtimes):.2f}s\n"
+        f"Max Model Runtime: {max(model_runtimes):.2f}s\n"
+        f"Min Model Runtime: {min(model_runtimes):.2f}s\n"
         f"\nTest Outcomes:\n"
         f"Passed: {outcome_counts['passed']}\n"
         f"Failed: {outcome_counts['failed']}\n"

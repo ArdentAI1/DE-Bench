@@ -1,11 +1,6 @@
 User_Input = """
-Access the MySQL database to retrieve API keys for Plaid and Finch. Use these credentials to fetch transaction data, 
-then transform and store this data in the TigerBeetle database.
-
-The MySQL database contains the following tables:
-- plaid_access_tokens (company_id, access_token)
-- finch_access_tokens (company_id, access_token)
-
+Access the MySQL database to retrieve access tokens for Plaid and Finch. Use these access tokens to fetch transaction data, 
+then transform and store this data in the TigerBeetle database as transactions, correctly writing the data to tigerbeetle.
 The data should be transformed and stored in TigerBeetle with appropriate transaction records.
 """
 

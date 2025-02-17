@@ -4,6 +4,7 @@ import os
 import importlib
 import pytest
 from pymongo.errors import CollectionInvalid
+import time
 
 from Configs.ArdentConfig import Ardent_Client
 
@@ -23,8 +24,11 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.mongodb
 @pytest.mark.code_writing
 @pytest.mark.database
-def test_add_mongodb_record():
+def test_add_mongodb_record(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
+
+    request.node.user_properties.append(("user_query", Test_Configs.User_Input))
+
 
 
     #SECTION 1: SETUP THE TEST
@@ -64,9 +68,13 @@ def test_add_mongodb_record():
 
 
 
+
     #SECTION 2: RUN THE MODEL
     # Run the model which should add the record
-    run_model(container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs)
+    start_time = time.time()
+    model_result = run_model(container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs)
+    end_time = time.time()
+    request.node.user_properties.append(("model_runtime", end_time - start_time))
 
     #SECTION 3: VERIFY THE OUTCOMES
 
@@ -86,4 +94,7 @@ def test_add_mongodb_record():
     #now clean up
     db.drop_collection('test_collection')
     syncMongoClient.drop_database('test_database')
+
+
+    Ardent_Client.delete_config(config_id=result['specific_config']['id'])
     

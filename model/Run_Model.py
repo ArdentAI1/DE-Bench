@@ -26,10 +26,9 @@ def run_model(container,task,configs):
 
 
 
+
     
-    
-    
-    return "AI model prediction"
+    return result
     
     
 

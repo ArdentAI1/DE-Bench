@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# Establish the connection
 connection = mysql.connector.connect(
     host=os.getenv("MYSQL_HOST"),
     port=os.getenv("MYSQL_PORT"),

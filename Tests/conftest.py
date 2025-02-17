@@ -34,13 +34,19 @@ def pytest_configure(config):
     initialize_model()
 
 def pytest_runtest_logreport(report):
-    #print("Report")
-    #print(report)
     if report.when == 'call':
+        # Get model_runtime from user_properties
+        model_runtime = None
+        for name, value in report.user_properties:
+            if name == "model_runtime":
+                model_runtime = value
+                break
+        
         test_result = {
             'nodeid': report.nodeid,
             'outcome': report.outcome,
             'duration': report.duration,
+            'model_runtime': model_runtime,
             'longrepr': str(report.longrepr) if report.failed else None
         }
         test_results.append(test_result)
