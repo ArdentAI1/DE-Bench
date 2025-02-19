@@ -247,54 +247,123 @@ def test_postgres_to_mysql_pipeline(request):
         end_time = time.time()
         request.node.user_properties.append(("model_runtime", end_time - start_time))
 
+        time.sleep(10)
+
+        #we first need to merge the PR
+
+        input("We are now merging the pr")
+                # After model creates the PR, find and merge it
+        pulls = repo.get_pulls(state='open')
+        target_pr = None
+        for pr in pulls:
+            if pr.title == "Merge_Sales_Profit_Pipeline":  # Look for PR by title instead of branch
+                target_pr = pr
+                break
+        
+        if not target_pr:
+            raise Exception("PR 'Merge_Sales_Profit_Pipeline' not found")
+            
+        # Merge the PR
+        merge_result = target_pr.merge(
+            commit_title="Merge_Sales_Profit_Pipeline",
+            merge_method="squash"
+        )
+        
+        if not merge_result.merged:
+            raise Exception(f"Failed to merge PR: {merge_result.message}")
+
+
         # After creating the DAG, wait a bit for Airflow to detect it
         time.sleep(100)  # Give Airflow time to scan for new DAGs
 
-        input("waiting for input 2")
-
-
         # Trigger the DAG
-        # airflow_base_url = os.getenv("AIRFLOW_HOST")
-        # airflow_username = os.getenv("AIRFLOW_USERNAME")
-        # airflow_password = os.getenv("AIRFLOW_PASSWORD")
+        airflow_base_url = os.getenv("AIRFLOW_HOST")
+        airflow_username = os.getenv("AIRFLOW_USERNAME")
+        airflow_password = os.getenv("AIRFLOW_PASSWORD")
         
-        # # Wait for DAG to appear and trigger it
-        # max_retries = 5
-        # auth = HTTPBasicAuth(airflow_username, airflow_password)
-        # headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
+        # Wait for DAG to appear and trigger it
+        max_retries = 5
+        auth = HTTPBasicAuth(airflow_username, airflow_password)
+        headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
 
-        # for attempt in range(max_retries):
-        #     # Check if DAG exists
-        #     dag_response = requests.get(
-        #         f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
-        #         auth=auth,
-        #         headers=headers
-        #     )
+        for attempt in range(max_retries):
+            # Check if DAG exists
+            input("We are now checking if the DAG exists")
+            dag_response = requests.get(
+                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
+                auth=auth,
+                headers=headers
+            )
 
-        #     if dag_response.status_code != 200:
-        #         if attempt == max_retries - 1:
-        #             raise Exception("DAG not found after max retries")
-        #         print(f"DAG not found, attempt {attempt + 1} of {max_retries}")
-        #         time.sleep(10)
-        #         continue
+            if dag_response.status_code != 200:
+                if attempt == max_retries - 1:
+                    raise Exception("DAG not found after max retries")
+                print(f"DAG not found, attempt {attempt + 1} of {max_retries}")
+                time.sleep(10)
+                continue
 
-        #     # Trigger the DAG
-        #     trigger_response = requests.post(
-        #         f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
-        #         auth=auth,
-        #         headers=headers,
-        #         json={"conf": {}}
-        #     )
+            input("We are now unpausing the DAG")
+            # Unpause the DAG before triggering
+            unpause_response = requests.patch(
+                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
+                auth=auth,
+                headers=headers,
+                json={"is_paused": False}
+            )
+            
+            if unpause_response.status_code != 200:
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
+                print(f"Failed to unpause DAG, attempt {attempt + 1} of {max_retries}")
+                time.sleep(10)
+                continue
 
-        #     if trigger_response.status_code == 200:
-        #         print("DAG triggered successfully")
-        #         break
-        #     else:
-        #         if attempt == max_retries - 1:
-        #             raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
-        #         print(f"Failed to trigger DAG, attempt {attempt + 1} of {max_retries}")
-        #         time.sleep(10)
+            input("We are now triggering the DAG")
+            # Trigger the DAG
+            trigger_response = requests.post(
+                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
+                auth=auth,
+                headers=headers,
+                json={"conf": {}}
+            )
 
+            if trigger_response.status_code == 200:
+                dag_run_id = trigger_response.json()['dag_run_id']
+                print("DAG triggered successfully")
+                break
+            else:
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
+                print(f"Failed to trigger DAG, attempt {attempt + 1} of {max_retries}")
+                time.sleep(10)
+
+        # Monitor the DAG run
+        input("We are now monitoring the DAG run")
+        max_wait = 300  # 5 minutes timeout
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            status_response = requests.get(
+                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns/{dag_run_id}",
+                auth=auth,
+                headers=headers
+            )
+            
+            if status_response.status_code == 200:
+                state = status_response.json()['state']
+                print(f"DAG state: {state}")
+                if state == 'success':
+                    print("DAG completed successfully")
+                    break
+                elif state in ['failed', 'error']:
+                    raise Exception(f"DAG failed with state: {state}")
+            
+            time.sleep(10)
+        else:
+            raise Exception("DAG run timed out")
+
+
+
+        input("waiting for input 3")
 
 
         #SECTION 3: VERIFY THE OUTCOMES
@@ -302,33 +371,59 @@ def test_postgres_to_mysql_pipeline(request):
         # dagbag = DagBag(os.getenv("AIRFLOW_DAGS_FOLDER"))
         # assert "sales_profit_pipeline" in dagbag.dags, "DAG not found in Airflow"
         
+        input("We are now verifying the outcomes")
         # Verify data in MySQL
-        # mysql_cursor.execute("""
-        #     SELECT * FROM daily_profits 
-        #     WHERE date = '2024-01-01'
-        #     ORDER BY user_id
-        # """)
+        mysql_cursor.execute("""
+            SELECT * FROM daily_profits 
+            WHERE date = '2024-01-01'
+            ORDER BY user_id
+        """)
         
-        # results = mysql_cursor.fetchall()
-        # assert len(results) == 2, "Expected 2 records in daily_profits"
+        results = mysql_cursor.fetchall()
+        assert len(results) == 2, "Expected 2 records in daily_profits"
         
         # Check user 1's profits
-        # assert results[0][0] == datetime(2024, 1, 1).date(), "Incorrect date"
-        # assert results[0][1] == 1, "Incorrect user_id"
-        # assert float(results[0][2]) == 250.00, "Incorrect total sales"
-        # assert float(results[0][3]) == 150.00, "Incorrect total costs"
-        # assert float(results[0][4]) == 100.00, "Incorrect total profit"
+        # They had two transactions: $100 sale ($60 cost) and $150 sale ($90 cost)
+        assert results[0][0] == datetime(2024, 1, 1).date(), "Incorrect date"
+        assert results[0][1] == 1, "Incorrect user_id"
+        assert float(results[0][2]) == 250.00, "Incorrect total sales"  # 100 + 150
+        assert float(results[0][3]) == 150.00, "Incorrect total costs"  # 60 + 90
+        assert float(results[0][4]) == 100.00, "Incorrect total profit"  # 250 - 150
         
         # Check user 2's profits
-        # assert results[1][0] == datetime(2024, 1, 1).date(), "Incorrect date"
-        # assert results[1][1] == 2, "Incorrect user_id"
-        # assert float(results[1][2]) == 200.00, "Incorrect total sales"
-        # assert float(results[1][3]) == 120.00, "Incorrect total costs"
-        # assert float(results[1][4]) == 80.00, "Incorrect total profit"
+        # They had one transaction: $200 sale ($120 cost)
+        assert results[1][0] == datetime(2024, 1, 1).date(), "Incorrect date"
+        assert results[1][1] == 2, "Incorrect user_id"
+        assert float(results[1][2]) == 200.00, "Incorrect total sales"
+        assert results[1][3] == 120.00, "Incorrect total costs"
+        assert float(results[1][4]) == 80.00, "Incorrect total profit"  # 200 - 120
 
     finally:
         try:
             print("Starting cleanup...")
+            
+            # Clean up Airflow DAG
+            airflow_base_url = os.getenv("AIRFLOW_HOST")
+            auth = HTTPBasicAuth(os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD"))
+            headers = {"Content-Type": "application/json"}
+
+            # First delete all DAG runs
+            requests.delete(
+                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
+                auth=auth,
+                headers=headers
+            )
+
+            # Then delete the DAG itself
+            requests.delete(
+                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
+                auth=auth,
+                headers=headers
+            )
+            
+            print("Cleaned up Airflow DAG")
+
+            # Rest of your existing cleanup...
             # First close our connection to sales_db
             postgres_cursor.close()
             postgres_connection.close()
