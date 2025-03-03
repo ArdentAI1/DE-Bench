@@ -16,47 +16,24 @@ To Run this testing yourself:
 
 ## Environment Variables Template:
 
-Below is a template of all environment variables needed for the tests. Copy this to your `.env` file and replace the placeholder values with your own credentials:
+Below is a template of all environment variables needed for the tests. Copy this to your `.env` file and replace the placeholder values with your own credentials. If there is an actual value there already do not change it:
 
-<pre><code># AWS Credentials
-ACCESS_KEY_ID_AWS="YOUR_AWS_ACCESS_KEY_ID"           # AWS access key ID
-SECRET_ACCESS_KEY_AWS="YOUR_AWS_SECRET_ACCESS_KEY"   # AWS secret access key
+<pre><code>
 
 # MongoDB
 MONGODB_URI="YOUR_MONGODB_CONNECTION_STRING"         # MongoDB connection string
 
-# Ardent
-ARDENT_PUBLIC_KEY="YOUR_ARDENT_PUBLIC_KEY"           # Ardent public key
-ARDENT_SECRET_KEY="YOUR_ARDENT_SECRET_KEY"           # Ardent secret key
-ARDENT_BASE_URL="YOUR_ARDENT_BASE_URL"               # Ardent base URL
-
 # MySQL
 MYSQL_HOST="YOUR_MYSQL_HOST"                         # MySQL host address
-MYSQL_PORT=3306                                      # MySQL port (typically 3306)
+MYSQL_PORT="YOUR MYSQL PORT"                         # MySQL port (typically 3306)
 MYSQL_USERNAME="YOUR_MYSQL_USERNAME"                 # MySQL username
 MYSQL_PASSWORD="YOUR_MYSQL_PASSWORD"                 # MySQL password
 
-# Supabase
-SUPABASE_PROJECT_URL="YOUR_SUPABASE_PROJECT_URL"     # Supabase project URL
-SUPABASE_API_KEY="YOUR_SUPABASE_API_KEY"             # Supabase API key
-
 # Postgres
 POSTGRES_HOSTNAME="YOUR_POSTGRES_HOSTNAME"           # Postgres hostname
-POSTGRES_PORT=5432                                   # Postgres port (typically 5432)
+POSTGRES_PORT="YOUR POSTGRES PORT"                   # Postgres port (typically 5432)
 POSTGRES_USERNAME="YOUR_POSTGRES_USERNAME"           # Postgres username
 POSTGRES_PASSWORD="YOUR_POSTGRES_PASSWORD"           # Postgres password
-
-# Snowflake
-SNOWFLAKE_ACCOUNT="YOUR_SNOWFLAKE_ACCOUNT"           # Snowflake account name
-SNOWFLAKE_USER="YOUR_SNOWFLAKE_USER"                 # Snowflake username
-SNOWFLAKE_PASSWORD="YOUR_SNOWFLAKE_PASSWORD"         # Snowflake password
-SNOWFLAKE_WAREHOUSE="YOUR_SNOWFLAKE_WAREHOUSE"       # Snowflake warehouse name
-
-# Azure SQL
-AZURE_SQL_SERVER="YOUR_AZURE_SQL_SERVER"             # Azure SQL server address
-AZURE_SQL_USERNAME="YOUR_AZURE_SQL_USERNAME"         # Azure SQL username
-AZURE_SQL_PASSWORD="YOUR_AZURE_SQL_PASSWORD"         # Azure SQL password
-AZURE_SQL_VERSION=18                                 # Azure SQL version
 
 # Airflow
 AIRFLOW_GITHUB_TOKEN="YOUR_GITHUB_TOKEN"             # GitHub token with full repo access
@@ -72,22 +49,9 @@ _AIRFLOW_WWW_USER_USERNAME="airflow"                 # Airflow web UI username
 _AIRFLOW_WWW_USER_PASSWORD="airflow"                 # Airflow web UI password
 AIRFLOW__CORE__LOAD_EXAMPLES=false                   # Whether to load example DAGs
 
-# Databricks
-DATABRICKS_SERVER_HOSTNAME="YOUR_DATABRICKS_SERVER_HOSTNAME"   # Databricks server hostname
-DATABRICKS_HTTP_PATH="YOUR_DATABRICKS_HTTP_PATH"               # Databricks HTTP path
-DATABRICKS_ACCESS_TOKEN="YOUR_DATABRICKS_ACCESS_TOKEN"         # Databricks access token
-DATABRICKS_JOBS_WORKSPACE_URL="YOUR_DATABRICKS_WORKSPACE_URL"  # Databricks workspace URL
-DATABRICKS_JOBS_ACCESS_TOKEN="YOUR_DATABRICKS_JOBS_ACCESS_TOKEN"  # Databricks jobs access token
-DATABRICKS_JOBS_GITHUB_TOKEN="YOUR_GITHUB_TOKEN"               # GitHub token for Databricks
-DATABRICKS_JOBS_REPO="YOUR_DATABRICKS_REPO_URL"                # GitHub repo URL for Databricks
-DATABRICKS_JOBS_REPO_PATH="YOUR_DATABRICKS_REPO_PATH"          # Repo path in Databricks
-
-# Finch
-FINCH_ACCESS_TOKEN="YOUR_FINCH_ACCESS_TOKEN"                   # Finch access token
-
 # Benchmark
-BENCHMARK_ROOT="FULL_PATH_TO_BENCHMARK_FOLDER"                 # Full path of the folder you clone the repo into
-MODEL_PATH="PATH_TO_YOUR_MODEL"                                # Path to your model
+BENCHMARK_ROOT="FULL_PATH_TO_BENCHMARK_FOLDER"       # Full path of the folder you clone the repo into
+MODEL_PATH="PATH_TO_YOUR_MODEL"                      # Path to your model
 </code></pre>
 
 3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
