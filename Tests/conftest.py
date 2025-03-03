@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 manager = Manager()
 test_results = manager.list()
 
+
 def pytest_configure(config):
     print("Configuring pytest...")
 
@@ -30,55 +31,83 @@ def pytest_configure(config):
 
     # Initialize the model
     from model.Initialize_Model import initialize_model
+    from Environment.Airflow.Airflow import Airflow_Local
+
+    # set up the airflow docker container
 
     initialize_model()
 
+    # initialize local airflow instance
+    airflow_local = Airflow_Local()
+
+    print("Initializing Airflow")
+    # start the airflow docker container
+    airflow_local.Start_Airflow()
+
+
 def pytest_runtest_logreport(report):
-    #print("Report")
-    #print(report)
-    if report.when == 'call':
+    if report.when == "call":
+        # Get model_runtime from user_properties
+        model_runtime = None
+        for name, value in report.user_properties:
+            if name == "model_runtime":
+                model_runtime = value
+            if name == "user_query":
+                user_query = value
+            if name == "test_steps":
+                test_steps = value
+
         test_result = {
-            'nodeid': report.nodeid,
-            'outcome': report.outcome,
-            'duration': report.duration,
-            'longrepr': str(report.longrepr) if report.failed else None
+            "nodeid": report.nodeid,
+            "user_query": user_query,
+            "outcome": report.outcome,
+            "duration": report.duration,
+            "model_runtime": model_runtime,
+            "longrepr": str(report.longrepr) if report.failed else None,
+            "test_steps": test_steps,
         }
         test_results.append(test_result)
 
+
 def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
+    from Environment.Airflow.Airflow import Airflow_Local
+
+    airflow_local = Airflow_Local()
+
+    airflow_local.Stop_Airflow()
+
+    airflow_local.Cleanup_Airflow_Directories()
 
     # Only the main process should aggregate and display results
     if os.environ.get("PYTEST_XDIST_WORKER") is None:
         total = len(test_results)
-        passed = sum(1 for result in test_results if result['outcome'] == 'passed')
-        failed = sum(1 for result in test_results if result['outcome'] == 'failed')
-        skipped = sum(1 for result in test_results if result['outcome'] == 'skipped')
-        total_duration = sum(result['duration'] for result in test_results)
+        passed = sum(1 for result in test_results if result["outcome"] == "passed")
+        failed = sum(1 for result in test_results if result["outcome"] == "failed")
+        skipped = sum(1 for result in test_results if result["outcome"] == "skipped")
+        total_duration = sum(result["duration"] for result in test_results)
 
-        #print("\nTest Session Summary:")
-        #print(f"Total tests: {total}")
-        #print(f"Passed: {passed}")
-        #print(f"Failed: {failed}")
-        #print(f"Skipped: {skipped}")
-        #print(f"Total duration: {total_duration:.2f} seconds")
+        # print("\nTest Session Summary:")
+        # print(f"Total tests: {total}")
+        # print(f"Passed: {passed}")
+        # print(f"Failed: {failed}")
+        # print(f"Skipped: {skipped}")
+        # print(f"Total duration: {total_duration:.2f} seconds")
 
-        #print("\nDetailed Test Results:")
-
+        # print("\nDetailed Test Results:")
 
         results_json = {
             "session_id": Ardent_Client.session_id,
-            "test_results": list(test_results)
+            "test_results": list(test_results),
         }
 
         for result in test_results:
-            #print("Result Object")
-            #print(result)
+            # print("Result Object")
+            # print(result)
 
-
-            status = result['outcome'].capitalize()
-            #print(f"{status}: {result['nodeid']} ({result['duration']:.2f} seconds)")
-            #if result['longrepr']:
+            status = result["outcome"].capitalize()
+            # print(f"{status}: {result['nodeid']} ({result['duration']:.2f} seconds)")
+            # if result['longrepr']:
             #    print(f"  Failure Reason: {result['longrepr']}")
 
         # Optionally, save detailed results to a JSON file
