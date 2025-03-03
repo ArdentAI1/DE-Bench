@@ -1,3 +1,5 @@
+import os
+
 User_Input = """
 Create an Airflow DAG that:
 1. Extracts sales data from Postgres database 'sales_db', table 'transactions'
@@ -12,10 +14,29 @@ Create an Airflow DAG that:
     - retry_delay: 20 seconds
 """
 
-
-Configs = """
-Airflow Configuration:
-dag_id: sales_profit_pipeline
-schedule_interval: @daily
-start_date: 2024-01-01
-"""
+Configs = {
+    "services": {
+        "airflow": {
+            "github_token": os.getenv("AIRFLOW_GITHUB_TOKEN"),
+            "repo": os.getenv("AIRFLOW_REPO"),
+            "dag_path": os.getenv("AIRFLOW_DAG_PATH"),
+            "host": os.getenv("AIRFLOW_HOST"),
+            "username": os.getenv("AIRFLOW_USERNAME"),
+            "password": os.getenv("AIRFLOW_PASSWORD"),
+        },
+        "postgres": {
+            "host": os.getenv("POSTGRES_HOSTNAME"),
+            "port": os.getenv("POSTGRES_PORT"),
+            "username": os.getenv("POSTGRES_USERNAME"),
+            "password": os.getenv("POSTGRES_PASSWORD"),
+            "databases": [{"name": "sales_db"}],
+        },
+        "mysql": {
+            "host": os.getenv("MYSQL_HOST"),
+            "port": os.getenv("MYSQL_PORT"),
+            "username": os.getenv("MYSQL_USERNAME"),
+            "password": os.getenv("MYSQL_PASSWORD"),
+            "databases": [{"name": "analytics_db"}],
+        },
+    }
+}

@@ -33,6 +33,10 @@ def test_postgres_to_mysql_pipeline(request):
 
     # Create a Docker client with the compose file configuration
 
+    request.node.user_properties.append(("user_query", Test_Configs.User_Input))
+
+    config_results = None
+
     # SECTION 1: SETUP THE TEST
     try:
 

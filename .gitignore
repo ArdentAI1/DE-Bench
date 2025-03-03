@@ -13,3 +13,4 @@ ardent-sdk/
 **/ardent_sdk/
 
 requirements-dev.txt
+.cursor

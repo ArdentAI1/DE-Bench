@@ -1,5 +1,7 @@
 # Import from the Model directory
 from model.Run_Model import run_model
+from model.Configure_Model import set_up_model_configs
+from model.Configure_Model import remove_model_configs
 import os
 import importlib
 import pytest
@@ -29,54 +31,71 @@ def test_add_mongodb_record(request):
 
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
 
+    test_steps = [
+        {
+            "name": "Record Creation",
+            "description": "Adding a new record to MongoDB",
+            "status": "did not reach",
+            "Result_Message": "",
+        }
+    ]
+
+    request.node.user_properties.append(("test_steps", test_steps))
+
     # SECTION 1: SETUP THE TEST
-
-    # we can add an option to do local runs with this container
-    # container = load_docker(input_directory=input_dir)
-
-    # we need to add the database in mongo and the collection into the database.
-
+    config_results = None
     try:
-        db = syncMongoClient["test_database"]
-        db.create_collection("test_collection")
-    except CollectionInvalid as e:
-        print(f"Collection exists, dropping and recreating: {e}")
-        db.drop_collection("test_collection")
-        db.create_collection("test_collection")
-    except Exception as e:
-        raise Exception(f"Unexpected Error: {e}")
+        # we can add an option to do local runs with this container
+        # container = load_docker(input_directory=input_dir)
 
-    # we then sync Ardent to the new stuff created
-    valid_config = {
-        "connection_string": os.getenv("MONGODB_URI"),
-        "databases": [
-            {"name": "test_database", "collections": [{"name": "test_collection"}]}
-        ],
-    }
+        # we need to add the database in mongo and the collection into the database.
+        try:
+            db = syncMongoClient["test_database"]
+            db.create_collection("test_collection")
+        except CollectionInvalid as e:
+            db.drop_collection("test_collection")
+            db.create_collection("test_collection")
+        except Exception as e:
+            raise Exception(f"Unexpected Error: {e}")
 
-    result = Ardent_Client.set_config(config_type="mongodb", **valid_config)
+        # Set up model configs using the configuration from Test_Configs
+        config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 
-    # SECTION 2: RUN THE MODEL
-    # Run the model which should add the record
-    start_time = time.time()
-    model_result = run_model(
-        container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
-    )
-    end_time = time.time()
-    request.node.user_properties.append(("model_runtime", end_time - start_time))
+        # SECTION 2: RUN THE MODEL
+        # Run the model which should add the record
+        start_time = time.time()
+        model_result = run_model(
+            container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
+        )
+        end_time = time.time()
+        request.node.user_properties.append(("model_runtime", end_time - start_time))
 
-    # SECTION 3: VERIFY THE OUTCOMES
+        # SECTION 3: VERIFY THE OUTCOMES
+        # we then check the record was added
+        collection = db["test_collection"]
+        record = collection.find_one({"name": "John Doe", "age": 30})
 
-    # we then check the record was added
-    collection = db["test_collection"]
-    record = collection.find_one({"name": "John Doe", "age": 30})
-    assert record is not None, "Record was not found in MongoDB"
-    assert record["name"] == "John Doe", "Name in record does not match"
-    assert record["age"] == 30, "Age in record does not match"
-    # assert True
+        if record is not None:
+            test_steps[0]["status"] = "passed"
+            test_steps[0]["Result_Message"] = "Record was successfully added to MongoDB"
+            assert record["name"] == "John Doe", "Name in record does not match"
+            assert record["age"] == 30, "Age in record does not match"
+        else:
+            test_steps[0]["status"] = "failed"
+            test_steps[0]["Result_Message"] = "Record was not found in MongoDB"
+            raise AssertionError("Record was not found in MongoDB")
 
-    # now clean up
-    db.drop_collection("test_collection")
-    syncMongoClient.drop_database("test_database")
+    finally:
+        try:
+            # Clean up MongoDB
+            db.drop_collection("test_collection")
+            syncMongoClient.drop_database("test_database")
 
-    Ardent_Client.delete_config(config_id=result["specific_config"]["id"])
+            # Remove model configs
+            if config_results:
+                remove_model_configs(
+                    Configs=Test_Configs.Configs, custom_info=config_results
+                )
+
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
