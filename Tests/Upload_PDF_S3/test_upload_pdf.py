@@ -38,37 +38,30 @@ Test_Configs = importlib.import_module(module_path)
 def test_Download_File(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
-    #we can add an option to do local runs with this container
-    #container = load_docker(input_directory=input_dir)
+    # we can add an option to do local runs with this container
+    # container = load_docker(input_directory=input_dir)
 
+    # the model itself should be able to upload the file to the S3 bucket. We just check if its there
 
-    #the model itself should be able to upload the file to the S3 bucket. We just check if its there
+    # Do setup
 
-    #Do setup
+    # run_model(container=None, task=Test_Configs.User_Input,configs=Test_Configs.Configs)
 
-    #run_model(container=None, task=Test_Configs.User_Input,configs=Test_Configs.Configs)
+    aws_access_key_id = os.getenv("ACCESS_KEY_ID_AWS")
+    aws_secret_access_key = os.getenv("SECRET_ACCESS_KEY_AWS")
+    aws_region = "us-east-1"
 
-
-
-    aws_access_key_id = os.getenv('ACCESS_KEY_ID_AWS')
-    aws_secret_access_key = os.getenv('SECRET_ACCESS_KEY_AWS')
-    aws_region = 'us-east-1'
-
-
-
-
-    
     # container.exec_run(['/bin/sh', '-c', create_file_command])
-    # 
+    #
     # # Install boto3 library (if not already installed)
     # container.exec_run("pip install boto3")
-    # 
+    #
     # # Run the upload script
     # result = container.exec_run("python upload_file.py")
-    # 
+    #
     # # Get the output
     # output = result.output.decode('utf-8').strip()
-    # 
+    #
     # # Validate if the file is in S3
     # # You may need to check the file from outside the container or use a similar script to verify
     # try:
@@ -79,21 +72,20 @@ def test_Download_File(request):
     #         print("File was successfully uploaded, verified, and deleted from S3.")
     # except Exception as e:
     #     file_exists_in_s3 = False
-    # 
+    #
     # Stop the container
-    #container.stop()
-    
+    # container.stop()
+
     # Validate the upload
-    #assert file_exists_in_s3, "Uploaded file not found in the S3 bucket"
-    #print("File was successfully uploaded and verified in S3.")
-   
-    #SECTION 2: RUN THE MODEL
+    # assert file_exists_in_s3, "Uploaded file not found in the S3 bucket"
+    # print("File was successfully uploaded and verified in S3.")
+
+    # SECTION 2: RUN THE MODEL
     start_time = time.time()
-    run_model(container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs)
+    run_model(
+        container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
+    )
     end_time = time.time()
     request.node.user_properties.append(("model_runtime", end_time - start_time))
 
-
     assert True
-
-   

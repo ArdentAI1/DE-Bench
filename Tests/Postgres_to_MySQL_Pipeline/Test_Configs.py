@@ -18,4 +18,4 @@ Airflow Configuration:
 dag_id: sales_profit_pipeline
 schedule_interval: @daily
 start_date: 2024-01-01
-""" 
+"""

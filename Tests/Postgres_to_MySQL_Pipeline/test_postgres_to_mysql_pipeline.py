@@ -22,6 +22,7 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
+
 @pytest.mark.airflow
 @pytest.mark.postgres
 @pytest.mark.mysql
@@ -29,25 +30,22 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.database
 def test_postgres_to_mysql_pipeline(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
     # Create a Docker client with the compose file configuration
 
-
-    #SECTION 1: SETUP THE TEST
+    # SECTION 1: SETUP THE TEST
     try:
-        
-
 
         # Setup GitHub repository with empty dags folder
         access_token = os.getenv("AIRFLOW_GITHUB_TOKEN")
         airflow_github_repo = os.getenv("AIRFLOW_REPO")
-        
+
         # Convert full URL to owner/repo format if needed
         if "github.com" in airflow_github_repo:
             # Extract owner/repo from URL
-            parts = airflow_github_repo.split('/')
+            parts = airflow_github_repo.split("/")
             airflow_github_repo = f"{parts[-2]}/{parts[-1]}"
-        
+
         print("Using repo format:", airflow_github_repo)
         g = Github(access_token)
         repo = g.get_repo(airflow_github_repo)
@@ -55,19 +53,18 @@ def test_postgres_to_mysql_pipeline(request):
 
         print("GitHub repository:", airflow_github_repo)
 
-
         try:
             # First, clear only the dags folder
             dags_contents = repo.get_contents("dags")
             for content in dags_contents:
-                if content.name != '.gitkeep':  # Keep the .gitkeep file if it exists
+                if content.name != ".gitkeep":  # Keep the .gitkeep file if it exists
                     repo.delete_file(
                         path=content.path,
                         message="Clear dags folder",
                         sha=content.sha,
-                        branch="main"
+                        branch="main",
                     )
-            
+
             # Ensure .gitkeep exists in dags folder
             try:
                 repo.get_contents("dags/.gitkeep")
@@ -76,7 +73,7 @@ def test_postgres_to_mysql_pipeline(request):
                     path="dags/.gitkeep",
                     message="Add .gitkeep to dags folder",
                     content="",
-                    branch="main"
+                    branch="main",
                 )
             print("Cleaned dags folder. Press Enter to continue...")
             input()
@@ -91,11 +88,11 @@ def test_postgres_to_mysql_pipeline(request):
             port=os.getenv("POSTGRES_PORT"),
             user=os.getenv("POSTGRES_USERNAME"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            database="postgres",  
-            sslmode='require'
-        ) 
+            database="postgres",
+            sslmode="require",
+        )
         postgres_cursor = connection.cursor()
-        
+
         # First connect to postgres database
         postgres_connection = psycopg2.connect(
             host=os.getenv("POSTGRES_HOSTNAME"),
@@ -103,33 +100,37 @@ def test_postgres_to_mysql_pipeline(request):
             user=os.getenv("POSTGRES_USERNAME"),
             password=os.getenv("POSTGRES_PASSWORD"),
             database="postgres",
-            sslmode='require'
+            sslmode="require",
         )
         postgres_connection.autocommit = True
         postgres_cursor = postgres_connection.cursor()
-        
+
         # Check and kill any existing connections
-        postgres_cursor.execute("""
+        postgres_cursor.execute(
+            """
             SELECT pid, usename, datname 
             FROM pg_stat_activity 
             WHERE datname = 'sales_db'
-        """)
+        """
+        )
         connections = postgres_cursor.fetchall()
         print(f"Found connections to sales_db:", connections)
 
-        postgres_cursor.execute("""
+        postgres_cursor.execute(
+            """
             SELECT pg_terminate_backend(pid) 
             FROM pg_stat_activity 
             WHERE datname = 'sales_db'
-        """)
+        """
+        )
         print("Terminated all connections to sales_db")
-        
+
         # Now safe to drop and recreate
         postgres_cursor.execute("DROP DATABASE IF EXISTS sales_db")
         print("Dropped existing sales_db if it existed")
         postgres_cursor.execute("CREATE DATABASE sales_db")
         print("Created new sales_db")
-        
+
         # Close connection to postgres database
         postgres_cursor.close()
         postgres_connection.close()
@@ -141,12 +142,13 @@ def test_postgres_to_mysql_pipeline(request):
             user=os.getenv("POSTGRES_USERNAME"),
             password=os.getenv("POSTGRES_PASSWORD"),
             database="sales_db",
-            sslmode='require'
+            sslmode="require",
         )
         postgres_cursor = postgres_connection.cursor()
-        
+
         # Create test table
-        postgres_cursor.execute("""
+        postgres_cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS transactions (
                 transaction_id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -155,18 +157,21 @@ def test_postgres_to_mysql_pipeline(request):
                 cost_amount DECIMAL(10,2) NOT NULL,
                 transaction_date DATE NOT NULL
             )
-        """)
-        
+        """
+        )
+
         # Insert sample data
-        postgres_cursor.execute("""
+        postgres_cursor.execute(
+            """
             INSERT INTO transactions 
             (user_id, product_id, sale_amount, cost_amount, transaction_date)
             VALUES 
             (1, 101, 100.00, 60.00, '2024-01-01'),
             (1, 102, 150.00, 90.00, '2024-01-01'),
             (2, 101, 200.00, 120.00, '2024-01-01')
-        """)
-        
+        """
+        )
+
         # Make sure to commit the transaction
         postgres_connection.commit()
 
@@ -174,14 +179,14 @@ def test_postgres_to_mysql_pipeline(request):
         postgres_cursor.execute("SELECT * FROM transactions")
         data = postgres_cursor.fetchall()
 
-
         # Setup MySQL database
         mysql_cursor = mysql_connection.cursor()
         mysql_cursor.execute("CREATE DATABASE IF NOT EXISTS analytics_db")
         mysql_cursor.execute("USE analytics_db")
-        
+
         # Create result table
-        mysql_cursor.execute("""
+        mysql_cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS daily_profits (
                 date DATE,
                 user_id INTEGER,
@@ -190,22 +195,18 @@ def test_postgres_to_mysql_pipeline(request):
                 total_profit DECIMAL(10,2),
                 PRIMARY KEY (date, user_id)
             )
-        """)
-        
+        """
+        )
+
         mysql_connection.commit()
 
         # Verify table creation
         mysql_cursor.execute("SHOW TABLES")
         tables = mysql_cursor.fetchall()
 
-
         # Verify table structure
         mysql_cursor.execute("DESCRIBE daily_profits")
         structure = mysql_cursor.fetchall()
-
-
-
-
 
         # Configure Ardent with database connections
         postgres_result = Ardent_Client.set_config(
@@ -214,7 +215,7 @@ def test_postgres_to_mysql_pipeline(request):
             Port=os.getenv("POSTGRES_PORT"),
             username=os.getenv("POSTGRES_USERNAME"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            databases=[{"name": "sales_db"}]
+            databases=[{"name": "sales_db"}],
         )
 
         mysql_result = Ardent_Client.set_config(
@@ -223,10 +224,8 @@ def test_postgres_to_mysql_pipeline(request):
             port=os.getenv("MYSQL_PORT"),
             username=os.getenv("MYSQL_USERNAME"),
             password=os.getenv("MYSQL_PASSWORD"),
-            databases=[{"name": "analytics_db"}]
+            databases=[{"name": "analytics_db"}],
         )
-
-
 
         airflow_result = Ardent_Client.set_config(
             config_type="airflow",
@@ -235,43 +234,44 @@ def test_postgres_to_mysql_pipeline(request):
             dag_path=os.getenv("AIRFLOW_DAG_PATH"),
             host=os.getenv("AIRFLOW_HOST"),
             username=os.getenv("AIRFLOW_USERNAME"),
-            password=os.getenv("AIRFLOW_PASSWORD")
+            password=os.getenv("AIRFLOW_PASSWORD"),
         )
-
 
         input("waiting for input")
 
-        #SECTION 2: RUN THE MODEL
+        # SECTION 2: RUN THE MODEL
         start_time = time.time()
-        run_model(container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs)
+        run_model(
+            container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
+        )
         end_time = time.time()
         request.node.user_properties.append(("model_runtime", end_time - start_time))
 
         time.sleep(10)
 
-        #we first need to merge the PR
+        # we first need to merge the PR
 
         input("We are now merging the pr")
-                # After model creates the PR, find and merge it
-        pulls = repo.get_pulls(state='open')
+        # After model creates the PR, find and merge it
+        pulls = repo.get_pulls(state="open")
         target_pr = None
         for pr in pulls:
-            if pr.title == "Merge_Sales_Profit_Pipeline":  # Look for PR by title instead of branch
+            if (
+                pr.title == "Merge_Sales_Profit_Pipeline"
+            ):  # Look for PR by title instead of branch
                 target_pr = pr
                 break
-        
+
         if not target_pr:
             raise Exception("PR 'Merge_Sales_Profit_Pipeline' not found")
-            
+
         # Merge the PR
         merge_result = target_pr.merge(
-            commit_title="Merge_Sales_Profit_Pipeline",
-            merge_method="squash"
+            commit_title="Merge_Sales_Profit_Pipeline", merge_method="squash"
         )
-        
+
         if not merge_result.merged:
             raise Exception(f"Failed to merge PR: {merge_result.message}")
-
 
         # After creating the DAG, wait a bit for Airflow to detect it
         time.sleep(100)  # Give Airflow time to scan for new DAGs
@@ -280,7 +280,7 @@ def test_postgres_to_mysql_pipeline(request):
         airflow_base_url = os.getenv("AIRFLOW_HOST")
         airflow_username = os.getenv("AIRFLOW_USERNAME")
         airflow_password = os.getenv("AIRFLOW_PASSWORD")
-        
+
         # Wait for DAG to appear and trigger it
         max_retries = 5
         auth = HTTPBasicAuth(airflow_username, airflow_password)
@@ -292,7 +292,7 @@ def test_postgres_to_mysql_pipeline(request):
             dag_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
                 auth=auth,
-                headers=headers
+                headers=headers,
             )
 
             if dag_response.status_code != 200:
@@ -308,9 +308,9 @@ def test_postgres_to_mysql_pipeline(request):
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
                 auth=auth,
                 headers=headers,
-                json={"is_paused": False}
+                json={"is_paused": False},
             )
-            
+
             if unpause_response.status_code != 200:
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
@@ -324,11 +324,11 @@ def test_postgres_to_mysql_pipeline(request):
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
                 auth=auth,
                 headers=headers,
-                json={"conf": {}}
+                json={"conf": {}},
             )
 
             if trigger_response.status_code == 200:
-                dag_run_id = trigger_response.json()['dag_run_id']
+                dag_run_id = trigger_response.json()["dag_run_id"]
                 print("DAG triggered successfully")
                 break
             else:
@@ -345,43 +345,42 @@ def test_postgres_to_mysql_pipeline(request):
             status_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns/{dag_run_id}",
                 auth=auth,
-                headers=headers
+                headers=headers,
             )
-            
+
             if status_response.status_code == 200:
-                state = status_response.json()['state']
+                state = status_response.json()["state"]
                 print(f"DAG state: {state}")
-                if state == 'success':
+                if state == "success":
                     print("DAG completed successfully")
                     break
-                elif state in ['failed', 'error']:
+                elif state in ["failed", "error"]:
                     raise Exception(f"DAG failed with state: {state}")
-            
+
             time.sleep(10)
         else:
             raise Exception("DAG run timed out")
 
-
-
         input("waiting for input 3")
 
-
-        #SECTION 3: VERIFY THE OUTCOMES
+        # SECTION 3: VERIFY THE OUTCOMES
         # Check if DAG file was created
         # dagbag = DagBag(os.getenv("AIRFLOW_DAGS_FOLDER"))
         # assert "sales_profit_pipeline" in dagbag.dags, "DAG not found in Airflow"
-        
+
         input("We are now verifying the outcomes")
         # Verify data in MySQL
-        mysql_cursor.execute("""
+        mysql_cursor.execute(
+            """
             SELECT * FROM daily_profits 
             WHERE date = '2024-01-01'
             ORDER BY user_id
-        """)
-        
+        """
+        )
+
         results = mysql_cursor.fetchall()
         assert len(results) == 2, "Expected 2 records in daily_profits"
-        
+
         # Check user 1's profits
         # They had two transactions: $100 sale ($60 cost) and $150 sale ($90 cost)
         assert results[0][0] == datetime(2024, 1, 1).date(), "Incorrect date"
@@ -389,7 +388,7 @@ def test_postgres_to_mysql_pipeline(request):
         assert float(results[0][2]) == 250.00, "Incorrect total sales"  # 100 + 150
         assert float(results[0][3]) == 150.00, "Incorrect total costs"  # 60 + 90
         assert float(results[0][4]) == 100.00, "Incorrect total profit"  # 250 - 150
-        
+
         # Check user 2's profits
         # They had one transaction: $200 sale ($120 cost)
         assert results[1][0] == datetime(2024, 1, 1).date(), "Incorrect date"
@@ -401,26 +400,28 @@ def test_postgres_to_mysql_pipeline(request):
     finally:
         try:
             print("Starting cleanup...")
-            
+
             # Clean up Airflow DAG
             airflow_base_url = os.getenv("AIRFLOW_HOST")
-            auth = HTTPBasicAuth(os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD"))
+            auth = HTTPBasicAuth(
+                os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD")
+            )
             headers = {"Content-Type": "application/json"}
 
             # First delete all DAG runs
             requests.delete(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
                 auth=auth,
-                headers=headers
+                headers=headers,
             )
 
             # Then delete the DAG itself
             requests.delete(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
                 auth=auth,
-                headers=headers
+                headers=headers,
             )
-            
+
             print("Cleaned up Airflow DAG")
 
             # Rest of your existing cleanup...
@@ -436,31 +437,35 @@ def test_postgres_to_mysql_pipeline(request):
                 user=os.getenv("POSTGRES_USERNAME"),
                 password=os.getenv("POSTGRES_PASSWORD"),
                 database="postgres",
-                sslmode='require'
+                sslmode="require",
             )
             postgres_connection.autocommit = True
             postgres_cursor = postgres_connection.cursor()
-            
+
             # Check and kill any remaining connections
-            postgres_cursor.execute("""
+            postgres_cursor.execute(
+                """
                 SELECT pid, usename, datname 
                 FROM pg_stat_activity 
                 WHERE datname = 'sales_db'
-            """)
+            """
+            )
             connections = postgres_cursor.fetchall()
             print(f"Found connections to sales_db during cleanup:", connections)
 
-            postgres_cursor.execute("""
+            postgres_cursor.execute(
+                """
                 SELECT pg_terminate_backend(pid) 
                 FROM pg_stat_activity 
                 WHERE datname = 'sales_db'
-            """)
+            """
+            )
             print("Terminated all connections to sales_db")
-            
+
             # Now safe to drop
             postgres_cursor.execute("DROP DATABASE IF EXISTS sales_db")
             print("Dropped sales_db in cleanup")
-            
+
             # Close final connection
             postgres_cursor.close()
             postgres_connection.close()
@@ -472,23 +477,36 @@ def test_postgres_to_mysql_pipeline(request):
             mysql_cursor.close()
             mysql_connection.close()
             print("MySQL cleanup completed")
-            # Delete Ardent configs using config IDs from earlier set_config calls
-            Ardent_Client.delete_config(config_id=postgres_result['specific_config']['id'])
-            Ardent_Client.delete_config(config_id=mysql_result['specific_config']['id'])
-            Ardent_Client.delete_config(config_id=airflow_result['specific_config']['id'])
 
-        #reset the repo to the original state
+            # Delete Ardent configs
+            Ardent_Client.delete_config(
+                config_id=postgres_result["specific_config"]["id"]
+            )
+            Ardent_Client.delete_config(config_id=mysql_result["specific_config"]["id"])
+            Ardent_Client.delete_config(
+                config_id=airflow_result["specific_config"]["id"]
+            )
+
+            # Clean up GitHub - delete branch if it exists
+            try:
+                ref = repo.get_git_ref(f"heads/feature/sales_profit_pipeline")
+                ref.delete()
+                print("Deleted feature branch")
+            except Exception as e:
+                print(f"Branch might not exist or other error: {e}")
+
+            # reset the repo to the original state
             # First, clear only the dags folder
             dags_contents = repo.get_contents("dags")
             for content in dags_contents:
-                if content.name != '.gitkeep':  # Keep the .gitkeep file if it exists
+                if content.name != ".gitkeep":  # Keep the .gitkeep file if it exists
                     repo.delete_file(
                         path=content.path,
                         message="Clear dags folder",
                         sha=content.sha,
-                        branch="main"
+                        branch="main",
                     )
-            
+
             # Ensure .gitkeep exists in dags folder
             try:
                 repo.get_contents("dags/.gitkeep")
@@ -497,15 +515,10 @@ def test_postgres_to_mysql_pipeline(request):
                     path="dags/.gitkeep",
                     message="Add .gitkeep to dags folder",
                     content="",
-                    branch="main"
+                    branch="main",
                 )
             print("Cleaned dags folder. Press Enter to continue...")
             input()
 
-        
         except Exception as e:
-            print(f"Error during cleanup: {e}") 
-
-
-
-
+            print(f"Error during cleanup: {e}")

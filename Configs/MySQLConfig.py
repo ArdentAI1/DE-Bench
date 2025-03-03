@@ -13,4 +13,3 @@ connection = mysql.connector.connect(
     password=os.getenv("MYSQL_PASSWORD"),
     connect_timeout=10,
 )
-

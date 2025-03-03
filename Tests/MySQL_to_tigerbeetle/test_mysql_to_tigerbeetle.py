@@ -15,6 +15,7 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
+
 @pytest.mark.mysql
 @pytest.mark.tigerbeetle
 @pytest.mark.plaid
@@ -23,116 +24,101 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.database
 def test_mysql_to_tigerbeetle(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Create a Docker client with the compose file configuration
-    docker = DockerClient(
-        compose_files=[os.path.join(input_dir, "docker-compose.yml")]
-    )
 
-    #SECTION 1: SETUP THE TEST
+    # Create a Docker client with the compose file configuration
+    docker = DockerClient(compose_files=[os.path.join(input_dir, "docker-compose.yml")])
+
+    # SECTION 1: SETUP THE TEST
     try:
         # Start docker-compose to set up tigerbeetle
         docker.compose.up(detach=True)
-        
+
         # Give TigerBeetle a moment to start up
         time.sleep(10)
 
-        #add the right stuff to tigerbeetle
+        # add the right stuff to tigerbeetle
 
-        #let's sync ardent with the tigerbeetle instance
+        # let's sync ardent with the tigerbeetle instance
 
         tigerbeetle_result = Ardent_Client.set_config(
-            config_type = "tigerbeetle",
-            cluster_id='0',
-            replica_addresses=["127.0.0.1:3000"]
+            config_type="tigerbeetle",
+            cluster_id="0",
+            replica_addresses=["127.0.0.1:3000"],
         )
 
-        print(tigerbeetle_result)
+        # Now we set up the mysql Instance
 
-        #Now we set up the mysql Instance
-        
         cursor = connection.cursor()
 
-        #create a test database and then select it to execute the queries
+        # create a test database and then select it to execute the queries
         cursor.execute("CREATE DATABASE IF NOT EXISTS Access_Tokens")
         cursor.execute("USE Access_Tokens")
-        
+
         # Create test tables
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS plaid_access_tokens (
                 company_id VARCHAR(255) PRIMARY KEY,
                 access_token VARCHAR(255) NOT NULL
             )
-        """)
-        
-        cursor.execute("""
+        """
+        )
+
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS finch_access_tokens (
                 company_id VARCHAR(255) PRIMARY KEY,
                 access_token VARCHAR(255) NOT NULL
             )
-        """)
-        
-        # Insert test data with IGNORE to skip duplicates
-        cursor.execute("""
-            INSERT IGNORE INTO plaid_access_tokens (company_id, access_token) 
-            VALUES (%s, %s)
-        """, ("test_company_123", "test_plaid_token"))
-        
-        cursor.execute("""
-            INSERT IGNORE INTO finch_access_tokens (company_id, access_token) 
-            VALUES (%s, %s)
-        """, ("test_company_123", "test_finch_token"))
-        
-        connection.commit()
-
-
-        mysql_result = Ardent_Client.set_config(
-            config_type = "mysql",
-            host = os.getenv("MYSQL_HOST"),
-            port = os.getenv("MYSQL_PORT"),
-            username = os.getenv("MYSQL_USERNAME"),
-            password = os.getenv("MYSQL_PASSWORD"),
-            databases = [{"name": "Access_Tokens"}]
+        """
         )
 
-       
-        
+        # Insert test data with IGNORE to skip duplicates
+        cursor.execute(
+            """
+            INSERT IGNORE INTO plaid_access_tokens (company_id, access_token) 
+            VALUES (%s, %s)
+        """,
+            ("123", "test_plaid_token"),
+        )
 
+        cursor.execute(
+            """
+            INSERT IGNORE INTO finch_access_tokens (company_id, access_token) 
+            VALUES (%s, %s)
+        """,
+            ("123", os.getenv("FINCH_ACCESS_TOKEN")),
+        )
+
+        connection.commit()
+
+        mysql_result = Ardent_Client.set_config(
+            config_type="mysql",
+            host=os.getenv("MYSQL_HOST"),
+            port=os.getenv("MYSQL_PORT"),
+            username=os.getenv("MYSQL_USERNAME"),
+            password=os.getenv("MYSQL_PASSWORD"),
+            databases=[{"name": "Access_Tokens"}],
+        )
+
+        print(mysql_result)
 
     except Exception as e:
         raise Exception(f"Error in setup: {e}")
-    
-
-
-
-
 
     try:
-        #SECTION 2: RUN THE MODEL
+        # SECTION 2: RUN THE MODEL
         start_time = time.time()
-        #run_model(container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs)
+        run_model(
+            container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
+        )
         end_time = time.time()
         request.node.user_properties.append(("model_runtime", end_time - start_time))
 
-
-
-
-
-
-
-
-
-
-
-        #SECTION 3: VERIFY THE OUTCOMES
+        # SECTION 3: VERIFY THE OUTCOMES
         # Verify data in TigerBeetle
         # TODO: Add TigerBeetle verification logic here
         assert True, "Data not found in TigerBeetle"
-
-
-
-
-
 
     finally:
         # Cleanup
@@ -144,11 +130,12 @@ def test_mysql_to_tigerbeetle(request):
             # Stop and remove containers, networks, and volumes to clean up tigerbeetle
             docker.compose.down(volumes=True)
 
+            # now we delete the config for tigerbeetle
+            Ardent_Client.delete_config(
+                config_id=tigerbeetle_result["specific_config"]["id"]
+            )
 
-            #now we delete the config for tigerbeetle
-            Ardent_Client.delete_config(config_id=tigerbeetle_result['specific_config']['id'])
-
-            #now we delete the config for mysql
-            Ardent_Client.delete_config(config_id=mysql_result['specific_config']['id'])
+            # now we delete the config for mysql
+            Ardent_Client.delete_config(config_id=mysql_result["specific_config"]["id"])
         except Exception as e:
             print(f"Error during cleanup: {e}")
