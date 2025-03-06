@@ -86,35 +86,26 @@ class Airflow_Local:
                     # Check if directory has anything other than .gitkeep
                     contents = os.listdir(git_repo_path)
                     if len(contents) == 1 and contents[0] == ".gitkeep":
-                        print(
-                            f"Directory {git_repo_path} is empty (only contains .gitkeep)"
-                        )
+                        pass
                     else:
                         repo = Repo(git_repo_path)
                         is_valid_repo = True
-                        print(f"Repository exists at {git_repo_path}.")
 
                         # Check remote URL
                         origin = repo.remotes.origin
-                        print(f"Remote URL: {origin.url}")
 
                         # Force update remote URL with token
                         if repo_url != origin.url:
-                            print("Updating remote URL with current token...")
                             origin.set_url(repo_url)
 
-                        print("Resetting to remote state...")
                         repo.git.reset("--hard", "origin/main")
 
-                        print("Pulling latest changes...")
                         pull_info = origin.pull()
                         for info in pull_info:
-                            print(f"Updated {info.ref} to {info.commit}")
+                            pass
 
                         source_dag_path = os.path.join(git_repo_path, dag_path)
-                        input(f"Source DAG path: {source_dag_path}")
                 except (InvalidGitRepositoryError, GitCommandError) as e:
-                    print(f"Directory exists but is not a valid git repository: {e}")
                     # Clean contents instead of removing directory
                     for item in os.listdir(git_repo_path):
                         if item != ".gitkeep":  # Preserve .gitkeep
@@ -127,7 +118,6 @@ class Airflow_Local:
 
             # Clone the repository if it doesn't exist or wasn't valid
             if not is_valid_repo:
-                print(f"Cloning repository from {repo_url} to {git_repo_path}.")
                 # Create directory if it doesn't exist
                 os.makedirs(git_repo_path, exist_ok=True)
 
@@ -181,8 +171,6 @@ class Airflow_Local:
             else:
                 shutil.copy2(s, d)
 
-        print(f"DAG files have been copied to {destination_dag_path}.")
-
     def Cleanup_Airflow_Directories(self):
         """
         Clean up all Airflow directories while preserving .gitkeep files.
@@ -215,7 +203,6 @@ class Airflow_Local:
             # Clean each directory
             for dir_name, dir_path in directories.items():
                 if os.path.exists(dir_path):
-                    print(f"Cleaning {dir_name} directory: {dir_path}")
                     try:
                         for item in os.listdir(dir_path):
                             if item != ".gitkeep":  # Preserve .gitkeep
@@ -231,7 +218,6 @@ class Airflow_Local:
                             with open(gitkeep_path, "w") as f:
                                 pass
 
-                        print(f"{dir_name} directory cleaned successfully.")
                     except Exception as e:
                         print(f"Error while cleaning {dir_name} directory: {e}")
                 else:
