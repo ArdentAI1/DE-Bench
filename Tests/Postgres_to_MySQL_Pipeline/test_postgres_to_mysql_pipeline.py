@@ -16,6 +16,8 @@ from requests.auth import HTTPBasicAuth
 from Configs.ArdentConfig import Ardent_Client
 from model.Run_Model import run_model
 from Configs.MySQLConfig import connection as mysql_connection
+from model.Configure_Model import set_up_model_configs, remove_model_configs
+from Environment.Airflow.Airflow import Airflow_Local
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
@@ -33,13 +35,34 @@ def test_postgres_to_mysql_pipeline(request):
 
     # Create a Docker client with the compose file configuration
 
+    test_steps = [
+        {
+            "name": "Checking Git Branch Existence",
+            "description": "Checking if the git branch exists with the right name",
+            "status": "did not reach",
+            "Result_Message": "",
+        },
+        {
+            "name": "Checking PR Creation",
+            "description": "Checking if the PR was created with the right name",
+            "status": "did not reach",
+            "Result_Message": "",
+        },
+        {
+            "name": "Checking Dag Results",
+            "description": "Checking if the DAG produces the expected results",
+            "status": "did not reach",
+            "Result_Message": "",
+        },
+    ]
+
+    request.node.user_properties.append(("test_steps", test_steps))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
 
     config_results = None
 
     # SECTION 1: SETUP THE TEST
     try:
-
         # Setup GitHub repository with empty dags folder
         access_token = os.getenv("AIRFLOW_GITHUB_TOKEN")
         airflow_github_repo = os.getenv("AIRFLOW_REPO")
@@ -79,8 +102,7 @@ def test_postgres_to_mysql_pipeline(request):
                     content="",
                     branch="main",
                 )
-            print("Cleaned dags folder. Press Enter to continue...")
-            input()
+            print("Cleaned dags folder.")
 
         except Exception as e:
             if "sha" not in str(e):  # If error is not about folder already existing
@@ -213,35 +235,7 @@ def test_postgres_to_mysql_pipeline(request):
         structure = mysql_cursor.fetchall()
 
         # Configure Ardent with database connections
-        postgres_result = Ardent_Client.set_config(
-            config_type="postgreSQL",
-            Hostname=os.getenv("POSTGRES_HOSTNAME"),
-            Port=os.getenv("POSTGRES_PORT"),
-            username=os.getenv("POSTGRES_USERNAME"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            databases=[{"name": "sales_db"}],
-        )
-
-        mysql_result = Ardent_Client.set_config(
-            config_type="mysql",
-            host=os.getenv("MYSQL_HOST"),
-            port=os.getenv("MYSQL_PORT"),
-            username=os.getenv("MYSQL_USERNAME"),
-            password=os.getenv("MYSQL_PASSWORD"),
-            databases=[{"name": "analytics_db"}],
-        )
-
-        airflow_result = Ardent_Client.set_config(
-            config_type="airflow",
-            github_token=os.getenv("AIRFLOW_GITHUB_TOKEN"),
-            repo=os.getenv("AIRFLOW_REPO"),
-            dag_path=os.getenv("AIRFLOW_DAG_PATH"),
-            host=os.getenv("AIRFLOW_HOST"),
-            username=os.getenv("AIRFLOW_USERNAME"),
-            password=os.getenv("AIRFLOW_PASSWORD"),
-        )
-
-        input("waiting for input")
+        config_results = set_up_model_configs(Test_Configs.Configs)
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
@@ -253,20 +247,39 @@ def test_postgres_to_mysql_pipeline(request):
 
         time.sleep(10)
 
-        # we first need to merge the PR
+        # Check if the branch exists
+        try:
+            branch = repo.get_branch("feature/sales_profit_pipeline")
+            test_steps[0]["status"] = "passed"
+            test_steps[0][
+                "Result_Message"
+            ] = "Branch 'feature/sales_profit_pipeline' was created successfully"
+        except Exception as e:
+            test_steps[0]["status"] = "failed"
+            test_steps[0][
+                "Result_Message"
+            ] = f"Branch 'feature/sales_profit_pipeline' was not created: {str(e)}"
+            raise Exception(
+                f"Branch 'feature/sales_profit_pipeline' was not created: {str(e)}"
+            )
 
-        input("We are now merging the pr")
         # After model creates the PR, find and merge it
         pulls = repo.get_pulls(state="open")
         target_pr = None
         for pr in pulls:
-            if (
-                pr.title == "Merge_Sales_Profit_Pipeline"
-            ):  # Look for PR by title instead of branch
+            if pr.title == "Merge_Sales_Profit_Pipeline":
                 target_pr = pr
+                test_steps[1]["status"] = "passed"
+                test_steps[1][
+                    "Result_Message"
+                ] = "PR 'Merge_Sales_Profit_Pipeline' was created successfully"
                 break
 
         if not target_pr:
+            test_steps[1]["status"] = "failed"
+            test_steps[1][
+                "Result_Message"
+            ] = "PR 'Merge_Sales_Profit_Pipeline' not found"
             raise Exception("PR 'Merge_Sales_Profit_Pipeline' not found")
 
         # Merge the PR
@@ -277,8 +290,12 @@ def test_postgres_to_mysql_pipeline(request):
         if not merge_result.merged:
             raise Exception(f"Failed to merge PR: {merge_result.message}")
 
+        # now we run the function to get the dag
+        airflow_local = Airflow_Local()
+        airflow_local.Get_Airflow_Dags_From_Github()
+
         # After creating the DAG, wait a bit for Airflow to detect it
-        time.sleep(100)  # Give Airflow time to scan for new DAGs
+        time.sleep(5)  # Give Airflow time to scan for new DAGs
 
         # Trigger the DAG
         airflow_base_url = os.getenv("AIRFLOW_HOST")
@@ -292,7 +309,7 @@ def test_postgres_to_mysql_pipeline(request):
 
         for attempt in range(max_retries):
             # Check if DAG exists
-            input("We are now checking if the DAG exists")
+            print("Checking if the DAG exists...")
             dag_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
                 auth=auth,
@@ -306,7 +323,7 @@ def test_postgres_to_mysql_pipeline(request):
                 time.sleep(10)
                 continue
 
-            input("We are now unpausing the DAG")
+            print("Unpausing the DAG...")
             # Unpause the DAG before triggering
             unpause_response = requests.patch(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
@@ -322,7 +339,7 @@ def test_postgres_to_mysql_pipeline(request):
                 time.sleep(10)
                 continue
 
-            input("We are now triggering the DAG")
+            print("Triggering the DAG...")
             # Trigger the DAG
             trigger_response = requests.post(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
@@ -342,7 +359,7 @@ def test_postgres_to_mysql_pipeline(request):
                 time.sleep(10)
 
         # Monitor the DAG run
-        input("We are now monitoring the DAG run")
+        print("Monitoring the DAG run...")
         max_wait = 300  # 5 minutes timeout
         start_time = time.time()
         while time.time() - start_time < max_wait:
@@ -365,14 +382,8 @@ def test_postgres_to_mysql_pipeline(request):
         else:
             raise Exception("DAG run timed out")
 
-        input("waiting for input 3")
-
         # SECTION 3: VERIFY THE OUTCOMES
-        # Check if DAG file was created
-        # dagbag = DagBag(os.getenv("AIRFLOW_DAGS_FOLDER"))
-        # assert "sales_profit_pipeline" in dagbag.dags, "DAG not found in Airflow"
-
-        input("We are now verifying the outcomes")
+        print("Verifying the outcomes...")
         # Verify data in MySQL
         mysql_cursor.execute(
             """
@@ -401,6 +412,11 @@ def test_postgres_to_mysql_pipeline(request):
         assert results[1][3] == 120.00, "Incorrect total costs"
         assert float(results[1][4]) == 80.00, "Incorrect total profit"  # 200 - 120
 
+        test_steps[2]["status"] = "passed"
+        test_steps[2][
+            "Result_Message"
+        ] = "DAG successfully transferred and transformed data from Postgres to MySQL"
+
     finally:
         try:
             print("Starting cleanup...")
@@ -412,21 +428,17 @@ def test_postgres_to_mysql_pipeline(request):
             )
             headers = {"Content-Type": "application/json"}
 
-            # First delete all DAG runs
-            requests.delete(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
-                auth=auth,
-                headers=headers,
-            )
-
-            # Then delete the DAG itself
-            requests.delete(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
-                auth=auth,
-                headers=headers,
-            )
-
-            print("Cleaned up Airflow DAG")
+            # First pause the DAG
+            try:
+                requests.patch(
+                    f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
+                    auth=auth,
+                    headers=headers,
+                    json={"is_paused": True},
+                )
+                print("Paused the DAG")
+            except Exception as e:
+                print(f"Error pausing DAG: {e}")
 
             # Rest of your existing cleanup...
             # First close our connection to sales_db
@@ -483,13 +495,7 @@ def test_postgres_to_mysql_pipeline(request):
             print("MySQL cleanup completed")
 
             # Delete Ardent configs
-            Ardent_Client.delete_config(
-                config_id=postgres_result["specific_config"]["id"]
-            )
-            Ardent_Client.delete_config(config_id=mysql_result["specific_config"]["id"])
-            Ardent_Client.delete_config(
-                config_id=airflow_result["specific_config"]["id"]
-            )
+            remove_model_configs(Test_Configs.Configs, config_results)
 
             # Clean up GitHub - delete branch if it exists
             try:
@@ -521,8 +527,8 @@ def test_postgres_to_mysql_pipeline(request):
                     content="",
                     branch="main",
                 )
-            print("Cleaned dags folder. Press Enter to continue...")
-            input()
+            print("Cleaned dags folder")
+            airflow_local.Cleanup_Airflow_Directories()
 
         except Exception as e:
             print(f"Error during cleanup: {e}")

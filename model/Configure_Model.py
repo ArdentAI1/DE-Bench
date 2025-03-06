@@ -28,11 +28,37 @@ def set_up_model_configs(Configs, custom_info=None):
                 )
 
             elif service == "mongodb":
-
                 service_result = Ardent_Client.set_config(
                     config_type="mongodb",
                     connection_string=service_config["connection_string"],
                     databases=service_config["databases"],
+                )
+
+            elif service == "postgreSQL":
+                service_result = Ardent_Client.set_config(
+                    config_type="postgreSQL",
+                    Hostname=service_config["hostname"],
+                    Port=service_config["port"],
+                    username=service_config["username"],
+                    password=service_config["password"],
+                    databases=service_config["databases"],
+                )
+
+            elif service == "mysql":
+                service_result = Ardent_Client.set_config(
+                    config_type="mysql",
+                    host=service_config["host"],
+                    port=service_config["port"],
+                    username=service_config["username"],
+                    password=service_config["password"],
+                    databases=service_config["databases"],
+                )
+                
+            elif service == "tigerbeetle":
+                service_result = Ardent_Client.set_config(
+                    config_type="tigerbeetle",
+                    cluster_id=service_config["cluster_id"],
+                    replica_addresses=service_config["replica_addresses"],
                 )
 
             # Add the result to our results dictionary
