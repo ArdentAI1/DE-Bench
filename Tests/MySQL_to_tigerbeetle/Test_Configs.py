@@ -23,6 +23,7 @@ Configs = {
             "host": os.getenv("AIRFLOW_HOST"),
             "username": os.getenv("AIRFLOW_USERNAME"),
             "password": os.getenv("AIRFLOW_PASSWORD"),
+            "requirements_path": os.getenv("AIRFLOW_REQUIREMENTS_PATH"),
         },
         "mysql": {
             "host": os.getenv("MYSQL_HOST"),
