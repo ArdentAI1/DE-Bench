@@ -27,6 +27,7 @@ Configs = {
             "github_token": os.getenv("AIRFLOW_GITHUB_TOKEN"),
             "repo": os.getenv("AIRFLOW_REPO"),
             "dag_path": os.getenv("AIRFLOW_DAG_PATH"),
+            "requirements_path": os.getenv("AIRFLOW_REQUIREMENTS_PATH"),
         },
         "postgreSQL": {
             "hostname": os.getenv("POSTGRES_HOSTNAME"),
