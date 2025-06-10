@@ -34,6 +34,8 @@ def test_postgres_to_mysql_pipeline(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Create a Docker client with the compose file configuration
+    airflow_local = Airflow_Local()
+
 
     test_steps = [
         {
@@ -291,7 +293,6 @@ def test_postgres_to_mysql_pipeline(request):
             raise Exception(f"Failed to merge PR: {merge_result.message}")
 
         # now we run the function to get the dag
-        airflow_local = Airflow_Local()
         airflow_local.Get_Airflow_Dags_From_Github()
 
         # After creating the DAG, wait a bit for Airflow to detect it
