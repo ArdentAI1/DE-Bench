@@ -318,7 +318,7 @@ def test_simple_airflow_pipeline(request):
                     branch="main",
                 )
 
-            airflow_local.Cleanup_Airflow_Directories()
+            # airflow_local.Cleanup_Airflow_Directories()
 
         except Exception as e:
             print(f"Error during cleanup: {e}")

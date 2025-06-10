@@ -9,6 +9,8 @@ load_dotenv()
 
 uri = os.getenv("MONGODB_URI")
 
+print("MongoDB URI: ", uri)
+
 # Create a new client and connect to the server
 syncMongoClient = MongoClient(uri, server_api=ServerApi("1"))
 asyncMongoClient = AsyncIOMotorClient(uri, server_api=ServerApi("1"))
@@ -18,11 +20,21 @@ asyncMongoClient = AsyncIOMotorClient(uri, server_api=ServerApi("1"))
 async def confirmMongoConnection():
     try:
         # Synchronous ping
-        syncMongoClient.admin.command("ping")
-        # print("Pinged your deployment. You successfully connected to MongoDB Synchronously!")
+        result = syncMongoClient.admin.command("ping")
+        print("Ping result (sync): ", result)
+        print(
+            "Pinged your deployment. You successfully connected to MongoDB Synchronously!"
+        )
 
         # Asynchronous ping
-        await asyncMongoClient.admin.command("ping")
-        # print("Pinged your deployment. You successfully connected to MongoDb Async")
+        result = await asyncMongoClient.admin.command("ping")
+        print("Ping result (async): ", result)
+        print(
+            "Pinged your deployment asynchronously. You successfully connected to MongoDb Async"
+        )
     except Exception as e:
         print(f"Error occurred: {e}")
+
+
+if __name__ == "__main__":
+    asyncio.run(confirmMongoConnection())
