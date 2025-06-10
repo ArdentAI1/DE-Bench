@@ -53,7 +53,7 @@ def set_up_model_configs(Configs, custom_info=None):
                     password=service_config["password"],
                     databases=service_config["databases"],
                 )
-                
+
             elif service == "tigerbeetle":
                 service_result = Ardent_Client.set_config(
                     config_type="tigerbeetle",

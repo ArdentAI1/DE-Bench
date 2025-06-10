@@ -63,14 +63,12 @@ def test_mysql_to_tigerbeetle(request):
     airflow_local = Airflow_Local()
     cursor = connection.cursor()
 
-    
-
     # Pre-cleanup to ensure we start fresh
     try:
         print("Performing pre-cleanup...")
         # Force down any existing containers and remove volumes
         docker.compose.down(volumes=True)
-        
+
         # Additional cleanup for any orphaned volumes using Python on Whales
         try:
             # Try without force parameter
@@ -80,7 +78,7 @@ def test_mysql_to_tigerbeetle(request):
             print("Volume doesn't exist, which is fine")
         except Exception as vol_err:
             print(f"Other error when removing volume: {vol_err}")
-        
+
         print("Pre-cleanup completed")
     except Exception as e:
         print(f"Error during pre-cleanup: {e}")
@@ -181,9 +179,6 @@ def test_mysql_to_tigerbeetle(request):
 
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 
-        
-
-
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
         run_model(
@@ -196,11 +191,17 @@ def test_mysql_to_tigerbeetle(request):
         try:
             branch = repo.get_branch("feature/mysql_to_tigerbeetle")
             test_steps[0]["status"] = "passed"
-            test_steps[0]["Result_Message"] = "Branch 'feature/mysql_to_tigerbeetle' was created successfully"
+            test_steps[0][
+                "Result_Message"
+            ] = "Branch 'feature/mysql_to_tigerbeetle' was created successfully"
         except Exception as e:
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = f"Branch 'feature/mysql_to_tigerbeetle' was not created: {str(e)}"
-            raise Exception(f"Branch 'feature/mysql_to_tigerbeetle' was not created: {str(e)}")
+            test_steps[0][
+                "Result_Message"
+            ] = f"Branch 'feature/mysql_to_tigerbeetle' was not created: {str(e)}"
+            raise Exception(
+                f"Branch 'feature/mysql_to_tigerbeetle' was not created: {str(e)}"
+            )
 
         # Find and merge the PR
         pulls = repo.get_pulls(state="open")
@@ -209,12 +210,16 @@ def test_mysql_to_tigerbeetle(request):
             if pr.title == "Add MySQL to TigerBeetle Pipeline":  # Look for PR by title
                 target_pr = pr
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = "PR 'Add MySQL to TigerBeetle Pipeline' was created successfully"
+                test_steps[1][
+                    "Result_Message"
+                ] = "PR 'Add MySQL to TigerBeetle Pipeline' was created successfully"
                 break
 
         if not target_pr:
             test_steps[1]["status"] = "failed"
-            test_steps[1]["Result_Message"] = "PR 'Add MySQL to TigerBeetle Pipeline' not found"
+            test_steps[1][
+                "Result_Message"
+            ] = "PR 'Add MySQL to TigerBeetle Pipeline' not found"
             raise Exception("PR 'Add MySQL to TigerBeetle Pipeline' not found")
 
         # Merge the PR
@@ -224,7 +229,7 @@ def test_mysql_to_tigerbeetle(request):
 
         if not merge_result.merged:
             raise Exception(f"Failed to merge PR: {merge_result.message}")
-        
+
         input("Prior to dag fetch. We should have merged the PR...")
 
         # Get the DAGs from GitHub
@@ -255,33 +260,38 @@ def test_mysql_to_tigerbeetle(request):
 
             if dag_response.status_code != 200:
                 if attempt == max_retries - 1:
-                    
+
                     # Check for import errors before giving up
-                    print("DAG not found after max retries, checking for import errors...")
+                    print(
+                        "DAG not found after max retries, checking for import errors..."
+                    )
                     import_errors_response = requests.get(
                         f"{airflow_base_url.rstrip('/')}/api/v1/importErrors",
                         auth=auth,
-                        headers=headers
+                        headers=headers,
                     )
-                    
+
                     if import_errors_response.status_code == 200:
-                        import_errors = import_errors_response.json()['import_errors']
+                        import_errors = import_errors_response.json()["import_errors"]
 
                         print(import_errors)
-                        
+
                         # Filter errors related to your specific DAG
-                        dag_errors = [error for error in import_errors 
-                                     if "mysql_to_tigerbeetle.py" in error['filename']]
-                        
+                        dag_errors = [
+                            error
+                            for error in import_errors
+                            if "mysql_to_tigerbeetle.py" in error["filename"]
+                        ]
+
                         print(dag_errors)
-                        
+
                         if dag_errors:
                             error_message = f"DAG failed to load with import error: {dag_errors[0]['stack_trace']}"
                             print(error_message)
                             test_steps[2]["status"] = "failed"
                             test_steps[2]["Result_Message"] = error_message
                             raise Exception("Dag error which caused dag to not load")
-                    
+
                     raise Exception("DAG not found after max retries")
                 time.sleep(10)
                 continue
@@ -341,7 +351,9 @@ def test_mysql_to_tigerbeetle(request):
         # In a real test, we would verify the data in TigerBeetle
         # For now, we'll consider the test successful if the DAG ran successfully
         test_steps[2]["status"] = "passed"
-        test_steps[2]["Result_Message"] = "DAG executed successfully and data was transformed and stored in TigerBeetle"
+        test_steps[2][
+            "Result_Message"
+        ] = "DAG executed successfully and data was transformed and stored in TigerBeetle"
 
     except Exception as e:
         for step in test_steps:
@@ -375,14 +387,14 @@ def test_mysql_to_tigerbeetle(request):
             cursor.execute("DROP DATABASE IF EXISTS Access_Tokens")
             connection.commit()
             cursor.close()
-            
+
             # Pre-cleanup to ensure we start fresh
             try:
                 print("Performing cleanup...")
                 # Stop and remove containers, networks, and volumes to clean up tigerbeetle
                 print("Cleaning up Docker containers and volumes...")
                 docker.compose.down(volumes=True)
-                
+
                 # Additional cleanup for any orphaned volumes using Python on Whales
                 try:
                     # Try without force parameter
@@ -392,7 +404,7 @@ def test_mysql_to_tigerbeetle(request):
                     print("Volume doesn't exist, which is fine")
                 except Exception as vol_err:
                     print(f"Other error when removing volume: {vol_err}")
-                
+
                 print("Cleanup completed")
             except Exception as e:
                 print(f"Error during cleanup: {e}")
@@ -401,7 +413,7 @@ def test_mysql_to_tigerbeetle(request):
             remove_model_configs(
                 Configs=Test_Configs.Configs, custom_info=config_results
             )
-            
+
             # Clean up GitHub - delete branch if it exists
             try:
                 ref = repo.get_git_ref(f"heads/feature/mysql_to_tigerbeetle")
@@ -432,9 +444,9 @@ def test_mysql_to_tigerbeetle(request):
                     branch="main",
                 )
             print("Cleaned dags folder")
-            
+
             # Clean up Airflow
             airflow_local.Cleanup_Airflow_Directories()
-            
+
         except Exception as e:
             print(f"Error during cleanup: {e}")

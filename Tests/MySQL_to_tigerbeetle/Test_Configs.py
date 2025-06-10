@@ -29,11 +29,8 @@ Configs = {
             "port": os.getenv("MYSQL_PORT"),
             "username": os.getenv("MYSQL_USERNAME"),
             "password": os.getenv("MYSQL_PASSWORD"),
-            "databases": [{"name": "Access_Tokens"}]
+            "databases": [{"name": "Access_Tokens"}],
         },
-        "tigerbeetle": {
-            "cluster_id": "0",
-            "replica_addresses": ["127.0.0.1:3001"]
-        }
+        "tigerbeetle": {"cluster_id": "0", "replica_addresses": ["127.0.0.1:3001"]},
     }
 }
