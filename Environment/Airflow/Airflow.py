@@ -4,9 +4,13 @@ from python_on_whales import DockerClient
 import time
 import subprocess
 
+import requests
+from dotenv import load_dotenv
 import os
 import shutil
 from git import Repo, GitCommandError, InvalidGitRepositoryError
+
+load_dotenv()
 
 
 class Airflow_Local:
@@ -31,11 +35,64 @@ class Airflow_Local:
         docker.compose.up(detach=True)
 
         # Wait for the airflow webserver to start
-        time.sleep(30)
+        self._wait_for_airflow_ready(docker)
 
         if public_expose:
             # TODO: Implement this for external connections. For now we ignore
             print("TODO LATER")
+
+    def _wait_for_airflow_ready(self, docker, timeout=300):
+        """
+        Wait for Airflow containers to be ready and healthy.
+        
+        Args:
+            docker: DockerClient instance
+            timeout: Maximum time to wait in seconds (default 5 minutes)
+        """
+        import requests
+        
+        print("Waiting for Airflow containers to be ready...")
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Check if all services are running
+                containers = docker.compose.ps()
+                
+                # Check if webserver container is running
+                webserver_running = False
+                for container in containers:
+                    if 'airflow-webserver' in container.name and container.state == 'running':
+                        webserver_running = True
+                        break
+                
+                if webserver_running:
+                    # Try to connect to the Airflow web interface
+                    try:
+                        response = requests.get(f"{self.Airflow_BASE_URL}/health", timeout=5)
+                        if response.status_code == 200:
+                            print("Airflow is ready!")
+                            return
+                        else:
+                            print(f"Airflow is not ready! Status code: {response.status_code}")
+                            return
+                    except requests.exceptions.RequestException as e:
+                        # Airflow might not be fully ready yet
+                        print(f"Error checking Airflow health: {e}")
+                        pass
+                else:
+                    print(f"Airflow is not running!")
+                    return
+                
+                print(".", end="", flush=True)
+                time.sleep(5)
+                
+            except Exception as e:
+                print(f"Error checking container status: {e}")
+                time.sleep(5)
+        
+        # Fallback to original behavior if timeout is reached
+        print(f"\nTimeout reached ({timeout}s). Airflow may still be starting up...")
 
     def Stop_Airflow(self):
 

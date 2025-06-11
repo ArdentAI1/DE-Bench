@@ -14,6 +14,9 @@ def set_up_model_configs(Configs, custom_info=None):
         for service in Configs["services"]:
             service_config = Configs["services"][service]
 
+            print(f"Setting up config for {service}")
+            print(f"Service config: {service_config}")
+
             # Handle different service types
             if service == "airflow":
                 # ensure all required fields are present
@@ -54,7 +57,7 @@ def set_up_model_configs(Configs, custom_info=None):
                     password=service_config["password"],
                     databases=service_config["databases"],
                 )
-                
+
             elif service == "tigerbeetle":
                 service_result = Ardent_Client.set_config(
                     config_type="tigerbeetle",

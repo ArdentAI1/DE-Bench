@@ -77,7 +77,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     airflow_local.Stop_Airflow()
 
-    airflow_local.Cleanup_Airflow_Directories()
+    # airflow_local.Cleanup_Airflow_Directories()
 
     # Only the main process should aggregate and display results
     if os.environ.get("PYTEST_XDIST_WORKER") is None:

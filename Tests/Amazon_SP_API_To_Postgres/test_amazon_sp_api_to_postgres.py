@@ -147,11 +147,17 @@ def test_amazon_sp_api_to_postgres(request):
         try:
             branch = repo.get_branch("feature/amazon_sp_api_pipeline")
             test_steps[0]["status"] = "passed"
-            test_steps[0]["Result_Message"] = "Branch 'feature/amazon_sp_api_pipeline' was created successfully"
+            test_steps[0][
+                "Result_Message"
+            ] = "Branch 'feature/amazon_sp_api_pipeline' was created successfully"
         except Exception as e:
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = f"Branch 'feature/amazon_sp_api_pipeline' was not created: {str(e)}"
-            raise Exception(f"Branch 'feature/amazon_sp_api_pipeline' was not created: {str(e)}")
+            test_steps[0][
+                "Result_Message"
+            ] = f"Branch 'feature/amazon_sp_api_pipeline' was not created: {str(e)}"
+            raise Exception(
+                f"Branch 'feature/amazon_sp_api_pipeline' was not created: {str(e)}"
+            )
 
         input("Branch exists we are now checking the PR")
         # Find and merge the PR
@@ -161,12 +167,16 @@ def test_amazon_sp_api_to_postgres(request):
             if pr.title == "Add Amazon SP-API to Postgres Pipeline":
                 target_pr = pr
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = "PR 'Add Amazon SP-API to Postgres Pipeline' was created successfully"
+                test_steps[1][
+                    "Result_Message"
+                ] = "PR 'Add Amazon SP-API to Postgres Pipeline' was created successfully"
                 break
 
         if not target_pr:
             test_steps[1]["status"] = "failed"
-            test_steps[1]["Result_Message"] = "PR 'Add Amazon SP-API to Postgres Pipeline' not found"
+            test_steps[1][
+                "Result_Message"
+            ] = "PR 'Add Amazon SP-API to Postgres Pipeline' not found"
             raise Exception("PR 'Add Amazon SP-API to Postgres Pipeline' not found")
 
         input("PR found we are now merging the PR")
@@ -206,25 +216,30 @@ def test_amazon_sp_api_to_postgres(request):
             if dag_response.status_code != 200:
                 if attempt == max_retries - 1:
                     # Check for import errors before giving up
-                    print("DAG not found after max retries, checking for import errors...")
+                    print(
+                        "DAG not found after max retries, checking for import errors..."
+                    )
                     import_errors_response = requests.get(
                         f"{airflow_base_url.rstrip('/')}/api/v1/importErrors",
                         auth=auth,
-                        headers=headers
+                        headers=headers,
                     )
-                    
+
                     if import_errors_response.status_code == 200:
-                        import_errors = import_errors_response.json()['import_errors']
-                        dag_errors = [error for error in import_errors 
-                                     if "amazon_sp_api_to_postgres.py" in error['filename']]
-                        
+                        import_errors = import_errors_response.json()["import_errors"]
+                        dag_errors = [
+                            error
+                            for error in import_errors
+                            if "amazon_sp_api_to_postgres.py" in error["filename"]
+                        ]
+
                         if dag_errors:
                             error_message = f"DAG failed to load with import error: {dag_errors[0]['stack_trace']}"
                             print(error_message)
                             test_steps[2]["status"] = "failed"
                             test_steps[2]["Result_Message"] = error_message
                             raise Exception("DAG error which caused DAG to not load")
-                    
+
                     raise Exception("DAG not found after max retries")
                 time.sleep(10)
                 continue
@@ -331,7 +346,9 @@ def test_amazon_sp_api_to_postgres(request):
             assert count > 0, f"No data found in table {table}"
 
         test_steps[2]["status"] = "passed"
-        test_steps[2]["Result_Message"] = "DAG successfully transformed and stored Amazon SP-API data in Postgres"
+        test_steps[2][
+            "Result_Message"
+        ] = "DAG successfully transformed and stored Amazon SP-API data in Postgres"
 
     finally:
         try:
