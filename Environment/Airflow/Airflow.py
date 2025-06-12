@@ -31,6 +31,7 @@ class Airflow_Local:
         docker.compose.up(detach=True)
 
         # Wait for the airflow webserver to start
+        print("Waiting for Airflow to start... (Sleeping for 30 seconds)")
         time.sleep(30)
 
         if public_expose:
