@@ -61,6 +61,22 @@ def set_up_model_configs(Configs, custom_info=None):
                     cluster_id=service_config["cluster_id"],
                     replica_addresses=service_config["replica_addresses"],
                 )
+                
+            elif service == "databricks":
+                service_result = Ardent_Client.set_config(
+                    config_type="databricks",
+                    server_hostname=service_config["host"],
+                    access_token=service_config["token"],
+                    http_path=service_config["http_path"],
+                    cluster_id=service_config.get("cluster_id"),
+                    catalogs=[{
+                        "name": service_config["catalog"],
+                        "databases": [{
+                            "name": service_config["schema"],
+                            "tables": []
+                        }]
+                    }]
+                )
 
             # Add the result to our results dictionary
             if not results:
