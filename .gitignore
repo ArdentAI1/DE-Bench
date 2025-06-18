@@ -14,3 +14,10 @@ ardent-sdk/
 
 requirements-dev.txt
 .cursor
+
+# Databricks ephemeral cache
+Environment/Databricks/ephemeral.json
+
+.DS_Store
+*/.DS_Store
+*/**/.DS_Store
