@@ -60,3 +60,4 @@ psycopg2-binary==2.9.9
 # Databricks integration
 databricks-api>=0.8.0
 databricks-cli>=0.17.0
+databricks-sdk==0.41.0
