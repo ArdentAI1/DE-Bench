@@ -1,5 +1,5 @@
 annotated-types==0.7.0
-ardent-sdk==0.3.0
+ardent-sdk==0.3.3
 attrs==25.1.0
 boto3==1.36.11
 botocore==1.36.11
