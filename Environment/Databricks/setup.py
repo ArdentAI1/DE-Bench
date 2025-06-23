@@ -92,6 +92,11 @@ def get_or_create_cluster(client: DatabricksAPI, config: Dict[str, Any], timeout
     
     # Check cache first
     cache_data = load_cluster_cache()
+    if cache_data and not is_cluster_cache_valid(cache_data):
+        print(f"Found expired cached cluster {cache_data.get('cluster_id', 'unknown')}, clearing cache")
+        clear_cluster_cache()
+        cache_data = {}
+    
     if is_cluster_cache_valid(cache_data):
         cached_cluster_id = cache_data["cluster_id"]
         print(f"Found valid cached cluster: {cached_cluster_id}")
@@ -105,24 +110,17 @@ def get_or_create_cluster(client: DatabricksAPI, config: Dict[str, Any], timeout
                 print(f"Using cached running cluster: {cached_cluster_id}")
                 return cached_cluster_id, False
             elif state == "TERMINATED":
-                print(f"Starting cached cluster: {cached_cluster_id}")
-                client.cluster.start_cluster(cached_cluster_id)
-                
-                # Wait for it to start
-                max_wait = min(timeout, 300)  # Use provided timeout or 5 minutes max
-                start_time = time.time()
-                while time.time() - start_time < max_wait:
-                    cluster_info = client.cluster.get_cluster(cached_cluster_id)
-                    if cluster_info["state"] == "RUNNING":
-                        print(f"Cached cluster {cached_cluster_id} is now running")
-                        return cached_cluster_id, False
-                    time.sleep(10)
-                
-                print(f"Cached cluster {cached_cluster_id} failed to start, creating new one")
+                print(f"Cached cluster {cached_cluster_id} is terminated, creating new one")
+                # Clear the cache since this cluster is terminated
+                clear_cluster_cache()
             else:
                 print(f"Cached cluster {cached_cluster_id} is in state {state}, creating new one")
+                # Clear the cache since this cluster is in an unexpected state
+                clear_cluster_cache()
         except Exception as e:
             print(f"Error with cached cluster {cached_cluster_id}: {e}. Creating new cluster.")
+            # Clear the cache since this cluster is problematic
+            clear_cluster_cache()
     
     # If cluster_id is provided in config, try to use it
     if cluster_id:
@@ -136,21 +134,7 @@ def get_or_create_cluster(client: DatabricksAPI, config: Dict[str, Any], timeout
                 cache_new_cluster(cluster_id)
                 return cluster_id, False  # False = not created by us
             elif state == "TERMINATED":
-                print(f"Starting existing cluster: {cluster_id}")
-                client.cluster.start_cluster(cluster_id)
-                
-                # Wait for it to start
-                max_wait = min(timeout, 300)  # Use provided timeout or 5 minutes max
-                start_time = time.time()
-                while time.time() - start_time < max_wait:
-                    cluster_info = client.cluster.get_cluster(cluster_id)
-                    if cluster_info["state"] == "RUNNING":
-                        # Cache this cluster for future use
-                        cache_new_cluster(cluster_id)
-                        return cluster_id, False
-                    time.sleep(10)
-                
-                raise Exception(f"Cluster {cluster_id} failed to start")
+                print(f"Existing cluster {cluster_id} is terminated, creating new cluster")
             else:
                 print(f"Cluster {cluster_id} is in state {state}, creating new cluster")
                 
@@ -228,26 +212,26 @@ def cleanup_databricks_environment(client: DatabricksAPI, config: Dict[str, Any]
     except Exception as e:
         print(f"Warning: Could not delete output directory: {e}")
     
-    # 3. DO NOT terminate cached clusters - let them expire naturally
-    # Only terminate if explicitly created by us and not cached
-    cluster_from_env = os.getenv("DATABRICKS_CLUSTER_ID") is not None
-    cache_data = load_cluster_cache()
-    cluster_is_cached = cache_data.get("cluster_id") == config.get("cluster_id")
+    # # 3. DO NOT terminate cached clusters - let them expire naturally
+    # # Only terminate if explicitly created by us and not cached
+    # cluster_from_env = os.getenv("DATABRICKS_CLUSTER_ID") is not None
+    # cache_data = load_cluster_cache()
+    # cluster_is_cached = cache_data.get("cluster_id") == config.get("cluster_id")
     
-    if cluster_created_by_us and config.get("cluster_id") and not cluster_from_env and not cluster_is_cached:
-        try:
-            print(f"Terminating test cluster: {config['cluster_id']}")
-            client.cluster.delete_cluster(config["cluster_id"])
-            print(f"✓ Terminated cluster: {config['cluster_id']}")
-        except Exception as e:
-            print(f"Warning: Could not terminate cluster: {e}")
-    else:
-        if cluster_from_env:
-            print(f"Cluster cleanup skipped (cluster from env var: {config.get('cluster_id')})")
-        elif cluster_is_cached:
-            print(f"Cluster cleanup skipped (cached cluster: {config.get('cluster_id')})")
-        else:
-            print(f"Cluster cleanup skipped (using existing cluster: {config.get('cluster_id')})")
+    # if cluster_created_by_us and config.get("cluster_id") and not cluster_from_env and not cluster_is_cached:
+    #     try:
+    #         print(f"Terminating test cluster: {config['cluster_id']}")
+    #         client.cluster.delete_cluster(config["cluster_id"])
+    #         print(f"✓ Terminated cluster: {config['cluster_id']}")
+    #     except Exception as e:
+    #         print(f"Warning: Could not terminate cluster: {e}")
+    # else:
+    #     if cluster_from_env:
+    #         print(f"Cluster cleanup skipped (cluster from env var: {config.get('cluster_id')})")
+    #     elif cluster_is_cached:
+    #         print(f"Cluster cleanup skipped (cached cluster: {config.get('cluster_id')})")
+    #     else:
+    #         print(f"Cluster cleanup skipped (using existing cluster: {config.get('cluster_id')})")
     
     print("Cleanup completed.")
 
