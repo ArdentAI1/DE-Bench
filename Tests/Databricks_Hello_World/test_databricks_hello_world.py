@@ -288,6 +288,7 @@ def test_databricks_hello_world(request, databricks_client):
         failed_steps = []
         for step_name, step_data in test_steps.items():
             if step_data["status"] == "failed":
+                print(f"Test failed at step: {step_name}", step_data["Result_Message"])
                 failed_steps.append(step_name)
         
         if failed_steps:
