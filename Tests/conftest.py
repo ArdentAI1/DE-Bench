@@ -47,14 +47,18 @@ def pytest_configure(config):
 
 def pytest_runtest_logreport(report):
     if report.when == "call":
-        # Get model_runtime from user_properties
+        # Initialize variables with default values
         model_runtime = None
+        user_query = None
+        test_steps = None
+        
+        # Get values from user_properties if they exist
         for name, value in report.user_properties:
             if name == "model_runtime":
                 model_runtime = value
-            if name == "user_query":
+            elif name == "user_query":
                 user_query = value
-            if name == "test_steps":
+            elif name == "test_steps":
                 test_steps = value
 
         test_result = {
