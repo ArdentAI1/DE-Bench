@@ -22,24 +22,7 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
-@pytest.fixture(scope="module")
-def databricks_client():
-    """Initialize Databricks API client for validation"""
-    config = Test_Configs.Configs["services"]["databricks"]
-    
-    # Check if required environment variables are set
-    if not config["host"] or not config["token"]:
-        pytest.skip("Databricks credentials not configured. Set DATABRICKS_HOST and DATABRICKS_TOKEN environment variables.")
-    
-    # Ensure host has proper format
-    host = config["host"]
-    if not host.startswith("https://"):
-        host = f"https://{host}"
-    
-    return DatabricksAPI(
-        host=host,
-        token=config["token"]
-    )
+# Databricks client and shared cluster fixtures are now imported from shared_fixtures.py via conftest.py
 
 
 
@@ -173,17 +156,18 @@ def update_test_step(test_steps, step_name, status, message):
 
 @pytest.mark.databricks
 @pytest.mark.hello_world
-def test_databricks_hello_world(request, databricks_client):
+def test_databricks_hello_world(request, databricks_client, shared_cluster):
     """
     Test Databricks Hello World with unique string validation:
-    - Set up or create Databricks cluster
+    - Uses shared cluster for improved efficiency
     - Set up Databricks environment
     - Run model to create and execute simple Spark job with unique string
     - Validate results by checking for unique string output
     - Clean up the environment
     """
     config = Test_Configs.Configs["services"]["databricks"]
-    cluster_created_by_us = False
+    cluster_id = shared_cluster["cluster_id"]
+    cluster_created_by_us = shared_cluster["created_by_us"]
     start_time = time.time()
     
     # Store test metadata including unique identifiers
@@ -194,7 +178,7 @@ def test_databricks_hello_world(request, databricks_client):
     test_steps = {
         "Cluster Setup": {
             "order": 1,
-            "description": "Get or create Databricks cluster",
+            "description": "Use shared Databricks cluster",
             "status": "did not reach",
             "Result_Message": ""
         },
@@ -226,9 +210,8 @@ def test_databricks_hello_world(request, databricks_client):
     request.node.user_properties.append(("test_steps", test_steps))
     
     try:
-        # Step 1: Get or create cluster
-        cluster_id, cluster_created_by_us = get_or_create_cluster(databricks_client, config)
-        update_test_step(test_steps, "Cluster Setup", "passed", f"Using cluster: {cluster_id}")
+        # Step 1: Use shared cluster (already managed by session fixture)
+        update_test_step(test_steps, "Cluster Setup", "passed", f"Using shared cluster: {cluster_id}")
         
         # Step 2: Set up Databricks environment
         setup_databricks_environment(databricks_client, config, cluster_id)

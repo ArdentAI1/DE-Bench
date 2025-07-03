@@ -10,12 +10,15 @@ def extract_warehouse_id_from_http_path(http_path: str) -> str:
     return None
 
 def execute_sql_query(host: str, token: str, warehouse_id: str, sql_query: str, 
-                     catalog: str = "hive_metastore", schema: str = "default", timeout: int = 60) -> Dict[str, Any]:
+                     catalog: str = "hive_metastore", schema: str = "default", timeout: int = 30) -> Dict[str, Any]:
     """Execute SQL query using Databricks SQL Statement Execution API"""
     
     # Ensure host has proper format
     if not host.startswith("https://"):
         host = f"https://{host}"
+    
+    # Databricks SQL API requires wait_timeout to be 0 or between 5-50 seconds
+    sql_timeout = min(max(timeout, 5), 50) if timeout > 0 else 0
     
     # Prepare request payload for SQL execution
     payload = {
@@ -23,7 +26,7 @@ def execute_sql_query(host: str, token: str, warehouse_id: str, sql_query: str,
         "catalog": catalog,
         "schema": schema,
         "statement": sql_query,
-        "wait_timeout": f"{timeout}s",
+        "wait_timeout": f"{sql_timeout}s",
         "format": "JSON_ARRAY",
         "disposition": "INLINE"
     }
