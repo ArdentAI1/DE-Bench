@@ -1,0 +1,5 @@
+[16:17:59.671 +0.101s] ==== MAIN PROCESS SESSION START ====
+PYTEST_XDIST_WORKER: unknown
+Session started in main process
+Process ID: 67655
+==== END MAIN PROCESS SESSION START ====

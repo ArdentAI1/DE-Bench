@@ -36,13 +36,89 @@ def pytest_configure(config):
     # set up the airflow docker container
 
     initialize_model()
+    # Convert config object to JSON and print
+    
+    try:
+        config_dict = vars(config)
+        #print(json.dumps(config_dict, indent=2, default=str))
+
+        print(config_dict.get("args"))
+    except Exception as e:
+        print(f"Error converting config to JSON: {e}")
 
     # initialize local airflow instance
-    airflow_local = Airflow_Local()
+    #airflow_local = Airflow_Local()
 
-    print("Initializing Airflow")
+    #print("Initializing Airflow")
     # start the airflow docker container
-    airflow_local.Start_Airflow()
+    #airflow_local.Start_Airflow()
+
+
+def pytest_sessionstart(session):
+    """This runs in the main process at the start of the session"""
+    if os.environ.get("PYTEST_XDIST_WORKER") is None:
+        with open("main_process_sessionstart.txt", "w") as f:
+            f.write("==== MAIN PROCESS SESSION START ====\n")
+            f.write(f"PYTEST_XDIST_WORKER: {os.environ.get('PYTEST_XDIST_WORKER')}\n")
+            f.write("Session started in main process\n")
+            f.write("==== END MAIN PROCESS SESSION START ====\n")
+
+
+def pytest_collection_modifyitems(session, config, items):
+    # This runs in workers with xdist
+    with open(f"worker_{os.environ.get('PYTEST_XDIST_WORKER', 'unknown')}_compilation.txt", "w") as f:
+        f.write(f"==== WORKER {os.environ.get('PYTEST_XDIST_WORKER', 'unknown')} COMPILATION ====\n")
+        f.write(f"Worker has {len(items)} tests:\n")
+        
+        # Analyze markers for each test
+        airflow_tests = [item for item in items if item.get_closest_marker('airflow')]
+        databricks_tests = [item for item in items if item.get_closest_marker('databricks')]
+        mysql_tests = [item for item in items if item.get_closest_marker('mysql')]
+        mongodb_tests = [item for item in items if item.get_closest_marker('mongodb')]
+        
+        f.write(f"Airflow tests: {len(airflow_tests)}\n")
+        f.write(f"Databricks tests: {len(databricks_tests)}\n")
+        f.write(f"MySQL tests: {len(mysql_tests)}\n")
+        f.write(f"MongoDB tests: {len(mongodb_tests)}\n\n")
+        
+        for item in items:
+            markers = [mark.name for mark in item.iter_markers()]
+            f.write(f"  - {item.nodeid} (markers: {markers})\n")
+        
+        # Resource compilation logic
+        if airflow_tests:
+            f.write(f"\n🚀 Need Airflow cluster for: {len(airflow_tests)} tests\n")
+        if databricks_tests:
+            f.write(f"🚀 Need Databricks cluster for: {len(databricks_tests)} tests\n")
+        if mysql_tests:
+            f.write(f"🚀 Need MySQL database for: {len(mysql_tests)} tests\n")
+        if mongodb_tests:
+            f.write(f"🚀 Need MongoDB database for: {len(mongodb_tests)} tests\n")
+        
+        f.write("==== END WORKER COMPILATION ====\n")
+
+
+def pytest_collection_finish(session):
+    """This runs AFTER collection is complete - better for xdist"""
+    
+    print(f"🔍 pytest_collection_finish() called!")
+    print(f"   PYTEST_XDIST_WORKER: {os.environ.get('PYTEST_XDIST_WORKER')}")
+    
+    if os.environ.get("PYTEST_XDIST_WORKER") is None:
+        print("🔍 COLLECTION FINISHED (MAIN PROCESS):")
+        print(f"📊 Total tests in session: {len(session.items)}")
+        
+        # Analyze all tests in the session
+        airflow_tests = [item for item in session.items if item.get_closest_marker('airflow')]
+        print(f"   Airflow tests: {len(airflow_tests)}")
+        
+        for test in airflow_tests:
+            print(f"     - {test.nodeid}")
+        
+        print("✅ Collection finish analysis complete!")
+    else:
+        print(f"🔍 WORKER {os.environ.get('PYTEST_XDIST_WORKER')} FINISHED")
+        print(f"   Worker has {len(session.items)} items")
 
 
 def pytest_runtest_logreport(report):
@@ -73,11 +149,11 @@ def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
     from Environment.Airflow.Airflow import Airflow_Local
 
-    airflow_local = Airflow_Local()
+    #airflow_local = Airflow_Local()
 
-    airflow_local.Stop_Airflow()
+    #airflow_local.Stop_Airflow()
 
-    airflow_local.Cleanup_Airflow_Directories()
+    #airflow_local.Cleanup_Airflow_Directories()
 
     # Only the main process should aggregate and display results
     if os.environ.get("PYTEST_XDIST_WORKER") is None:

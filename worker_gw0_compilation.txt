@@ -1,0 +1,15 @@
+[16:18:00.130 +0.313s] ==== WORKER gw0 COMPILATION ====
+Worker has 2 tests:
+Process ID: 67660
+Collection timestamp: [16:18:00.130 +0.313s]
+Airflow tests: 2
+Databricks tests: 0
+MySQL tests: 0
+MongoDB tests: 0
+
+Test Details:
+  - Tests/Airflow_sample_1/test_airflow_sample_1.py::test_airflow_sample_1 (markers: ['pipeline', 'airflow'])
+  - Tests/Airflow_sample_2/test_airflow_sample_2.py::test_airflow_sample_2 (markers: ['pipeline', 'airflow'])
+
+🚀 Need Airflow cluster for: 2 tests
+==== END WORKER COMPILATION ====

@@ -1,0 +1,142 @@
+{
+  "airflow": {
+    "cluster_name": "test-airflow-cluster",
+    "version": "2.7.0",
+    "config": {
+      "workers": 2,
+      "memory": "4GB",
+      "cpu": "2 cores"
+    },
+    "tests": [
+      "test_mysql_to_tigerbeetle.py",
+      "test_airflow_sample_1.py",
+      "test_postgres_to_mysql_pipeline.py",
+      "test_amazon_sp_api_to_postgres.py",
+      "test_simple_airflow_pipeline.py",
+      "test_yfinance_airflow_pipeline.py",
+      "test_airflow_sample_2.py",
+      "test_pandas_airflow_pipeline.py"
+    ]
+  },
+  "databricks": null,
+  "mysql": {
+    "database": "test_database",
+    "version": "8.0",
+    "config": {
+      "host": "localhost",
+      "port": 3306,
+      "charset": "utf8mb4"
+    },
+    "tests": [
+      "test_mysql_to_tigerbeetle.py",
+      "test_postgres_to_mysql_pipeline.py"
+    ]
+  },
+  "mongodb": {
+    "database": "test_mongodb",
+    "version": "6.0",
+    "config": {
+      "host": "localhost",
+      "port": 27017,
+      "replica_set": "rs0"
+    },
+    "tests": [
+      "test_add_record_to_mongodb.py"
+    ]
+  },
+  "tests_analyzed": 10,
+  "test_files": [
+    "test_mysql_to_tigerbeetle.py",
+    "test_airflow_sample_1.py",
+    "test_postgres_to_mysql_pipeline.py",
+    "test_amazon_sp_api_to_postgres.py",
+    "test_simple_airflow_pipeline.py",
+    "test_yfinance_airflow_pipeline.py",
+    "test_airflow_sample_2.py",
+    "test_upload_pdf.py",
+    "test_pandas_airflow_pipeline.py",
+    "test_add_record_to_mongodb.py"
+  ],
+  "rich_marker_data": {
+    "test_airflow_sample_1.py": {
+      "airflow": {
+        "cluster_name": "test-airflow-cluster-1",
+        "version": "2.7.0",
+        "config": {
+          "workers": 2,
+          "memory": "4GB",
+          "cpu": "2 cores",
+          "executor": "CeleryExecutor",
+          "parallelism": 16,
+          "dag_concurrency": 16,
+          "max_active_runs_per_dag": 16
+        },
+        "dags": [
+          {
+            "name": "sample_dag_1",
+            "schedule": "0 0 * * *",
+            "description": "Sample Airflow DAG for testing"
+          }
+        ],
+        "requirements": [
+          "apache-airflow==2.7.0",
+          "pandas>=1.5.0",
+          "requests>=2.28.0"
+        ],
+        "estimated_cost": "$0.50/hour",
+        "startup_time": "2 minutes"
+      },
+      "pipeline": {
+        "type": "data_pipeline",
+        "complexity": "medium",
+        "estimated_duration": "5 minutes"
+      }
+    },
+    "test_airflow_sample_2.py": {
+      "airflow": {
+        "cluster_name": "test-airflow-cluster-2",
+        "version": "2.8.0",
+        "config": {
+          "workers": 4,
+          "memory": "8GB",
+          "cpu": "4 cores",
+          "executor": "KubernetesExecutor",
+          "parallelism": 32,
+          "dag_concurrency": 32,
+          "max_active_runs_per_dag": 32
+        },
+        "dags": [
+          {
+            "name": "sample_dag_2",
+            "schedule": "*/15 * * * *",
+            "description": "High-frequency Airflow DAG for testing"
+          },
+          {
+            "name": "backup_dag",
+            "schedule": "0 2 * * *",
+            "description": "Daily backup DAG"
+          }
+        ],
+        "requirements": [
+          "apache-airflow==2.8.0",
+          "kubernetes>=26.0.0",
+          "pandas>=2.0.0",
+          "numpy>=1.24.0"
+        ],
+        "estimated_cost": "$1.20/hour",
+        "startup_time": "5 minutes"
+      },
+      "pipeline": {
+        "type": "streaming_pipeline",
+        "complexity": "high",
+        "estimated_duration": "15 minutes"
+      }
+    }
+  },
+  "resources_needed": [
+    "\ud83d\ude80 Airflow cluster: test-airflow-cluster (v2.7.0)",
+    "\ud83d\ude80 MySQL database: test_database (v8.0)",
+    "\ud83d\ude80 MongoDB database: test_mongodb (v6.0)"
+  ],
+  "compilation_timestamp": "2025-07-08T15:42:13.721206"
+}
