@@ -6,7 +6,17 @@ import json
 from datetime import datetime
 from multiprocessing import Manager
 from dotenv import load_dotenv
+try:
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.exists(project_root):
+        raise FileNotFoundError(f"Project root path does not exist: {project_root}")
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+except Exception as e:
+    raise Exception(f"Error setting project root path: {str(e)}")
 
+# Import fixtures from root-level Fixtures directory
+from Fixtures.shared_resources import shared_resource, another_shared_fixture
 
 # Initialize a manager for a thread-safe list to store test results
 manager = Manager()
@@ -33,16 +43,17 @@ def pytest_configure(config):
     from model.Initialize_Model import initialize_model
     from Environment.Airflow.Airflow import Airflow_Local
 
+
     # set up the airflow docker container
 
     initialize_model()
 
     # initialize local airflow instance
-    airflow_local = Airflow_Local()
+    #airflow_local = Airflow_Local()
 
-    print("Initializing Airflow")
+    #print("Initializing Airflow")
     # start the airflow docker container
-    airflow_local.Start_Airflow()
+    #airflow_local.Start_Airflow()
 
 
 def pytest_runtest_logreport(report):
@@ -77,11 +88,11 @@ def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
     from Environment.Airflow.Airflow import Airflow_Local
 
-    airflow_local = Airflow_Local()
+    #airflow_local = Airflow_Local()
 
-    airflow_local.Stop_Airflow()
+    #airflow_local.Stop_Airflow()
 
-    airflow_local.Cleanup_Airflow_Directories()
+    #airflow_local.Cleanup_Airflow_Directories()
 
     # Only the main process should aggregate and display results
     if os.environ.get("PYTEST_XDIST_WORKER") is None:
