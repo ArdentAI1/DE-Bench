@@ -15,8 +15,8 @@ try:
 except Exception as e:
     raise Exception(f"Error setting project root path: {str(e)}")
 
-# Import fixtures from root-level Fixtures directory
-from Fixtures.shared_resources import shared_resource, another_shared_fixture
+# Import all fixtures from central hub
+from Fixtures.base_resources import *
 
 # Initialize a manager for a thread-safe list to store test results
 manager = Manager()
@@ -42,6 +42,12 @@ def pytest_configure(config):
     # Initialize the model
     from model.Initialize_Model import initialize_model
     from Environment.Airflow.Airflow import Airflow_Local
+
+
+    os.makedirs(".tmp", exist_ok=True)
+
+    #with open(".tmp/resources.json", "w") as f:
+    #    json.dump([], f, indent=2)
 
 
     # set up the airflow docker container
@@ -87,6 +93,26 @@ def pytest_runtest_logreport(report):
 def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
     from Environment.Airflow.Airflow import Airflow_Local
+    from Fixtures.session_spindown import session_spindown
+    import shutil
+
+
+    if os.path.exists(".tmp"):
+        print("TMP directory exists")
+
+        data = json.load(open(".tmp/resources.json"))
+
+        session_spindown(data)
+
+        #input("Waiting here")
+
+        if os.path.exists(".tmp"):
+            shutil.rmtree(".tmp/")
+
+
+
+        #now we want to check for information in there? on resources?
+
 
     #airflow_local = Airflow_Local()
 
