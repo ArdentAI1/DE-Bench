@@ -15,6 +15,19 @@ def test_shared_resource_works(shared_resource):
     print(f"TEST1: Test start time: {time.time()}")
     assert shared_resource is not None
     assert isinstance(shared_resource, str)
+    assert shared_resource == "test_value"
+    assert True  # Simple assertion to show it works
+
+
+@pytest.mark.parametrize("second_shared_resource", ["test_value1"], indirect=True)
+def test_second_shared_resource_works(second_shared_resource):
+    """Test that the shared resource fixture works."""
+    print(f"TEST1: Using shared resource: {second_shared_resource}")
+    print(f"TEST1: Worker PID: {os.getpid()}")
+    print(f"TEST1: Test start time: {time.time()}")
+    assert second_shared_resource is not None
+    assert isinstance(second_shared_resource, str)
+    assert second_shared_resource == "test_value1"
     assert True  # Simple assertion to show it works
 
 

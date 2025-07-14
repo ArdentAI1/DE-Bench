@@ -98,6 +98,13 @@ def shared_resource(request):
                 print(f"Worker {os.getpid()}: Resource creation took {creation_end - creation_start:.2f}s")
                 
                 # Create detailed resource data
+                custom_info = {
+                    "airflow_info": f"execution_date=2024-01-15,resource_id={rid}",
+                    "dag_id": "test_dag",
+                    "task_id": "test_task",
+                    "custom_param": "some_value",
+                }
+                
                 resource_data = {
                     "resource_id": rid,
                     "type": "shared_test_resource",
@@ -105,7 +112,8 @@ def shared_resource(request):
                     "worker_pid": os.getpid(),
                     "creation_duration": creation_end - creation_start,
                     "description": "A shared resource for coordinating test execution across workers",
-                    "status": "active"
+                    "status": "active",
+                    "custom_info": json.dumps(custom_info)
                 }
 
                 # Log to SQLite
@@ -140,79 +148,85 @@ def cleanup_shared_resource(resource_data):
  
 
 
-
-
 @pytest.fixture(scope="session")
-def second_shared_resource():
+def second_shared_resource(request):
     """
-    A shared resource that uses FileLock to coordinate creation across workers.
+    A Second shared resource that uses FileLock to coordinate creation across workers.
     Only one worker will create the resource, others will wait and reuse it.
     """
+
+    rid = request.param
+
+    
     start_time = time.time()
-    print(f"Worker {os.getpid()}: Starting second_shared_resource fixture at {start_time}")
     
     # Create temp directory in project root
     temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".tmp")
     
 
-    lock_file = os.path.join(temp_dir, "second_shared_resource.lock")
+    lock_file = os.path.join(temp_dir, f"second_shared_resource_{rid}.lock")
 
     #this should extract the resource FROM the file and see if it exists so it should read hte list and find the object with the right type
 
-    resource_file = os.path.join(temp_dir, "resources.json")
+    #resource_file = os.path.join(temp_dir, "resources.json")
     
     
     # First check without lock
     #checks if the resource already exists in the resource file
-    if os.path.exists(resource_file):
+
+
+    #we first need to chec
+
+
+    #we need to check if the resource exists in the sqlite database
+    with sqlite3.connect(".tmp/resources.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT resource_id, type, creation_time, worker_pid, creation_duration, description, status FROM resources WHERE resource_id = ?", (rid,))
+        existing_resource = cursor.fetchone()
+        if existing_resource:
+            print(f"Worker {os.getpid()}: Resource {rid} already exists in SQLite")
+
+
+
+
+    if existing_resource:
         # Resource exists, use it immediately
-        with open(resource_file, 'r') as f:
-            resource_data = json.load(f)
 
-
+        resource_id, resource_type, creation_time, worker_pid, creation_duration, description, status = existing_resource
         
-
-
-        resource_id = resource_data["resource_id"]
-        print(f"Worker {os.getpid()}: Resource already exists, reusing...")
-        print(f"Worker {os.getpid()}: Reusing resource {resource_id}")
+        print(f"Worker {os.getpid()}: Reusing resource {rid}")
         fixture_end_time = time.time()
         print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
-        yield resource_id
-        
+        yield {
+            "resource_id": resource_id,
+            "resource_type": resource_type,
+            "creation_time": creation_time,
+            "worker_pid": worker_pid,
+            "creation_duration": creation_duration,
+            "description": description,
+            "status": status
+        }
         # No cleanup here for a shared resource that happens in the end block
         
     else:
         # Only lock if we need to create
         with FileLock(lock_file):
+            with sqlite3.connect(".tmp/resources.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT resource_id, type, creation_time, worker_pid, creation_duration, description, status FROM resources WHERE resource_id = ?", (rid,))
+                existing_resource = cursor.fetchone()
+                if existing_resource:
+                    print(f"Worker {os.getpid()}: Resource {rid} already exists in SQLite")
             # Double-check after acquiring lock
-            if os.path.exists(resource_file):
+            if existing_resource:
+                print(f"Worker {os.getpid()}: Reusing resource {rid}")
+                fixture_end_time = time.time()
+                print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
+                resource_id, resource_type, creation_time, worker_pid, creation_duration, description, status = existing_resource
 
-                #if os.path.exists(resource_file):
-                with open(resource_file, 'r') as f:
-                    resource_data = json.load(f)
-
-
-                
-                resource_id = resource_data["resource_id"]
-                print(f"Worker {os.getpid()}: Resource already exists, reusing...")
-                print(f"Worker {os.getpid()}: Reusing resource {resource_id}")
+                yield rid
             else:
-                # Create resource
-
-
-                #creates the brackets
-
                 
-
-
-
-             
-
-
-
-                
-
 
                 print(f"Worker {os.getpid()}: Creating shared resource...")
                 creation_start = time.time()
@@ -220,17 +234,23 @@ def second_shared_resource():
                 creation_end = time.time()
                 print(f"Worker {os.getpid()}: Resource creation took {creation_end - creation_start:.2f}s")
                 
-                resource_id = f"resource_{int(time.time())}"
-                
                 # Create detailed resource data
+                custom_info = {
+                    "airflow_info": f"execution_date=2024-01-15,resource_id={rid}",
+                    "dag_id": "test_dag",
+                    "task_id": "test_task",
+                    "custom_param": "some_value",
+                }
+                
                 resource_data = {
-                    "resource_id": resource_id,
+                    "resource_id": rid,
                     "type": "second_shared_test_resource",
                     "creation_time": time.time(),
                     "worker_pid": os.getpid(),
                     "creation_duration": creation_end - creation_start,
                     "description": "A shared resource for coordinating test execution across workers",
-                    "status": "active"
+                    "status": "active",
+                    "custom_info": json.dumps(custom_info)
                 }
 
                 # Log to SQLite
@@ -251,24 +271,18 @@ def second_shared_resource():
                         print(f"Worker {os.getpid()}: Logged resource {resource_data['resource_id']} to SQLite")
                 except Exception as e:
                     print(f"Worker {os.getpid()}: Failed to log to SQLite: {e}")
-                
-                # Save resource info as JSON
-                with open(resource_file, 'w') as f:
-                    json.dump(resource_data, f, indent=2)
-                
-                print(f"Worker {os.getpid()}: Created resource {resource_id}")
-            
-            fixture_end_time = time.time()
-            print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
-            
-            yield resource_id
-            
-            # Cleanup (only by the worker that created it)
-           
+
+                # Append and save the resource list
+               
+                print(f"Worker {os.getpid()}: Created resource {rid}")
+                fixture_end_time = time.time()
+                print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
+                yield rid
+
+
 def cleanup_second_shared_resource(resource_data):
     print(f"Worker {os.getpid()}: Cleaning up shared resource {resource_data['resource_id']}")
  
-
 
 
 
