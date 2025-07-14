@@ -17,8 +17,6 @@ def test_shared_resource_works(shared_resource):
     assert True  # Simple assertion to show it works
 
 
-
-
 def test_test_specific_resource_works(test_specific_resource):
     """Test that the test_specific_resource fixture works."""
     print(f"TEST2: Using test_specific_resource: {test_specific_resource}")
