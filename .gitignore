@@ -21,3 +21,6 @@ Environment/Databricks/ephemeral.json
 .DS_Store
 */.DS_Store
 */**/.DS_Store
+
+# Temporary files for test coordination
+.tmp/
