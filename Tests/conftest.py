@@ -6,6 +6,10 @@ import json
 from datetime import datetime
 from multiprocessing import Manager
 from dotenv import load_dotenv
+import sqlite3
+
+
+
 try:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if not os.path.exists(project_root):
@@ -45,6 +49,10 @@ def pytest_configure(config):
 
 
     os.makedirs(".tmp", exist_ok=True)
+
+    # SQLite will create the database file automatically
+    with sqlite3.connect(".tmp/resources.db") as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS resources (id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id TEXT, type TEXT, creation_time REAL, worker_pid INTEGER, creation_duration REAL, description TEXT, status TEXT, custom_info TEXT)")
 
     #with open(".tmp/resources.json", "w") as f:
     #    json.dump([], f, indent=2)
@@ -100,9 +108,11 @@ def pytest_sessionfinish(session, exitstatus):
     if os.path.exists(".tmp"):
         print("TMP directory exists")
 
-        data = json.load(open(".tmp/resources.json"))
 
-        session_spindown(data)
+
+        input("Waiting here")
+
+        session_spindown()
 
         #input("Waiting here")
 

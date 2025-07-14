@@ -7,6 +7,7 @@ import pytest
 import time
 import os
 import json
+import sqlite3
 from filelock import FileLock
 
 
@@ -19,21 +20,8 @@ def shared_resource(request):
 
     rid = request.param
 
-    print("Got ID", rid)
-
-    with open(f".tmp/test_dump_{rid}.txt", "w") as f:
-        f.write(rid)
-
-
-
-
-
-
-    #print("Got ID", id)
-
     
     start_time = time.time()
-    print(f"Worker {os.getpid()}: Starting shared_resource fixture at {start_time}")
     
     # Create temp directory in project root
     temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".tmp")
@@ -43,7 +31,7 @@ def shared_resource(request):
 
     #this should extract the resource FROM the file and see if it exists so it should read hte list and find the object with the right type
 
-    resource_file = os.path.join(temp_dir, "resources.json")
+    #resource_file = os.path.join(temp_dir, "resources.json")
     
     
     # First check without lock
@@ -53,59 +41,55 @@ def shared_resource(request):
     #we first need to chec
 
 
+    #we need to check if the resource exists in the sqlite database
+    with sqlite3.connect(".tmp/resources.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT resource_id, type, creation_time, worker_pid, creation_duration, description, status FROM resources WHERE resource_id = ?", (rid,))
+        existing_resource = cursor.fetchone()
+        if existing_resource:
+            print(f"Worker {os.getpid()}: Resource {rid} already exists in SQLite")
 
 
-    if os.path.exists(resource_file):
+
+
+    if existing_resource:
         # Resource exists, use it immediately
-        with open(resource_file, 'r') as f:
-            resource_data = json.load(f)
 
-
+        resource_id, resource_type, creation_time, worker_pid, creation_duration, description, status = existing_resource
         
-
-
-        resource_id = resource_data["resource_id"]
-        print(f"Worker {os.getpid()}: Resource already exists, reusing...")
-        print(f"Worker {os.getpid()}: Reusing resource {resource_id}")
+        print(f"Worker {os.getpid()}: Reusing resource {rid}")
         fixture_end_time = time.time()
         print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
-        yield resource_id
-        
+        yield {
+            "resource_id": resource_id,
+            "resource_type": resource_type,
+            "creation_time": creation_time,
+            "worker_pid": worker_pid,
+            "creation_duration": creation_duration,
+            "description": description,
+            "status": status
+        }
         # No cleanup here for a shared resource that happens in the end block
         
     else:
         # Only lock if we need to create
         with FileLock(lock_file):
+            with sqlite3.connect(".tmp/resources.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT resource_id, type, creation_time, worker_pid, creation_duration, description, status FROM resources WHERE resource_id = ?", (rid,))
+                existing_resource = cursor.fetchone()
+                if existing_resource:
+                    print(f"Worker {os.getpid()}: Resource {rid} already exists in SQLite")
             # Double-check after acquiring lock
-            if os.path.exists(resource_file):
+            if existing_resource:
+                print(f"Worker {os.getpid()}: Reusing resource {rid}")
+                fixture_end_time = time.time()
+                print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
+                resource_id, resource_type, creation_time, worker_pid, creation_duration, description, status = existing_resource
 
-                #if os.path.exists(resource_file):
-                with open(resource_file, 'r') as f:
-                    resource_data = json.load(f)
-
-
-                
-                resource_id = resource_data["resource_id"]
-                print(f"Worker {os.getpid()}: Resource already exists, reusing...")
-                print(f"Worker {os.getpid()}: Reusing resource {resource_id}")
+                yield rid
             else:
-                # Create resource
-
-
-                #creates the brackets
-
-                if os.path.exists(resource_file):
-                    with open(resource_file, 'w') as f:
-                        json.dump([], f, indent=2)
-
-
-
-             
-
-
-
                 
-
 
                 print(f"Worker {os.getpid()}: Creating shared resource...")
                 creation_start = time.time()
@@ -113,11 +97,9 @@ def shared_resource(request):
                 creation_end = time.time()
                 print(f"Worker {os.getpid()}: Resource creation took {creation_end - creation_start:.2f}s")
                 
-                resource_id = f"resource_{int(time.time())}"
-                
                 # Create detailed resource data
                 resource_data = {
-                    "resource_id": resource_id,
+                    "resource_id": rid,
                     "type": "shared_test_resource",
                     "creation_time": time.time(),
                     "worker_pid": os.getpid(),
@@ -126,20 +108,33 @@ def shared_resource(request):
                     "status": "active"
                 }
 
-                
-                # Save resource info as JSON
-                with open(resource_file, 'w') as f:
-                    json.dump(resource_data, f, indent=2)
-                
-                print(f"Worker {os.getpid()}: Created resource {resource_id}")
-            
-            fixture_end_time = time.time()
-            print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
-            
-            yield resource_id
-            
-            # Cleanup (only by the worker that created it)
-           
+                # Log to SQLite
+                try:
+                    with sqlite3.connect(".tmp/resources.db") as conn:
+                        conn.execute("""
+                            INSERT INTO resources (resource_id, type, creation_time, worker_pid, creation_duration, description, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            resource_data["resource_id"],
+                            resource_data["type"],
+                            resource_data["creation_time"],
+                            resource_data["worker_pid"],
+                            resource_data["creation_duration"],
+                            resource_data["description"],
+                            resource_data["status"]
+                        ))
+                        print(f"Worker {os.getpid()}: Logged resource {resource_data['resource_id']} to SQLite")
+                except Exception as e:
+                    print(f"Worker {os.getpid()}: Failed to log to SQLite: {e}")
+
+                # Append and save the resource list
+               
+                print(f"Worker {os.getpid()}: Created resource {rid}")
+                fixture_end_time = time.time()
+                print(f"Worker {os.getpid()}: Fixture setup took {fixture_end_time - start_time:.2f}s total")
+                yield rid
+
+
 def cleanup_shared_resource(resource_data):
     print(f"Worker {os.getpid()}: Cleaning up shared resource {resource_data['resource_id']}")
  
@@ -208,9 +203,7 @@ def second_shared_resource():
 
                 #creates the brackets
 
-                if os.path.exists(resource_file):
-                    with open(resource_file, 'w') as f:
-                        json.dump([], f, indent=2)
+                
 
 
 
@@ -232,7 +225,7 @@ def second_shared_resource():
                 # Create detailed resource data
                 resource_data = {
                     "resource_id": resource_id,
-                    "type": "shared_test_resource",
+                    "type": "second_shared_test_resource",
                     "creation_time": time.time(),
                     "worker_pid": os.getpid(),
                     "creation_duration": creation_end - creation_start,
@@ -240,6 +233,24 @@ def second_shared_resource():
                     "status": "active"
                 }
 
+                # Log to SQLite
+                try:
+                    with sqlite3.connect(".tmp/resources.db") as conn:
+                        conn.execute("""
+                            INSERT INTO resources (resource_id, type, creation_time, worker_pid, creation_duration, description, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            resource_data["resource_id"],
+                            resource_data["type"],
+                            resource_data["creation_time"],
+                            resource_data["worker_pid"],
+                            resource_data["creation_duration"],
+                            resource_data["description"],
+                            resource_data["status"]
+                        ))
+                        print(f"Worker {os.getpid()}: Logged resource {resource_data['resource_id']} to SQLite")
+                except Exception as e:
+                    print(f"Worker {os.getpid()}: Failed to log to SQLite: {e}")
                 
                 # Save resource info as JSON
                 with open(resource_file, 'w') as f:
@@ -254,8 +265,6 @@ def second_shared_resource():
             
             # Cleanup (only by the worker that created it)
            
-
-
 def cleanup_second_shared_resource(resource_data):
     print(f"Worker {os.getpid()}: Cleaning up shared resource {resource_data['resource_id']}")
  
@@ -280,7 +289,7 @@ def test_specific_resource(request):
     # Create test-specific resource
     print(f"Worker {os.getpid()}: Creating test-specific resource for {test_name}")
     creation_start = time.time()
-    time.sleep(20)  # Simulate resource creation
+    time.sleep(12)  # Simulate resource creation
     creation_end = time.time()
     print(f"Worker {os.getpid()}: Test resource creation took {creation_end - creation_start:.2f}s")
     
