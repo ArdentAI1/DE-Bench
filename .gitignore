@@ -24,3 +24,5 @@ Environment/Databricks/ephemeral.json
 
 # Temporary files for test coordination
 .tmp/
+
+Environment/Airflow/logs/*
