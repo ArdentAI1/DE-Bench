@@ -1,12 +1,17 @@
-import pytest
-import json
-import time
+"""
+This module provides a pytest fixture for creating isolated Airflow instances using Docker Compose.
+"""
 import os
-import tempfile
 import shutil
-from python_on_whales import DockerClient
-from Environment.Airflow.Airflow import Airflow_Local
+import tempfile
+import time
+
+import pytest
 import requests
+from pathlib import Path
+from python_on_whales import DockerClient
+
+from Environment.Airflow.Airflow import Airflow_Local
 
 
 @pytest.fixture(scope="function")
@@ -20,7 +25,7 @@ def airflow_resource(request):
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
     
     # Use a temp directory inside the project root for Docker compatibility
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).parent
     tmp_root = os.path.join(project_root, "tmp_airflow_tests")
     os.makedirs(tmp_root, exist_ok=True)
     temp_dir = tempfile.mkdtemp(prefix=f"airflow_test_{test_name}_", dir=tmp_root)

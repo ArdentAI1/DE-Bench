@@ -1,14 +1,9 @@
 # conftest.py
-import sys
 import os
-import pytest
-import json
-from datetime import datetime
+import sys
 from multiprocessing import Manager
+
 from dotenv import load_dotenv
-import sqlite3
-
-
 
 try:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,8 +40,6 @@ def pytest_configure(config):
 
     # Initialize the model
     from model.Initialize_Model import initialize_model
-    from Environment.Airflow.Airflow import Airflow_Local
-
 
     os.makedirs(".tmp", exist_ok=True)
 
@@ -100,7 +93,6 @@ def pytest_runtest_logreport(report):
 
 def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
-    from Environment.Airflow.Airflow import Airflow_Local
     from Fixtures.session_spindown import session_spindown
     import shutil
 
