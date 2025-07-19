@@ -67,7 +67,7 @@ def create_test_cluster(client: DatabricksAPI, cluster_name: str = "de-bench-hel
     
     # Wait for cluster to start
     print(f"Waiting for cluster {cluster_id} to start...")
-    max_wait = 600  # 10 minutes timeout
+    max_wait = 1200  # 20 minutes timeout
     start_time = time.time()
     
     while time.time() - start_time < max_wait:

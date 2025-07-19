@@ -109,8 +109,7 @@ def pytest_sessionfinish(session, exitstatus):
         print("TMP directory exists")
 
 
-
-        input("Waiting here")
+        # input("Waiting here")
 
         session_spindown()
 
