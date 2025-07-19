@@ -96,6 +96,7 @@ def test_simple_airflow_pipeline(request, airflow_resource):
 
         # set the airflow folder with the correct configs
         # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
+        Test_Configs.Configs["services"]["airflow"]["host"] = airflow_resource["base_url"]
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 
         # SECTION 2: RUN THE MODEL
