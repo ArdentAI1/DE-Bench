@@ -22,7 +22,7 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
-# Databricks client and shared cluster fixtures are now imported from shared_fixtures.py via conftest.py
+# Databricks resource fixture is now imported from Fixtures/Databricks via conftest.py
 
 
 
@@ -154,20 +154,32 @@ def update_test_step(test_steps, step_name, status, message):
     test_steps[step_name]["Result_Message"] = message
 
 
+@pytest.mark.parametrize("databricks_resource", [
+    {
+        "resource_id": "hello_world_test",
+        "use_shared_cluster": True,
+        "cluster_fallback": True,
+        "shared_cluster_timeout": 1200
+    }
+], indirect=True)
 @pytest.mark.databricks
 @pytest.mark.hello_world
-def test_databricks_hello_world(request, databricks_client, shared_cluster):
+def test_databricks_hello_world(request, databricks_resource):
     """
     Test Databricks Hello World with unique string validation:
-    - Uses shared cluster for improved efficiency
+    - Uses databricks_resource fixture for setup
     - Set up Databricks environment
     - Run model to create and execute simple Spark job with unique string
     - Validate results by checking for unique string output
     - Clean up the environment
     """
     config = Test_Configs.Configs["services"]["databricks"]
-    cluster_id = shared_cluster["cluster_id"]
-    cluster_created_by_us = shared_cluster["created_by_us"]
+    
+    # Get cluster info from the databricks_resource fixture
+    cluster_id = databricks_resource["cluster_id"]
+    cluster_created_by_us = databricks_resource.get("cluster_created_by_us", False)
+    databricks_client = databricks_resource["client"]
+    
     start_time = time.time()
     
     # Store test metadata including unique identifiers

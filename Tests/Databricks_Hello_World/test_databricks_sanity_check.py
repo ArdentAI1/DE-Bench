@@ -21,7 +21,7 @@ from Environment.Databricks import (
     setup_databricks_environment,
     cleanup_databricks_environment,
 )
-from Tests.Databricks_Hello_World.shared_fixtures import databricks_client, shared_cluster
+from Fixtures.Databricks.databricks_resources import databricks_resource
 
 # Import test configurations
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -205,14 +205,22 @@ def submit_and_monitor_job(client: DatabricksAPI, job_id: str, timeout: int = 30
     }
 
 
+@pytest.mark.parametrize("databricks_resource", [
+    {
+        "resource_id": "sanity_check_test",
+        "use_shared_cluster": True,
+        "cluster_fallback": True,
+        "shared_cluster_timeout": 1200
+    }
+], indirect=True)
 @pytest.mark.databricks
 @pytest.mark.sanity_check
-def test_databricks_sanity_check(request, databricks_client, shared_cluster):
+def test_databricks_sanity_check(request, databricks_resource):
     """
     Sanity check test that directly implements Hello World functionality.
     
     This test:
-    - Uses the shared cluster from the session fixture
+    - Uses the databricks_resource fixture for setup
     - Creates a direct PySpark job (no AI model)
     - Submits and monitors the job using Databricks Jobs API
     - Validates results using the same validation logic as the main test
@@ -220,8 +228,13 @@ def test_databricks_sanity_check(request, databricks_client, shared_cluster):
     """
     # Create sanity check specific config
     config = create_sanity_check_config()
-    cluster_id = shared_cluster["cluster_id"]
-    cluster_created_by_us = shared_cluster["created_by_us"]
+    
+    # Get cluster info from the databricks_resource fixture
+    cluster_id = databricks_resource["cluster_id"]
+    cluster_created_by_us = databricks_resource["cluster_created_by_us"]
+    databricks_client = databricks_resource["client"]
+
+    print(f"Worker {os.getpid()}: Using cluster: {cluster_id}")
     
     start_time = time.time()
     job_id = None
