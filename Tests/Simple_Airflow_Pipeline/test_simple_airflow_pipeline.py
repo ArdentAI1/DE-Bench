@@ -1,17 +1,15 @@
-import os
 import importlib
-import pytest
+import os
 import time
+
+import pytest
 import requests
 from github import Github
 from requests.auth import HTTPBasicAuth
 
-from Environment.Airflow.Airflow import Airflow_Local
-
-
-from model.Run_Model import run_model
-from model.Configure_Model import set_up_model_configs
 from model.Configure_Model import remove_model_configs
+from model.Configure_Model import set_up_model_configs
+from model.Run_Model import run_model
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
@@ -21,11 +19,15 @@ Test_Configs = importlib.import_module(module_path)
 
 @pytest.mark.airflow
 @pytest.mark.pipeline
-def test_simple_airflow_pipeline(request):
+def test_simple_airflow_pipeline(request, airflow_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-    airflow_local = Airflow_Local()
-
+    
+    # Use the airflow_resource fixture - the Docker instance is already running
+    print(f"=== Starting Simple Airflow Pipeline Test ===")
+    print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
+    print(f"Airflow base URL: {airflow_resource['base_url']}")
+    print(f"Test directory: {input_dir}")
 
     test_steps = [
         {
@@ -93,7 +95,6 @@ def test_simple_airflow_pipeline(request):
                 raise e
 
         # set the airflow folder with the correct configs
-
         # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 
@@ -146,24 +147,31 @@ def test_simple_airflow_pipeline(request):
         if not merge_result.merged:
             raise Exception(f"Failed to merge PR: {merge_result.message}")
 
-        # now we get pull it and merge it in
-
-        airflow_local.Get_Airflow_Dags_From_Github()
+        # Use the airflow instance from the fixture to pull DAGs from GitHub
+        # The fixture already has the Docker instance running
+        airflow_instance = airflow_resource["airflow_instance"]
+        print(f"Pulling DAGs from GitHub using Airflow instance at: {airflow_instance.Airflow_DIR}")
+        airflow_instance.Get_Airflow_Dags_From_Github()
 
         # After merging, wait again for Airflow to detect changes
         time.sleep(10)  # Give Airflow time to scan for new DAGs
 
-        # Trigger the DAG
-        airflow_base_url = os.getenv("AIRFLOW_HOST")
-        airflow_username = os.getenv("AIRFLOW_USERNAME")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD")
+        # Use the connection details from the fixture
+        airflow_base_url = airflow_resource["base_url"]
+        airflow_username = airflow_resource["username"]
+        airflow_password = airflow_resource["password"]
+        
+        print(f"Connecting to Airflow at: {airflow_base_url}")
+        print(f"Using credentials: {airflow_username}")
 
         # Wait for DAG to appear and trigger it
         max_retries = 5
         auth = HTTPBasicAuth(airflow_username, airflow_password)
         headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
 
+        print(f"Waiting for DAG 'hello_world_dag' to appear in Airflow...")
         for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
             # Check if DAG exists
             dag_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag",
@@ -172,11 +180,13 @@ def test_simple_airflow_pipeline(request):
             )
 
             if dag_response.status_code != 200:
+                print(f"DAG not found yet (status: {dag_response.status_code}), waiting...")
                 if attempt == max_retries - 1:
                     raise Exception("DAG not found after max retries")
                 time.sleep(10)
                 continue
 
+            print(f"DAG found! Unpausing DAG...")
             # Unpause the DAG before triggering
             unpause_response = requests.patch(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag",
@@ -186,11 +196,13 @@ def test_simple_airflow_pipeline(request):
             )
 
             if unpause_response.status_code != 200:
+                print(f"Failed to unpause DAG: {unpause_response.text}")
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
                 time.sleep(10)
                 continue
 
+            print(f"DAG unpaused successfully. Triggering DAG...")
             # Trigger the DAG
             trigger_response = requests.post(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns",
@@ -201,8 +213,10 @@ def test_simple_airflow_pipeline(request):
 
             if trigger_response.status_code == 200:
                 dag_run_id = trigger_response.json()["dag_run_id"]
+                print(f"DAG triggered successfully! Run ID: {dag_run_id}")
                 break
             else:
+                print(f"Failed to trigger DAG: {trigger_response.text}")
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
                 time.sleep(10)
@@ -210,6 +224,7 @@ def test_simple_airflow_pipeline(request):
         # Monitor the DAG run
         max_wait = 120  # 2 minutes timeout
         start_time = time.time()
+        print(f"Monitoring DAG run {dag_run_id} for completion...")
         while time.time() - start_time < max_wait:
             status_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns/{dag_run_id}",
@@ -219,7 +234,9 @@ def test_simple_airflow_pipeline(request):
 
             if status_response.status_code == 200:
                 state = status_response.json()["state"]
+                print(f"DAG run state: {state}")
                 if state == "success":
+                    print("DAG run completed successfully!")
                     break
                 elif state in ["failed", "error"]:
                     raise Exception(f"DAG failed with state: {state}")
@@ -230,6 +247,7 @@ def test_simple_airflow_pipeline(request):
 
         # SECTION 3: VERIFY THE OUTCOMES
         # Get the task logs to verify "Hello World" was printed
+        print("Retrieving task logs to verify 'Hello World' output...")
 
         # First, get task instance information
         task_instance_response = requests.get(
@@ -249,6 +267,7 @@ def test_simple_airflow_pipeline(request):
             "try_number", 1
         )  # Default to 1 if not found
 
+        print(f"Retrieving logs for task 'print_hello', try number: {try_number}")
         # Now get the logs with the correct try number
         task_logs_response = requests.get(
             f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns/{dag_run_id}/taskInstances/print_hello/logs/{try_number}",
@@ -260,7 +279,11 @@ def test_simple_airflow_pipeline(request):
             raise Exception(f"Failed to retrieve task logs: {task_logs_response.text}")
 
         logs = task_logs_response.text
+        print(f"Task logs retrieved. Log content length: {len(logs)} characters")
+        print(f"Log content preview: {logs[:200]}...")
+        
         assert "Hello World" in logs, "Expected 'Hello World' in task logs"
+        print("✓ 'Hello World' found in task logs!")
         test_steps[2]["status"] = "passed"
         test_steps[2][
             "Result_Message"
@@ -268,22 +291,6 @@ def test_simple_airflow_pipeline(request):
 
     finally:
         try:
-
-            # Clean up Airflow DAG
-            airflow_base_url = os.getenv("AIRFLOW_HOST")
-            auth = HTTPBasicAuth(
-                os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD")
-            )
-            headers = {"Content-Type": "application/json"}
-
-            # First pause the DAG
-            pause_response = requests.patch(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag",
-                auth=auth,
-                headers=headers,
-                json={"is_paused": True},
-            )
-
             # this function is for you to remove the configs for the test. They follow a set structure.
             remove_model_configs(
                 Configs=Test_Configs.Configs, custom_info=config_results
@@ -317,8 +324,6 @@ def test_simple_airflow_pipeline(request):
                     content="",
                     branch="main",
                 )
-
-            airflow_local.Cleanup_Airflow_Directories()
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
