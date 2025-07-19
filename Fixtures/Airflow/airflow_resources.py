@@ -139,8 +139,8 @@ def airflow_resource(request):
                 )
 
                 # docker down with force removal
-                docker.compose.down(volumes=True, remove_orphans=True)
-                print(f"Worker {os.getpid()}: Successfully stopped containers for {self.project_name}")
+                docker.compose.down(volumes=True, remove_orphans=True, remove_images="all")
+                print(f"Worker {os.getpid()}: Successfully stopped & removed containers and volumes for {self.project_name}")
             except Exception as e:
                 print(f"Worker {os.getpid()}: Error in Stop_Airflow: {e}")
                 # Try alternative cleanup
@@ -148,15 +148,11 @@ def airflow_resource(request):
                     # Use docker directly to force remove containers
                     import subprocess
                     result = subprocess.run(
-                        ["docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={self.project_name}", "--format", "{{.ID}}"],
+                        ["docker", "compose", "down", "--rmi" "all", "--volumes", "--remove-orphans"],
                         capture_output=True, text=True
                     )
                     if result.stdout.strip():
-                        container_ids = result.stdout.strip().split('\n')
-                        for container_id in container_ids:
-                            if container_id:
-                                subprocess.run(["docker", "rm", "-f", container_id], capture_output=True)
-                        print(f"Worker {os.getpid()}: Force removed containers for {self.project_name}")
+                        print(f"Worker {os.getpid()}: removed containers, volumes, and orphans for {self.project_name}")
                 except Exception as alt_e:
                     print(f"Worker {os.getpid()}: Alternative cleanup failed: {alt_e}")
     
