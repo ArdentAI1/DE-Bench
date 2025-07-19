@@ -154,5 +154,5 @@ def pytest_sessionfinish(session, exitstatus):
             #    print(f"  Failure Reason: {result['longrepr']}")
 
         # Optionally, save detailed results to a JSON file
-        with open("Results/Test_Results.json", "w") as f:
+        with open(f"{project_root}/Results/Test_Results.json", "w") as f:
             json.dump(results_json, f, indent=4)
