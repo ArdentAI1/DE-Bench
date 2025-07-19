@@ -1,22 +1,27 @@
-import os
-import ssl
-from python_on_whales import DockerClient
-import time
-import subprocess
+"""
+This class is used to start and stop the Airflow local instance using docker compose.
+"""
 
 import os
 import shutil
+import subprocess
+import time
+from typing import Optional
+
 from git import Repo, GitCommandError, InvalidGitRepositoryError
+from python_on_whales import DockerClient
 
 
 class Airflow_Local:
-    def __init__(self):
+    def __init__(self, port: Optional[int] = None):
         self.Airflow_DIR = os.path.dirname(os.path.abspath(__file__))
         self.Airflow_USERNAME = os.getenv("AIRFLOW_USERNAME")
         self.Airflow_PASSWORD = os.getenv("AIRFLOW_PASSWORD")
-        self.Airflow_HOST = os.getenv("AIRFLOW_HOST")
-        self.Airflow_PORT = "8888"
-        self.Airflow_BASE_URL = f"http://{self.Airflow_HOST}:{self.Airflow_PORT}"
+        self.Airflow_HOST = os.getenv("AIRFLOW_HOST", "localhost")
+        self.Airflow_PORT = port or "8888"
+        # make sure the host doesn't have http:// or https://
+        url_prefix = "" if self.Airflow_HOST.startswith("http") else "http://"
+        self.Airflow_BASE_URL = f"{url_prefix}{self.Airflow_HOST}:{self.Airflow_PORT}"
 
     def Start_Airflow(self, public_expose=False):
         # Set the absolute path for AIRFLOW_PROJ_DIR
