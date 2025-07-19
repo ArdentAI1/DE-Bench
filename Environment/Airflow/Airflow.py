@@ -180,8 +180,21 @@ class Airflow_Local:
                     shutil.rmtree(d)
                 shutil.copytree(s, d)
             else:
-                shutil.copy2(s, d)
-
+                try:
+                    # Try to copy the file normally
+                    shutil.copy2(s, d)
+                except PermissionError:
+                    # If permission denied, try to remove the destination file first
+                    if os.path.exists(d):
+                        try:
+                            os.chmod(d, 0o666)  # Make writable
+                            os.remove(d)
+                        except (PermissionError, OSError):
+                            # If we still can't remove it, skip this file
+                            print(f"Warning: Could not overwrite {d}, skipping...")
+                            continue
+                    # Try copying again
+                    shutil.copy2(s, d)
     def Cleanup_Airflow_Directories(self):
         """
         Clean up all Airflow directories while preserving .gitkeep files.
