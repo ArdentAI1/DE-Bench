@@ -454,3 +454,8 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
+
+        finally:
+            remove_model_configs(
+                Configs=Test_Configs.Configs, custom_info=config_results
+            )
