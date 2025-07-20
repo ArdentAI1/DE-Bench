@@ -6,8 +6,6 @@ import requests
 from github import Github
 from requests.auth import HTTPBasicAuth
 
-from Environment.Airflow.Airflow import Airflow_Local
-
 from model.Run_Model import run_model
 from model.Configure_Model import set_up_model_configs
 from model.Configure_Model import remove_model_configs
@@ -20,10 +18,19 @@ Test_Configs = importlib.import_module(module_path)
 
 @pytest.mark.airflow
 @pytest.mark.pipeline
-def test_pandas_airflow_pipeline(request):
+def test_pandas_airflow_pipeline(request, airflow_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-    airflow_local = Airflow_Local()
+    
+    # Use the airflow_resource fixture instead of creating our own instance
+    airflow_local = airflow_resource["airflow_instance"]
+
+    # Get Airflow base URL and credentials from the fixture
+    airflow_base_url = airflow_resource["base_url"]
+    airflow_username = airflow_resource["username"]
+    airflow_password = airflow_resource["password"]
+
+    Test_Configs.Configs["services"]["airflow"]["host"] = airflow_base_url
 
     test_steps = [
         {
@@ -149,11 +156,6 @@ def test_pandas_airflow_pipeline(request):
         # Wait for Airflow to detect the new DAG
         time.sleep(10)
 
-        # Get Airflow base URL
-        airflow_base_url = os.getenv("AIRFLOW_HOST")
-        airflow_username = os.getenv("AIRFLOW_USERNAME")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD")
-
         # Wait for DAG to appear and trigger it
         max_retries = 5
         auth = HTTPBasicAuth(airflow_username, airflow_password)
@@ -273,11 +275,9 @@ def test_pandas_airflow_pipeline(request):
     finally:
         input("Waiting before cleanup")
         try:
-            # Clean up Airflow DAG
-            airflow_base_url = os.getenv("AIRFLOW_HOST")
-            auth = HTTPBasicAuth(
-                os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD")
-            )
+            # Clean up Airflow DAG using fixture credentials
+            # airflow_base_url, airflow_username, airflow_password already set from fixture
+            auth = HTTPBasicAuth(airflow_username, airflow_password)
             headers = {"Content-Type": "application/json"}
 
             # First pause the DAG
@@ -341,7 +341,6 @@ def test_pandas_airflow_pipeline(request):
             except Exception as e:
                 print(f"Error cleaning up requirements: {e}")
 
-            airflow_local.Cleanup_Airflow_Directories()
 
         except Exception as e:
             print(f"Error during cleanup: {e}") 
