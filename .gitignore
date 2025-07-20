@@ -31,3 +31,6 @@ tmp_airflow_tests/*
 
 # Ignore all .gitkeep files in Environment/Airflow recursively
 Environment/Airflow/**/.gitkeep
+.secrets
+*/**/.secrets
+.astro/*
