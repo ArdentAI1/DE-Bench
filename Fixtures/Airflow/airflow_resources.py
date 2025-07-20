@@ -35,30 +35,64 @@ def airflow_resource(request):
     unique_id = f"{test_name}_{int(time.time())}"
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
 
-    # TODO: verify template for Airflow resource
-    # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
-    # Template structure: {"resource_id": "id", "databases": [{"name": "db", "collections": [{"name": "col", "data": []}]}]}    
-    build_template = request.param
 
-    
+
     # Create Airflow resource
     print(f"Worker {os.getpid()}: Creating Airflow resource for {test_name}")
     creation_start = time.time()
-    
+    created_resources = []
+
     # run terminal commands to create the airflow resource in astronomer
     # login to astronomer
-    _run_and_validate_subprocess(["astro", "login", "--token", os.getenv("ASTRO_ACCESS_TOKEN")], "login to Astro")
-    
+    _run_and_validate_subprocess(["astro", "login", "--token-login", os.getenv("ASTRO_ACCESS_TOKEN")], "login to Astro")
+
     # create a deployment
     test_dir = _create_dir_and_astro_project(unique_id)
 
     # TODO: upload the dag
     # TODO: trigger the dag
     # TODO: wait for the dag to finish
-    # TODO: delete the deployment
-    
+
     creation_end = time.time()
     print(f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s")
+
+    # TODO: verify template for Airflow resource
+    # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
+    # Template structure: {"resource_id": "id", "databases": [{"name": "db", "collections": [{"name": "col", "data": []}]}]}    
+    build_template = request.param
+    resource_id = build_template.get("resource_id", f"airflow_resource_{unique_id}")
+    
+    # Create detailed resource data
+    resource_data = {
+        "resource_id": resource_id,
+        "type": "airflow_resource",
+        "test_name": test_name,
+        "creation_time": time.time(),
+        "worker_pid": os.getpid(),
+        "creation_duration": creation_end - creation_start,
+        "description": f"An Airflow resource for {test_name}",
+        "status": "active",
+        "created_resources": created_resources
+    }
+    
+    print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
+    
+    fixture_end_time = time.time()
+    print(f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total")
+
+    yield resource_data
+
+    # Cleanup after test completes
+    print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
+    try:
+        # Clean up created resources in reverse order
+        for resource in reversed(created_resources):
+            # TODO: delete the deployment
+            db = syncMongoClient[resource["db"]]
+            db.drop_collection(resource["collection"])
+        print(f"Worker {os.getpid()}: MongoDB resource {resource_id} cleaned up successfully")
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error cleaning up MongoDB resource: {e}")
 
 
 def _parse_astro_version() -> str:
@@ -92,7 +126,7 @@ def _parse_astro_version() -> str:
         ) from e
 
 
-def _run_and_validate_subprocess(command: list[str], process_description: str, check: bool = True, capture_output: bool = True, return_output: bool = False) -> subprocess.CompletedProcess:
+def _run_and_validate_subprocess(command: list[str], process_description: str, check: bool = True, capture_output: bool = True, return_output: bool = False, input_text: str = None) -> subprocess.CompletedProcess:
     """
     Helper function to run a subprocess command and validate the return code.
 
@@ -101,17 +135,35 @@ def _run_and_validate_subprocess(command: list[str], process_description: str, c
     :param check: Whether to check the return code.
     :param capture_output: Whether to capture the output.
     :param return_output: Whether to return the output.
+    :param input_text: Text to send to stdin if the command expects input.
     :return: The completed process.
     :rtype: subprocess.CompletedProcess
     """
     try:
-        process = subprocess.run(command, check=check, capture_output=capture_output)
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, command)
-        if return_output:
-            return process.stdout.decode('utf-8')
+        if input_text:
+            # If input is needed, use Popen to handle interactive input
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate(input=input_text)
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, command, stdout, stderr)
+            if return_output:
+                return stdout
+            else:
+                return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         else:
-            return process
+            process = subprocess.run(command, check=check, capture_output=capture_output)
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, command)
+            if return_output:
+                return process.stdout.decode('utf-8')
+            else:
+                return process
     except Exception as e:
         raise e(
             f"Failed to {process_description}. {VALIDATE_ASTRO_INSTALL}"
@@ -137,10 +189,11 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     print(f"Worker {os.getpid()}: Created temp directory for Airflow: {temp_dir}")
     # cd into the temp directory and run astro project init
     os.chdir(temp_dir)
+    temp_dir = Path(temp_dir)
 
-    astro_project = _run_and_validate_subprocess(["astro", "dev", "init"], "initialize Astro project", return_output=True)
+    astro_project = _run_and_validate_subprocess(["astro", "dev", "init", "-n", temp_dir.stem], "initialize Astro project", return_output=True, input_text="y")
     print(f"Worker {os.getpid()}: Astro project initialized: {astro_project}")
-    return Path(temp_dir)
+    return temp_dir
 
 
     # resource_id = build_template.get("resource_id", f"airflow_resource_{test_name}_{int(time.time())}")
