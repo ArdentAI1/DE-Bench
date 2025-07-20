@@ -7,7 +7,6 @@ from github import Github
 from requests.auth import HTTPBasicAuth
 import psycopg2
 
-from Environment.Airflow.Airflow import Airflow_Local
 from model.Run_Model import run_model
 from model.Configure_Model import set_up_model_configs
 from model.Configure_Model import remove_model_configs
@@ -20,10 +19,19 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.airflow
 @pytest.mark.pipeline
 @pytest.mark.database
-def test_yfinance_airflow_pipeline(request):
-    input_dir = os.path.dirname(os.path.abspath(__file__))
+def test_yfinance_airflow_pipeline(request, airflow_resource):
+    print_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-    airflow_local = Airflow_Local()
+    
+    # Use the airflow_resource fixture instead of creating our own instance
+    airflow_local = airflow_resource["airflow_instance"]
+
+    # Get Airflow base URL and credentials from the fixture
+    airflow_base_url = airflow_resource["base_url"]
+    airflow_username = airflow_resource["username"]
+    airflow_password = airflow_resource["password"]
+
+    Test_Configs.Configs["services"]["airflow"]["host"] = airflow_base_url
 
     test_steps = [
         {
@@ -200,15 +208,9 @@ def test_yfinance_airflow_pipeline(request):
         target_pr.merge(merge_method="merge")
         time.sleep(5)
 
-        # Get the DAGs from GitHub
+        # Get the DAGs from GitHub using the fixture's Airflow instance
         airflow_local.Get_Airflow_Dags_From_Github()
         time.sleep(10)
-
-
-        # Get Airflow base URL and credentials
-        airflow_base_url = os.getenv("AIRFLOW_HOST")
-        airflow_username = os.getenv("AIRFLOW_USERNAME")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD")
 
         # Wait for DAG to appear and trigger it
         max_retries = 5
@@ -319,11 +321,8 @@ def test_yfinance_airflow_pipeline(request):
     finally:
         input("Waiting before cleanup")
         try:
-            # Clean up Airflow DAG
-            airflow_base_url = os.getenv("AIRFLOW_HOST")
-            auth = HTTPBasicAuth(
-                os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD")
-            )
+            # Clean up Airflow DAG using the fixture's instance
+            auth = HTTPBasicAuth(airflow_username, airflow_password)
             headers = {"Content-Type": "application/json"}
 
             # Pause the DAG
@@ -385,6 +384,7 @@ def test_yfinance_airflow_pipeline(request):
             except Exception as e:
                 print(f"Error cleaning up requirements: {e}")
 
+            # Clean up the fixture's Airflow directories
             airflow_local.Cleanup_Airflow_Directories()
 
             # Clean up database
@@ -453,4 +453,4 @@ def test_yfinance_airflow_pipeline(request):
             print("Database cleanup completed successfully")
 
         except Exception as e:
-            print(f"Error during cleanup: {e}") 
+            print(f"Error during cleanup: {e}")
