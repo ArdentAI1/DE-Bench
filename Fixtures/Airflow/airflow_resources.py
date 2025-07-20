@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-
+import re
 import pytest
 import requests
 from pathlib import Path
@@ -23,12 +23,12 @@ def airflow_resource(request):
     Each test gets its own isolated Airflow environment using docker-compose.
     """
     # verify the required astro envars are set
-    required_envars = ["ASTRO_WORKSPACE_ID", "ASTRO_ACCESS_TOKEN"]
+    required_envars = ["ASTRO_WORKSPACE_ID", "ASTRO_ACCESS_TOKEN", "ASTRO_CLOUD_PROVIDER", "ASTRO_REGION"]
     if missing_envars := [envar for envar in required_envars if not os.getenv(envar)]:
         raise ValueError(f"The following envars are not set: {missing_envars}")
     
     # make sure the astro cli is installed
-    astro_version = _parse_astro_version()
+    _parse_astro_version()
 
     start_time = time.time()
     test_name = request.node.name
@@ -46,8 +46,9 @@ def airflow_resource(request):
     # login to astronomer
     _run_and_validate_subprocess(["astro", "login", "--token-login", os.getenv("ASTRO_ACCESS_TOKEN")], "login to Astro")
 
-    # create a deployment
     test_dir = _create_dir_and_astro_project(unique_id)
+    astro_deployment_id = _create_deployment_in_astronomer(unique_id)
+    created_resources.append(astro_deployment_id)
 
     # TODO: upload the dag
     # TODO: trigger the dag
@@ -56,11 +57,8 @@ def airflow_resource(request):
     creation_end = time.time()
     print(f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s")
 
-    # TODO: verify template for Airflow resource
     # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
-    # Template structure: {"resource_id": "id", "databases": [{"name": "db", "collections": [{"name": "col", "data": []}]}]}    
-    build_template = request.param
-    resource_id = build_template.get("resource_id", f"airflow_resource_{unique_id}")
+    resource_id = "airflow_resource"
     
     # Create detailed resource data
     resource_data = {
@@ -81,15 +79,25 @@ def airflow_resource(request):
     print(f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total")
 
     yield resource_data
+    # remove the temp directory after the test completes
+    if test_dir and test_dir.exists():
+        try:
+            shutil.rmtree(test_dir)
+            print(f"Worker {os.getpid()}: Removed {test_name}'s temp directory: {test_dir}")
+        except Exception as e:
+            print(f"Worker {os.getpid()}: Error removing temp directory: {e}")
 
     # Cleanup after test completes
     print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
     try:
         # Clean up created resources in reverse order
         for resource in reversed(created_resources):
-            # TODO: delete the deployment
-            db = syncMongoClient[resource["db"]]
-            db.drop_collection(resource["collection"])
+            deleted = _run_and_validate_subprocess(
+                ["astro", "deployment", "delete", resource, "-f"],
+                "delete Astronomer deployment",
+                check=True,
+                capture_output=False,
+            )
         print(f"Worker {os.getpid()}: MongoDB resource {resource_id} cleaned up successfully")
     except Exception as e:
         print(f"Worker {os.getpid()}: Error cleaning up MongoDB resource: {e}")
@@ -103,7 +111,6 @@ def _parse_astro_version() -> str:
     :return: The version number of the Astro CLI as a string.
     :rtype: str
     """
-    import re
     try:
         # run a simple astro version command to check if astro cli is installed
         version = subprocess.run(["astro", "version"], check=True, capture_output=True)
@@ -120,10 +127,11 @@ def _parse_astro_version() -> str:
         print(f"Worker {os.getpid()}: Astro CLI version: {astro_version}")
         return astro_version
     except Exception as e:
-        raise e(
+        print(
             "The Astro CLI is not installed or not in PATH. Please install it "
             "from https://docs.astronomer.io/cli/installation"
-        ) from e
+        )
+        raise e from e
 
 
 def _run_and_validate_subprocess(command: list[str], process_description: str, check: bool = True, capture_output: bool = True, return_output: bool = False, input_text: str = None) -> subprocess.CompletedProcess:
@@ -165,9 +173,42 @@ def _run_and_validate_subprocess(command: list[str], process_description: str, c
             else:
                 return process
     except Exception as e:
-        raise e(
-            f"Failed to {process_description}. {VALIDATE_ASTRO_INSTALL}"
-        ) from e
+        print(f"Worker {os.getpid()}: Error running {process_description}: {e}")
+        raise e from e
+
+
+def _create_deployment_in_astronomer(deployment_name: str) -> str:
+    """
+    Creates a deployment in Astronomer.
+
+    :param deployment_name: The name of the deployment to create.
+    :raises EnvironmentError: If the deployment ID cannot be parsed from the output.
+    :return: The ID of the created deployment.
+    :rtype: str
+    """
+    try:
+        # Run the command to create a deployment in Astronomer
+        response = _run_and_validate_subprocess(
+            [
+                "astro", "deployment", "create", "--workspace-id", os.getenv("ASTRO_WORKSPACE_ID"),
+                "--name", deployment_name, "--runtime-version", os.getenv("ASTRO_RUNTIME_VERSION", "13.1.0"),
+                "--development-mode", "enable", "--cloud-provider", os.getenv("ASTRO_CLOUD_PROVIDER"),
+                "--region", os.getenv("ASTRO_REGION", "us-east-1"), "--wait"
+            ],
+            "creating Astronomer deployment",
+            return_output=True
+        )
+        # Parse the output to get the newly created deployment ID
+        deployment_id_pattern = re.compile(r"(?<=deployments/)([^/]+)(?=/overview)")
+        match = deployment_id_pattern.search(response)
+        if not match:
+            raise EnvironmentError("Could not parse deployment ID from output")
+        deployment_id = match.group(1)
+        print(f"Worker {os.getpid()}: Created Astronomer deployment: {deployment_id}")
+        return deployment_id
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error creating Astronomer deployment: {e}")
+        raise e from e
 
 
 def _create_dir_and_astro_project(unique_id: str) -> Path:
