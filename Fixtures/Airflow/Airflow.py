@@ -32,8 +32,13 @@ class Airflow_Local:
         :rtype: bool
         """
         import requests
+        # wait 3 minutes before checking if the webserver is ready
+        time.sleep(60 * 3)
+
+        # check if the webserver is ready
         retries = 10
         while retries > 0:
+            print(f"Checking if Airflow webserver is ready... {retries} retries left")
             response = requests.get(f"{self.AIRFLOW_HOST}/health", headers={"Authorization": f"Bearer {self.API_TOKEN}"})
             if response.status_code == 200:
                 print("Airflow webserver is ready")
