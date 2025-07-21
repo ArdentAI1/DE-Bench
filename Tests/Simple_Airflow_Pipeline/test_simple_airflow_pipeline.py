@@ -143,7 +143,7 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         # The fixture already has the Docker instance running
         airflow_instance = airflow_resource["airflow_instance"]
         print(f"Pulling DAGs from GitHub using Airflow instance at: {airflow_instance.Airflow_DIR}")
-        if not airflow_instance.wait_for_astro_redeploy():
+        if not airflow_instance.wait_for_airflow_to_be_ready():
             raise Exception("Airflow instance did not redeploy successfully.")
 
         # Use the connection details from the fixture
