@@ -31,18 +31,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
 
     test_steps = [
         {
-            "name": "Checking Git Branch Existence",
-            "description": "Checking if the git branch exists with the right name",
-            "status": "did not reach",
-            "Result_Message": "",
-        },
-        {
-            "name": "Checking PR Creation",
-            "description": "Checking if the PR was created with the right name",
-            "status": "did not reach",
-            "Result_Message": "",
-        },
-        {
             "name": "Checking Dag Results",
             "description": "Checking if the DAG produces the expected results",
             "status": "did not reach",
@@ -97,6 +85,9 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         # set the airflow folder with the correct configs
         # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
         Test_Configs.Configs["services"]["airflow"]["host"] = airflow_resource["base_url"]
+        Test_Configs.Configs["services"]["airflow"]["username"] = airflow_resource["username"]
+        Test_Configs.Configs["services"]["airflow"]["password"] = airflow_resource["password"]
+        Test_Configs.Configs["services"]["airflow"]["api_token"] = airflow_resource["api_token"]
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 
         # SECTION 2: RUN THE MODEL
@@ -129,15 +120,15 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         for pr in pulls:
             if pr.title == "Add Hello World DAG":  # Look for PR by title
                 target_pr = pr
-                test_steps[1]["status"] = "passed"
-                test_steps[1][
+                test_steps[0]["status"] = "passed"
+                test_steps[0][
                     "Result_Message"
                 ] = "PR 'Add Hello World DAG' was created successfully"
                 break
 
         if not target_pr:
-            test_steps[1]["status"] = "failed"
-            test_steps[1]["Result_Message"] = "PR 'Add Hello World DAG' not found"
+            test_steps[0]["status"] = "failed"
+            test_steps[0]["Result_Message"] = "PR 'Add Hello World DAG' not found"
             raise Exception("PR 'Add Hello World DAG' not found")
 
         # Merge the PR
@@ -152,23 +143,19 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         # The fixture already has the Docker instance running
         airflow_instance = airflow_resource["airflow_instance"]
         print(f"Pulling DAGs from GitHub using Airflow instance at: {airflow_instance.Airflow_DIR}")
-        airflow_instance.Get_Airflow_Dags_From_Github()
-
-        # After merging, wait again for Airflow to detect changes
-        time.sleep(10)  # Give Airflow time to scan for new DAGs
+        if not airflow_instance.wait_for_astro_redeploy():
+            raise Exception("Airflow instance did not redeploy successfully.")
 
         # Use the connection details from the fixture
         airflow_base_url = airflow_resource["base_url"]
-        airflow_username = airflow_resource["username"]
-        airflow_password = airflow_resource["password"]
+        airflow_api_token = airflow_resource["api_token"]
         
         print(f"Connecting to Airflow at: {airflow_base_url}")
-        print(f"Using credentials: {airflow_username}")
+        print(f"Using API Token: {airflow_api_token}")
 
         # Wait for DAG to appear and trigger it
         max_retries = 5
-        auth = HTTPBasicAuth(airflow_username, airflow_password)
-        headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
+        headers = {"Content-Type": "application/json", "Cache-Control": "no-cache", "Authorization": f"Bearer {airflow_api_token}"}
 
         print(f"Waiting for DAG 'hello_world_dag' to appear in Airflow...")
         for attempt in range(max_retries):
@@ -176,7 +163,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
             # Check if DAG exists
             dag_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag",
-                auth=auth,
                 headers=headers,
             )
 
@@ -191,7 +177,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
             # Unpause the DAG before triggering
             unpause_response = requests.patch(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag",
-                auth=auth,
                 headers=headers,
                 json={"is_paused": False},
             )
@@ -207,7 +192,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
             # Trigger the DAG
             trigger_response = requests.post(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns",
-                auth=auth,
                 headers=headers,
                 json={"conf": {}},
             )
@@ -229,7 +213,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         while time.time() - start_time < max_wait:
             status_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns/{dag_run_id}",
-                auth=auth,
                 headers=headers,
             )
 
@@ -253,7 +236,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         # First, get task instance information
         task_instance_response = requests.get(
             f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns/{dag_run_id}/taskInstances/print_hello",
-            auth=auth,
             headers=headers,
         )
 
@@ -272,7 +254,6 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         # Now get the logs with the correct try number
         task_logs_response = requests.get(
             f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_world_dag/dagRuns/{dag_run_id}/taskInstances/print_hello/logs/{try_number}",
-            auth=auth,
             headers=headers,
         )
 
