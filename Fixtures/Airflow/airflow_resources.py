@@ -1,19 +1,20 @@
 """
 This module provides a pytest fixture for creating isolated Airflow instances using Docker Compose.
 """
+
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
-import re
-import pytest
-import requests
-from typing import Optional
 from pathlib import Path
-from python_on_whales import DockerClient
+from typing import Optional, Union
 
-from Environment.Airflow.Airflow import Airflow_Local
+import pytest
+
+from .Airflow import Airflow_Local
+
 VALIDATE_ASTRO_INSTALL = "Please check if the Astro CLI is installed and in PATH."
 
 
@@ -24,10 +25,15 @@ def airflow_resource(request):
     Each test gets its own isolated Airflow environment using docker-compose.
     """
     # verify the required astro envars are set
-    required_envars = ["ASTRO_WORKSPACE_ID", "ASTRO_ACCESS_TOKEN", "ASTRO_CLOUD_PROVIDER", "ASTRO_REGION"]
+    required_envars = [
+        "ASTRO_WORKSPACE_ID",
+        "ASTRO_ACCESS_TOKEN",
+        "ASTRO_CLOUD_PROVIDER",
+        "ASTRO_REGION",
+    ]
     if missing_envars := [envar for envar in required_envars if not os.getenv(envar)]:
         raise ValueError(f"The following envars are not set: {missing_envars}")
-    
+
     # make sure the astro cli is installed
     _parse_astro_version()
 
@@ -36,8 +42,6 @@ def airflow_resource(request):
     unique_id = f"{test_name}_{int(time.time())}"
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
 
-
-
     # Create Airflow resource
     print(f"Worker {os.getpid()}: Creating Airflow resource for {test_name}")
     creation_start = time.time()
@@ -45,28 +49,51 @@ def airflow_resource(request):
 
     # run terminal commands to create the airflow resource in astronomer
     # login to astronomer
-    _run_and_validate_subprocess(["astro", "login", "--token-login", os.getenv("ASTRO_ACCESS_TOKEN")], "login to Astro")
+    _run_and_validate_subprocess(
+        ["astro", "login", "--token-login", os.getenv("ASTRO_ACCESS_TOKEN")],
+        "login to Astro",
+    )
 
     test_dir = _create_dir_and_astro_project(unique_id)
     astro_deployment_id = _create_deployment_in_astronomer(unique_id)
     created_resources.append(astro_deployment_id)
     api_url = "https://" + _run_and_validate_subprocess(
-        ["astro", "deployment", "inspect", "--deployment-name", unique_id, "--key", "metadata.airflow_api_url"], 
-        "getting Astro deployment API URL", 
-        return_output=True
+        [
+            "astro",
+            "deployment",
+            "inspect",
+            "--deployment-name",
+            unique_id,
+            "--key",
+            "metadata.airflow_api_url",
+        ],
+        "getting Astro deployment API URL",
+        return_output=True,
     )
-    base_url = api_url[:api_url.find("/api/v1")]
+    base_url = api_url[: api_url.find("/api/v1")]
 
     # create a token for the airflow resource
     # astro deployment token create --description "CI/CD access" --name testing --role DEPLOYMENT_ADMIN --expiration 30 --deployment-id <deploymentId>
     api_token = _run_and_validate_subprocess(
         [
-            "astro", "deployment", "token", "create", "--description", f"{test_name} API access for deployment {unique_id}", 
-            "--name", f"{unique_id} API access", "--role", "DEPLOYMENT_ADMIN", "--expiration", "30", "--deployment-id", astro_deployment_id,
-            "--clean-output"
+            "astro",
+            "deployment",
+            "token",
+            "create",
+            "--description",
+            f"{test_name} API access for deployment {unique_id}",
+            "--name",
+            f"{unique_id} API access",
+            "--role",
+            "DEPLOYMENT_ADMIN",
+            "--expiration",
+            "30",
+            "--deployment-id",
+            astro_deployment_id,
+            "--clean-output",
         ],
-        "creating Astro deployment API token", 
-        return_output=True
+        "creating Astro deployment API token",
+        return_output=True,
     )
 
     # TODO: upload the dag
@@ -74,12 +101,13 @@ def airflow_resource(request):
     # TODO: wait for the dag to finish
 
     creation_end = time.time()
-    print(f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s")
+    print(
+        f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s"
+    )
 
     # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
     resource_id = "airflow_resource"
 
-    
     # Create detailed resource data
     resource_data = {
         "resource_id": resource_id,
@@ -94,16 +122,21 @@ def airflow_resource(request):
         "base_url": base_url,
         "api_url": api_url,
         "api_token": api_token,
-        "created_resources": created_resources
+        "airflow_instance": Airflow_Local(
+            host=base_url, api_token=api_token, api_url=api_url
+        ),
+        "created_resources": created_resources,
     }
-    
-    print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
-    
-    fixture_end_time = time.time()
-    print(f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total")
 
-    yield resource_data
+    print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
+
+    fixture_end_time = time.time()
+    print(
+        f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total"
+    )
+
     input("Press Enter to clean up...")
+    yield resource_data
     # clean up the airflow resource after the test completes
     cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
 
@@ -124,7 +157,7 @@ def _parse_astro_version() -> str:
             raise subprocess.CalledProcessError(version.returncode, "astro version")
         # use regex to extract the version number from the output
         version_pattern = re.compile(r"(\d+\.\d+\.\d+)")
-        match = version_pattern.search(version.stdout.decode('utf-8'))
+        match = version_pattern.search(version.stdout.decode("utf-8"))
         if not match:
             raise EnvironmentError("Could not parse Astro CLI version from output")
         astro_version = match.group(1)
@@ -139,7 +172,14 @@ def _parse_astro_version() -> str:
         raise e from e
 
 
-def _run_and_validate_subprocess(command: list[str], process_description: str, check: bool = True, capture_output: bool = True, return_output: bool = False, input_text: str = None) -> subprocess.CompletedProcess:
+def _run_and_validate_subprocess(
+    command: list[str],
+    process_description: str,
+    check: bool = True,
+    capture_output: bool = True,
+    return_output: bool = False,
+    input_text: str = None,
+) -> Union[subprocess.CompletedProcess, str]:
     """
     Helper function to run a subprocess command and validate the return code.
 
@@ -149,8 +189,8 @@ def _run_and_validate_subprocess(command: list[str], process_description: str, c
     :param capture_output: Whether to capture the output.
     :param return_output: Whether to return the output.
     :param input_text: Text to send to stdin if the command expects input.
-    :return: The completed process.
-    :rtype: subprocess.CompletedProcess
+    :return: The completed process, or the command output if `return_output` is True.
+    :rtype: Union[subprocess.CompletedProcess, str]
     """
     try:
         if input_text:
@@ -160,21 +200,27 @@ def _run_and_validate_subprocess(command: list[str], process_description: str, c
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
             stdout, stderr = process.communicate(input=input_text)
             if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, command, stdout, stderr)
+                raise subprocess.CalledProcessError(
+                    process.returncode, command, stdout, stderr
+                )
             if return_output:
                 return stdout
             else:
-                return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+                return subprocess.CompletedProcess(
+                    command, process.returncode, stdout, stderr
+                )
         else:
-            process = subprocess.run(command, check=check, capture_output=capture_output)
+            process = subprocess.run(
+                command, check=check, capture_output=capture_output
+            )
             if process.returncode != 0:
                 raise subprocess.CalledProcessError(process.returncode, command)
             if return_output:
-                return process.stdout.decode('utf-8')
+                return process.stdout.decode("utf-8").rstrip("\n")
             else:
                 return process
     except Exception as e:
@@ -195,13 +241,17 @@ def _create_deployment_in_astronomer(deployment_name: str) -> str:
         # Run the command to create a deployment in Astronomer
         response = _run_and_validate_subprocess(
             [
-                "astro", "deployment", "create", "--workspace-id", os.getenv("ASTRO_WORKSPACE_ID"),
-                "--name", deployment_name, "--runtime-version", os.getenv("ASTRO_RUNTIME_VERSION", "13.1.0"),
-                "--development-mode", "enable", "--cloud-provider", os.getenv("ASTRO_CLOUD_PROVIDER"),
-                "--region", os.getenv("ASTRO_REGION", "us-east-1"), "--wait"
+                "astro", "deployment", "create",
+                "--workspace-id", os.getenv("ASTRO_WORKSPACE_ID"),
+                "--name", deployment_name,
+                "--runtime-version", os.getenv("ASTRO_RUNTIME_VERSION", "13.1.0"),
+                "--development-mode", "enable",
+                "--cloud-provider", os.getenv("ASTRO_CLOUD_PROVIDER"),
+                "--region", os.getenv("ASTRO_REGION", "us-east-1"),
+                "--wait",
             ],
             "creating Astronomer deployment",
-            return_output=True
+            return_output=True,
         )
         # Parse the output to get the newly created deployment ID
         deployment_id_pattern = re.compile(r"(?<=deployments/)([^/]+)(?=/overview)")
@@ -225,7 +275,9 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     :rtype: Path
     """
     # Use a temp directory inside the project root for Docker compatibility
-    project_root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).parent
+    project_root = Path(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ).parent
     tmp_root = os.path.join(project_root, "tmp_airflow_tests")
     os.makedirs(tmp_root, exist_ok=True)
     temp_dir = tempfile.mkdtemp(prefix=f"airflow_test_{unique_id}", dir=tmp_root)
@@ -237,12 +289,22 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     os.chdir(temp_dir)
     temp_dir = Path(temp_dir)
 
-    astro_project = _run_and_validate_subprocess(["astro", "dev", "init", "-n", temp_dir.stem], "initialize Astro project", return_output=True, input_text="y")
+    astro_project = _run_and_validate_subprocess(
+        ["astro", "dev", "init", "-n", temp_dir.stem],
+        "initialize Astro project",
+        return_output=True,
+        input_text="y",
+    )
     print(f"Worker {os.getpid()}: Astro project initialized: {astro_project}")
     return temp_dir
 
 
-def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources: list[str], test_dir: Optional[Path] = None):
+def cleanup_airflow_resource(
+    test_name: str,
+    resource_id: str,
+    created_resources: list[str],
+    test_dir: Optional[Path] = None,
+):
     """
     Cleans up an Airflow resource, including the temp directory and the created resources in Astronomer.
 
@@ -254,7 +316,9 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
     if test_dir and test_dir.exists():
         try:
             shutil.rmtree(test_dir)
-            print(f"Worker {os.getpid()}: Removed {test_name}'s temp directory: {test_dir}")
+            print(
+                f"Worker {os.getpid()}: Removed {test_name}'s temp directory: {test_dir}"
+            )
         except Exception as e:
             print(f"Worker {os.getpid()}: Error removing temp directory: {e}")
 
@@ -268,13 +332,14 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
                 "delete Astronomer deployment",
                 check=True,
             )
-        print(f"Worker {os.getpid()}: Airflow resource {resource_id} cleaned up successfully")
+        print(
+            f"Worker {os.getpid()}: Airflow resource {resource_id} cleaned up successfully"
+        )
     except Exception as e:
         print(f"Worker {os.getpid()}: Error cleaning up Airflow resource: {e}")
 
-
     # resource_id = build_template.get("resource_id", f"airflow_resource_{test_name}_{int(time.time())}")
-    
+
     # # Create detailed resource data
     # resource_data = {
     #     "resource_id": resource_id,
@@ -287,14 +352,14 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
     #     "status": "active",
     #     "created_resources": created_resources
     # }
-    
+
     # print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
-    
+
     # fixture_end_time = time.time()
     # print(f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total")
-    
+
     # yield resource_data
-    
+
     # # Cleanup after test completes
     # print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
     # try:
@@ -307,39 +372,36 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
     # except Exception as e:
     #     print(f"Worker {os.getpid()}: Error cleaning up Airflow resource: {e}")
 
-
-
-
-    
-    
     # Use a temp directory inside the project root for Docker compatibility
+
+
 #     project_root = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).parent
 #     tmp_root = os.path.join(project_root, "tmp_airflow_tests")
 #     os.makedirs(tmp_root, exist_ok=True)
 #     temp_dir = tempfile.mkdtemp(prefix=f"airflow_test_{test_name}_", dir=tmp_root)
 #     print(f"Worker {os.getpid()}: Created temp directory for Airflow: {temp_dir}")
-    
+
 #     # Copy the Airflow environment to the temp directory
 #     airflow_source_dir = os.path.join(project_root, "Environment", "Airflow")
 #     airflow_test_dir = os.path.join(temp_dir, "airflow")
 #     shutil.copytree(airflow_source_dir, airflow_test_dir)
-    
+
 #     # Create a unique project name for this test instance
 #     project_name = f"airflow_{test_name}_{int(time.time())}"
-    
+
 #     # Modify the docker-compose.yml to use unique project name and ports
 #     docker_compose_path = os.path.join(airflow_test_dir, "docker-compose.yml")
-    
+
 #     # Read the original docker-compose.yml
 #     with open(docker_compose_path, 'r') as f:
 #         compose_content = f.read()
-    
+
 #     # Create a modified version with unique project name and ports
 #     # We'll use environment variables to make it unique and avoid port conflicts
 #     import random
 #     base_port = 8888
 #     webserver_port = base_port + random.randint(0, 100)  # Random port offset
-    
+
 #     # Replace the port mapping in the docker-compose content
 #     import re
 #     # Replace the webserver port mapping
@@ -348,7 +410,7 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #         f'ports:\n      - "{webserver_port}:8080"',
 #         compose_content
 #     )
-    
+
 #     modified_compose_content = f"""# Modified docker-compose for test isolation
 # # Project: {project_name}
 # # Test: {test_name}
@@ -357,16 +419,16 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 
 # {compose_content}
 # """
-    
+
 #     # Write the modified docker-compose.yml
 #     with open(docker_compose_path, 'w') as f:
 #         f.write(modified_compose_content)
-    
+
 #     # Set environment variables for this test instance
 #     original_env = os.environ.copy()
 #     os.environ["COMPOSE_PROJECT_NAME"] = project_name
 #     os.environ["AIRFLOW_PROJ_DIR"] = airflow_test_dir
-    
+
 #     # Create a custom Airflow_Local instance for this test
 #     class TestAirflowLocal(Airflow_Local):
 #         def __init__(self, test_dir, project_name, webserver_port):
@@ -398,7 +460,7 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #                 except requests.exceptions.RequestException as e:
 #                     print(f"Error connecting to Airflow: {e}")
 #                     time.sleep(10)
-        
+
 #         def Start_Airflow(self, public_expose=False):
 #             # Set the absolute path for AIRFLOW_PROJ_DIR
 #             os.environ["AIRFLOW_PROJ_DIR"] = self.Airflow_DIR
@@ -443,20 +505,20 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #                         print(f"Worker {os.getpid()}: removed containers, volumes, and orphans for {self.project_name}")
 #                 except Exception as alt_e:
 #                     print(f"Worker {os.getpid()}: Alternative cleanup failed: {alt_e}")
-    
+
 #     # Create the test-specific Airflow instance
 #     airflow_instance = TestAirflowLocal(airflow_test_dir, project_name, webserver_port)
-    
+
 #     creation_start = time.time()
-    
+
 #     try:
 #         # Start Airflow for this test
 #         print(f"Worker {os.getpid()}: Starting Airflow instance for {test_name}")
 #         airflow_instance.Start_Airflow()
-        
+
 #         creation_end = time.time()
 #         print(f"Worker {os.getpid()}: Airflow instance creation took {creation_end - creation_start:.2f}s")
-        
+
 #         # Create detailed resource data
 #         resource_data = {
 #             "resource_id": project_name,
@@ -474,14 +536,14 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #             "username": airflow_instance.Airflow_USERNAME,
 #             "password": airflow_instance.Airflow_PASSWORD
 #         }
-        
+
 #         print(f"Worker {os.getpid()}: Created Airflow resource {project_name}")
-        
+
 #         fixture_end_time = time.time()
 #         print(f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total")
-        
+
 #         yield resource_data
-        
+
 #     except Exception as e:
 #         print(f"Worker {os.getpid()}: Error creating Airflow resource: {e}")
 #         # Even if creation failed, try to clean up any partial resources
@@ -494,7 +556,7 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #     finally:
 #         # Cleanup after test completes - ensure this always runs
 #         print(f"Worker {os.getpid()}: Cleaning up Airflow resource {project_name}")
-        
+
 #         # Always try to stop containers first
 #         try:
 #             if 'airflow_instance' in locals():
@@ -511,7 +573,7 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #                 print(f"Worker {os.getpid()}: Force cleaned up containers using alternative method")
 #             except Exception as alt_e:
 #                 print(f"Worker {os.getpid()}: Alternative cleanup also failed: {alt_e}")
-        
+
 #         # Always try to clean up temp directory
 #         try:
 #             if os.path.exists(temp_dir):
@@ -519,12 +581,12 @@ def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources
 #                 print(f"Worker {os.getpid()}: Removed temp directory: {temp_dir}")
 #         except Exception as e:
 #             print(f"Worker {os.getpid()}: Error removing temp directory: {e}")
-        
+
 #         # Always restore original environment
 #         try:
 #             os.environ.clear()
 #             os.environ.update(original_env)
 #         except Exception as e:
 #             print(f"Worker {os.getpid()}: Error restoring environment: {e}")
-        
-#         print(f"Worker {os.getpid()}: Airflow resource {project_name} cleanup completed") 
+
+#         print(f"Worker {os.getpid()}: Airflow resource {project_name} cleanup completed")
