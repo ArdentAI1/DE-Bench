@@ -56,89 +56,94 @@ def airflow_resource(request):
 
     test_dir = _create_dir_and_astro_project(unique_id)
     astro_deployment_id = _create_deployment_in_astronomer(unique_id)
-    created_resources.append(astro_deployment_id)
-    api_url = "https://" + _run_and_validate_subprocess(
-        [
-            "astro",
-            "deployment",
-            "inspect",
-            "--deployment-name",
-            unique_id,
-            "--key",
-            "metadata.airflow_api_url",
-        ],
-        "getting Astro deployment API URL",
-        return_output=True,
-    )
-    base_url = api_url[: api_url.find("/api/v1")]
+    try:
+        created_resources.append(astro_deployment_id)
+        api_url = "https://" + _run_and_validate_subprocess(
+            [
+                "astro",
+                "deployment",
+                "inspect",
+                "--deployment-name",
+                unique_id,
+                "--key",
+                "metadata.airflow_api_url",
+            ],
+            "getting Astro deployment API URL",
+            return_output=True,
+        )
+        base_url = api_url[: api_url.find("/api/v1")]
 
-    # create a token for the airflow resource
-    # astro deployment token create --description "CI/CD access" --name testing --role DEPLOYMENT_ADMIN --expiration 30 --deployment-id <deploymentId>
-    api_token = _run_and_validate_subprocess(
-        [
-            "astro",
-            "deployment",
-            "token",
-            "create",
-            "--description",
-            f"{test_name} API access for deployment {unique_id}",
-            "--name",
-            f"{unique_id} API access",
-            "--role",
-            "DEPLOYMENT_ADMIN",
-            "--expiration",
-            "30",
-            "--deployment-id",
-            astro_deployment_id,
-            "--clean-output",
-        ],
-        "creating Astro deployment API token",
-        return_output=True,
-    )
+        # create a token for the airflow resource
+        # astro deployment token create --description "CI/CD access" --name testing --role DEPLOYMENT_ADMIN --expiration 30 --deployment-id <deploymentId>
+        api_token = _run_and_validate_subprocess(
+            [
+                "astro",
+                "deployment",
+                "token",
+                "create",
+                "--description",
+                f"{test_name} API access for deployment {unique_id}",
+                "--name",
+                f"{unique_id} API access",
+                "--role",
+                "DEPLOYMENT_ADMIN",
+                "--expiration",
+                "30",
+                "--deployment-id",
+                astro_deployment_id,
+                "--clean-output",
+            ],
+            "creating Astro deployment API token",
+            return_output=True,
+        )
 
-    # TODO: upload the dag
-    # TODO: trigger the dag
-    # TODO: wait for the dag to finish
+        # TODO: upload the dag
+        # TODO: trigger the dag
+        # TODO: wait for the dag to finish
 
-    creation_end = time.time()
-    print(
-        f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s"
-    )
+        creation_end = time.time()
+        print(
+            f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s"
+        )
 
-    # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
-    resource_id = "airflow_resource"
+        # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
+        resource_id = "airflow_resource"
 
-    # Create detailed resource data
-    resource_data = {
-        "resource_id": resource_id,
-        "type": "airflow_resource",
-        "test_name": test_name,
-        "creation_time": time.time(),
-        "worker_pid": os.getpid(),
-        "creation_duration": creation_end - creation_start,
-        "description": f"An Airflow resource for {test_name}",
-        "status": "active",
-        "project_name": test_dir.stem,
-        "base_url": base_url,
-        "api_url": api_url,
-        "api_token": api_token,
-        "airflow_instance": Airflow_Local(
-            host=base_url, api_token=api_token, api_url=api_url
-        ),
-        "created_resources": created_resources,
-    }
+        # Create detailed resource data
+        resource_data = {
+            "resource_id": resource_id,
+            "type": "airflow_resource",
+            "test_name": test_name,
+            "creation_time": time.time(),
+            "worker_pid": os.getpid(),
+            "creation_duration": creation_end - creation_start,
+            "description": f"An Airflow resource for {test_name}",
+            "status": "active",
+            "project_name": test_dir.stem,
+            "base_url": base_url,
+            "api_url": api_url,
+            "api_token": api_token,
+            "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
+            "airflow_instance": Airflow_Local(
+                host=base_url, api_token=api_token, api_url=api_url
+            ),
+            "created_resources": created_resources,
+        }
 
-    print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
+        print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
 
-    fixture_end_time = time.time()
-    print(
-        f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total"
-    )
-
-    input("Press Enter to clean up...")
-    yield resource_data
-    # clean up the airflow resource after the test completes
-    cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
+        fixture_end_time = time.time()
+        print(
+            f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total"
+        )
+        yield resource_data
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error in Airflow fixture: {e}")
+        raise e from e
+    finally:
+        input("Press Enter to clean up...")
+        # clean up the airflow resource after the test completes
+        cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
 
 
 def _parse_astro_version() -> str:
