@@ -209,6 +209,7 @@ def _run_and_validate_subprocess(
             )
             stdout, stderr = process.communicate(input=input_text)
             if process.returncode != 0:
+                print(stderr)
                 raise subprocess.CalledProcessError(
                     process.returncode, command, stdout, stderr
                 )
@@ -223,6 +224,7 @@ def _run_and_validate_subprocess(
                 command, check=check, capture_output=capture_output
             )
             if process.returncode != 0:
+                print(process.stderr.decode("utf-8"))
                 raise subprocess.CalledProcessError(process.returncode, command)
             if return_output:
                 return process.stdout.decode("utf-8").rstrip("\n")
