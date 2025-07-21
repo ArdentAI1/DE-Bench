@@ -9,6 +9,7 @@ import time
 import re
 import pytest
 import requests
+from typing import Optional
 from pathlib import Path
 from python_on_whales import DockerClient
 
@@ -49,6 +50,24 @@ def airflow_resource(request):
     test_dir = _create_dir_and_astro_project(unique_id)
     astro_deployment_id = _create_deployment_in_astronomer(unique_id)
     created_resources.append(astro_deployment_id)
+    api_url = "https://" + _run_and_validate_subprocess(
+        ["astro", "deployment", "inspect", "--deployment-name", unique_id, "--key", "metadata.airflow_api_url"], 
+        "getting Astro deployment API URL", 
+        return_output=True
+    )
+    base_url = api_url[:api_url.find("/api/v1")]
+
+    # create a token for the airflow resource
+    # astro deployment token create --description "CI/CD access" --name testing --role DEPLOYMENT_ADMIN --expiration 30 --deployment-id <deploymentId>
+    api_token = _run_and_validate_subprocess(
+        [
+            "astro", "deployment", "token", "create", "--description", f"{test_name} API access for deployment {unique_id}", 
+            "--name", f"{unique_id} API access", "--role", "DEPLOYMENT_ADMIN", "--expiration", "30", "--deployment-id", astro_deployment_id,
+            "--clean-output"
+        ],
+        "creating Astro deployment API token", 
+        return_output=True
+    )
 
     # TODO: upload the dag
     # TODO: trigger the dag
@@ -59,6 +78,7 @@ def airflow_resource(request):
 
     # A function-scoped fixture that creates Airflow resource in Astronomer based on template.
     resource_id = "airflow_resource"
+
     
     # Create detailed resource data
     resource_data = {
@@ -70,6 +90,10 @@ def airflow_resource(request):
         "creation_duration": creation_end - creation_start,
         "description": f"An Airflow resource for {test_name}",
         "status": "active",
+        "project_name": test_dir.stem,
+        "base_url": base_url,
+        "api_url": api_url,
+        "api_token": api_token,
         "created_resources": created_resources
     }
     
@@ -79,28 +103,9 @@ def airflow_resource(request):
     print(f"Worker {os.getpid()}: Airflow fixture setup took {fixture_end_time - start_time:.2f}s total")
 
     yield resource_data
-    # remove the temp directory after the test completes
-    if test_dir and test_dir.exists():
-        try:
-            shutil.rmtree(test_dir)
-            print(f"Worker {os.getpid()}: Removed {test_name}'s temp directory: {test_dir}")
-        except Exception as e:
-            print(f"Worker {os.getpid()}: Error removing temp directory: {e}")
-
-    # Cleanup after test completes
-    print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
-    try:
-        # Clean up created resources in reverse order
-        for resource in reversed(created_resources):
-            deleted = _run_and_validate_subprocess(
-                ["astro", "deployment", "delete", resource, "-f"],
-                "delete Astronomer deployment",
-                check=True,
-                capture_output=False,
-            )
-        print(f"Worker {os.getpid()}: MongoDB resource {resource_id} cleaned up successfully")
-    except Exception as e:
-        print(f"Worker {os.getpid()}: Error cleaning up MongoDB resource: {e}")
+    input("Press Enter to clean up...")
+    # clean up the airflow resource after the test completes
+    cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
 
 
 def _parse_astro_version() -> str:
@@ -235,6 +240,37 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     astro_project = _run_and_validate_subprocess(["astro", "dev", "init", "-n", temp_dir.stem], "initialize Astro project", return_output=True, input_text="y")
     print(f"Worker {os.getpid()}: Astro project initialized: {astro_project}")
     return temp_dir
+
+
+def cleanup_airflow_resource(test_name: str, resource_id: str, created_resources: list[str], test_dir: Optional[Path] = None):
+    """
+    Cleans up an Airflow resource, including the temp directory and the created resources in Astronomer.
+
+    :param test_name: The name of the test.
+    :param resource_id: The ID of the resource.
+    :param created_resources: The list of created resources.
+    :param test_dir: The path to the test directory.
+    """
+    if test_dir and test_dir.exists():
+        try:
+            shutil.rmtree(test_dir)
+            print(f"Worker {os.getpid()}: Removed {test_name}'s temp directory: {test_dir}")
+        except Exception as e:
+            print(f"Worker {os.getpid()}: Error removing temp directory: {e}")
+
+    # Cleanup after test completes
+    print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
+    try:
+        # Clean up created resources in reverse order
+        for resource in reversed(created_resources):
+            _ = _run_and_validate_subprocess(
+                ["astro", "deployment", "delete", resource, "-f"],
+                "delete Astronomer deployment",
+                check=True,
+            )
+        print(f"Worker {os.getpid()}: Airflow resource {resource_id} cleaned up successfully")
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error cleaning up Airflow resource: {e}")
 
 
     # resource_id = build_template.get("resource_id", f"airflow_resource_{test_name}_{int(time.time())}")
