@@ -11,6 +11,9 @@ import time
 from pathlib import Path
 from typing import Optional, Union
 
+import github
+from github import Github
+
 import pytest
 
 from .Airflow import Airflow_Local
@@ -29,6 +32,8 @@ def airflow_resource(request):
     required_envars = [
         "ASTRO_WORKSPACE_ID",
         "ASTRO_ACCESS_TOKEN",
+        "AIRFLOW_GITHUB_TOKEN",
+        "AIRFLOW_REPO",
         "ASTRO_CLOUD_PROVIDER",
         "ASTRO_REGION",
     ]
@@ -57,7 +62,15 @@ def airflow_resource(request):
 
     test_dir = _create_dir_and_astro_project(unique_id)
     astro_deployment_id = _create_deployment_in_astronomer(unique_id)
+
     try:
+         # check and update the github secrets
+        _check_and_update_gh_secrets(
+            deployment_id=astro_deployment_id,
+            deployment_name=unique_id,
+            astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
+        )
+
         created_resources.append(astro_deployment_id)
         api_url = "https://" + _run_and_validate_subprocess(
             [
@@ -100,10 +113,6 @@ def airflow_resource(request):
         # create a user in the airflow deployment (ardent needs username and password for the Airflowconfig)
         _create_user_in_airflow_deployment(unique_id)
 
-        # TODO: upload the dag
-        # TODO: trigger the dag
-        # TODO: wait for the dag to finish
-
         creation_end = time.time()
         print(
             f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s"
@@ -126,8 +135,8 @@ def airflow_resource(request):
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
             "username": os.getenv("AIRFLOW_USERNAME", "airflow"),
             "password": os.getenv("AIRFLOW_PASSWORD", "airflow"),
-            "airflow_instance": Airflow_Local(
-                host=base_url, api_token=api_token, api_url=api_url
+            "airflow_instance": Airflow_Local(  # TODO: remove this eventually
+                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url  #
             ),
             "created_resources": created_resources,
         }
@@ -148,13 +157,12 @@ def airflow_resource(request):
         cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
 
 
-def _parse_astro_version() -> str:
+def _parse_astro_version() -> None:
     """
     Runs the `astro version` command to check if the Astro CLI is installed and returns the version number.
 
     :raises EnvironmentError: If the Astro CLI is not installed or not in PATH, or if the version cannot be parsed.
-    :return: The version number of the Astro CLI as a string.
-    :rtype: str
+    :rtype: None
     """
     try:
         # run a simple astro version command to check if astro cli is installed
@@ -170,7 +178,6 @@ def _parse_astro_version() -> str:
         astro_version = match.group(1)
         # print the version number
         print(f"Worker {os.getpid()}: Astro CLI version: {astro_version}")
-        return astro_version
     except Exception as e:
         print(
             "The Astro CLI is not installed or not in PATH. Please install it "
@@ -234,6 +241,47 @@ def _run_and_validate_subprocess(
                 return process
     except Exception as e:
         print(f"Worker {os.getpid()}: Error running {process_description}: {e}")
+        raise e from e
+
+
+def _check_and_update_gh_secrets(deployment_id: str, deployment_name: str, astro_access_token: str) -> None:
+    """
+    Checks if the GitHub secrets exists, deletes them if they do, and creates new ones with the given
+        deployment ID and name.
+
+    :param str deployment_id: The ID of the deployment.
+    :param str deployment_name: The name of the deployment.
+    :rtype: None
+    """
+    gh_secrets = {
+        "ASTRO_DEPLOYMENT_ID": deployment_id,
+        "ASTRO_DEPLOYMENT_NAME": deployment_name,
+        "ASTRO_ACCESS_TOKEN": astro_access_token,
+    }
+    airflow_github_repo = os.getenv("AIRFLOW_REPO")
+    g = Github(os.getenv("AIRFLOW_GITHUB_TOKEN"))
+    if "github.com" in airflow_github_repo:
+        # Extract owner/repo from URL
+        parts = airflow_github_repo.split("/")
+        airflow_github_repo = f"{parts[-2]}/{parts[-1]}"
+    repo = g.get_repo(airflow_github_repo)
+    try:
+        for secret, value in gh_secrets.items():
+            try:
+                if repo.get_secret(secret):
+                    print(f"Worker {os.getpid()}: {secret} already exists, deleting...")
+                    repo.delete_secret(secret)
+                print(f"Worker {os.getpid()}: Creating {secret}...")
+            except github.GithubException as e:
+                if e.status == 404:
+                    print(f"Worker {os.getpid()}: {secret} does not exist, creating...")
+                else:
+                    print(f"Worker {os.getpid()}: Error checking secret {secret}: {e}")
+                    raise e
+            repo.create_secret(secret, value)
+            print(f"Worker {os.getpid()}: {secret} created successfully.")
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error checking and updating GitHub secrets: {e}")
         raise e from e
 
 
@@ -320,15 +368,23 @@ def _create_user_in_airflow_deployment(deployment_name: str) -> None:
     user_creation_commands = [
         [
             "astro", "deployment", "variable", "create",
-            "_AIRFLOW_WWW_USER_CREATE=true", "--deployment-name", deployment_name
+            "_AIRFLOW_WWW_USER_CREATE=true",
+            "--deployment-name", deployment_name
         ],
         [
             "astro", "deployment", "variable", "create",
-            f"_AIRFLOW_WWW_USER_USERNAME={username}", "--deployment-name", deployment_name
+            f"_AIRFLOW_WWW_USER_USERNAME={username}",
+            "--deployment-name", deployment_name
         ],
         [
             "astro", "deployment", "variable", "create",
-            f"_AIRFLOW_WWW_USER_PASSWORD={password}", "--deployment-name", deployment_name, "-s"
+            f"_AIRFLOW_WWW_USER_PASSWORD={password}",
+            "--deployment-name", deployment_name, "-s"
+        ],
+        [
+            "astro", "deployment", "variable", "create",
+            "AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth",
+            "--deployment-name", deployment_name,
         ],
     ]
     for command in user_creation_commands:
