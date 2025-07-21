@@ -152,7 +152,6 @@ def airflow_resource(request):
         print(f"Worker {os.getpid()}: Error in Airflow fixture: {e}")
         raise e from e
     finally:
-        input("Press Enter to clean up...")
         # clean up the airflow resource after the test completes
         cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
 
