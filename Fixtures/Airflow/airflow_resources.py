@@ -97,6 +97,9 @@ def airflow_resource(request):
             return_output=True,
         )
 
+        # create a user in the airflow deployment (ardent needs username and password for the Airflowconfig)
+        _create_user_in_airflow_deployment(unique_id)
+
         # TODO: upload the dag
         # TODO: trigger the dag
         # TODO: wait for the dag to finish
@@ -124,6 +127,8 @@ def airflow_resource(request):
             "api_url": api_url,
             "api_token": api_token,
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
+            "username": os.getenv("AIRFLOW_USERNAME", "airflow"),
+            "password": os.getenv("AIRFLOW_PASSWORD", "airflow"),
             "airflow_instance": Airflow_Local(
                 host=base_url, api_token=api_token, api_url=api_url
             ),
@@ -304,6 +309,23 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     )
     print(f"Worker {os.getpid()}: Astro project initialized: {astro_project}")
     return temp_dir
+
+
+def _create_user_in_airflow_deployment(deployment_name: str) -> None:
+    """
+    Helper method to create a user in the Airflow deployment using Astronomer CLI and environment variables in Airflow.
+
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :rtype: None
+    """
+    user_creation_commands = [
+        ["astro", "deployment", "variable", "create", "_AIRFLOW_WWW_USER_CREATE=true", "--deployment-name", deployment_name],
+        ["astro", "deployment", "variable", "create", f"_AIRFLOW_WWW_USER_USERNAME={os.getenv('AIRFLOW_USERNAME', "airflow")}", "--deployment-name", deployment_name],
+        ["astro", "deployment", "variable", "create", f"_AIRFLOW_WWW_USER_PASSWORD={os.getenv('AIRFLOW_PASSWORD', "airflow")}", "--deployment-name", deployment_name, "-s"],
+    ]
+    for command in user_creation_commands:
+        _ =_run_and_validate_subprocess(command.split(), "creating user in Airflow deployment")
+    
 
 
 def cleanup_airflow_resource(
