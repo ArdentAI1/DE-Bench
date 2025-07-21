@@ -31,6 +31,18 @@ def test_simple_airflow_pipeline(request, airflow_resource):
 
     test_steps = [
         {
+            "name": "Checking Git Branch Existence",
+            "description": "Checking if the git branch exists with the right name",
+            "status": "did not reach",
+            "Result_Message": "",
+        },
+        {
+            "name": "Checking PR Creation",
+            "description": "Checking if the PR was created with the right name",
+            "status": "did not reach",
+            "Result_Message": "",
+        },
+        {
             "name": "Checking Dag Results",
             "description": "Checking if the DAG produces the expected results",
             "status": "did not reach",
@@ -120,15 +132,15 @@ def test_simple_airflow_pipeline(request, airflow_resource):
         for pr in pulls:
             if pr.title == "Add Hello World DAG":  # Look for PR by title
                 target_pr = pr
-                test_steps[0]["status"] = "passed"
-                test_steps[0][
+                test_steps[1]["status"] = "passed"
+                test_steps[1][
                     "Result_Message"
                 ] = "PR 'Add Hello World DAG' was created successfully"
                 break
 
         if not target_pr:
-            test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = "PR 'Add Hello World DAG' not found"
+            test_steps[1]["status"] = "failed"
+            test_steps[1]["Result_Message"] = "PR 'Add Hello World DAG' not found"
             raise Exception("PR 'Add Hello World DAG' not found")
 
         # Merge the PR
