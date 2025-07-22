@@ -8,8 +8,6 @@ from multiprocessing import Manager
 from dotenv import load_dotenv
 import sqlite3
 
-
-
 try:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if not os.path.exists(project_root):
@@ -45,8 +43,6 @@ def pytest_configure(config):
 
     # Initialize the model
     from model.Initialize_Model import initialize_model
-    from Environment.Airflow.Airflow import Airflow_Local
-
 
     os.makedirs(".tmp", exist_ok=True)
 
@@ -100,7 +96,6 @@ def pytest_runtest_logreport(report):
 
 def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
-    from Environment.Airflow.Airflow import Airflow_Local
     from Fixtures.session_spindown import session_spindown
     import shutil
 
@@ -161,5 +156,5 @@ def pytest_sessionfinish(session, exitstatus):
             #    print(f"  Failure Reason: {result['longrepr']}")
 
         # Optionally, save detailed results to a JSON file
-        with open("Results/Test_Results.json", "w") as f:
+        with open(f"{project_root}/Results/Test_Results.json", "w") as f:
             json.dump(results_json, f, indent=4)
