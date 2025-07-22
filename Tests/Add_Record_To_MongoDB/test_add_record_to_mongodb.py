@@ -26,7 +26,21 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.mongodb
 @pytest.mark.code_writing
 @pytest.mark.database
-def test_add_mongodb_record(request):
+@pytest.mark.parametrize("mongo_resource", [{
+    "resource_id": "test_mongo_resource",
+    "databases": [
+        {
+            "name": "test_database",
+            "collections": [
+                {
+                    "name": "test_collection",
+                    "data": []
+                }
+            ]
+        }
+    ]
+}], indirect=True)
+def test_add_mongodb_record(request, mongo_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
@@ -48,16 +62,8 @@ def test_add_mongodb_record(request):
         # we can add an option to do local runs with this container
         # container = load_docker(input_directory=input_dir)
 
-        # we need to add the database in mongo and the collection into the database.
-        try:
-            db = syncMongoClient["test_database"]
-            db.create_collection("test_collection")
-        except CollectionInvalid as e:
-            db.drop_collection("test_collection")
-            db.create_collection("test_collection")
-        except Exception as e:
-            raise Exception(f"Unexpected Error: {e}")
-
+        # MongoDB setup is now handled by the fixture
+        
         # Set up model configs using the configuration from Test_Configs
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 
@@ -72,6 +78,7 @@ def test_add_mongodb_record(request):
 
         # SECTION 3: VERIFY THE OUTCOMES
         # we then check the record was added
+        db = syncMongoClient["test_database"]
         collection = db["test_collection"]
         record = collection.find_one({"name": "John Doe", "age": 30})
 
@@ -87,9 +94,7 @@ def test_add_mongodb_record(request):
 
     finally:
         try:
-            # Clean up MongoDB
-            db.drop_collection("test_collection")
-            syncMongoClient.drop_database("test_database")
+            # MongoDB cleanup is now handled by the fixture
 
             # Remove model configs
             if config_results:

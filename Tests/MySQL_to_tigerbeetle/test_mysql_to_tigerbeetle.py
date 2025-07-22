@@ -225,7 +225,7 @@ def test_mysql_to_tigerbeetle(request):
         if not merge_result.merged:
             raise Exception(f"Failed to merge PR: {merge_result.message}")
         
-        input("Prior to dag fetch. We should have merged the PR...")
+        #input("Prior to dag fetch. We should have merged the PR...")
 
         # Get the DAGs from GitHub
         airflow_local.Get_Airflow_Dags_From_Github()
@@ -233,7 +233,7 @@ def test_mysql_to_tigerbeetle(request):
         # After merging, wait for Airflow to detect changes
         time.sleep(10)  # Give Airflow time to scan for new DAGs
 
-        input("We should see the dags in the folder now...")
+        #input("We should see the dags in the folder now...")
 
         # Trigger the DAG
         airflow_base_url = os.getenv("AIRFLOW_HOST")

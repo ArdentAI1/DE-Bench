@@ -6,7 +6,19 @@ import json
 from datetime import datetime
 from multiprocessing import Manager
 from dotenv import load_dotenv
+import sqlite3
 
+try:
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.exists(project_root):
+        raise FileNotFoundError(f"Project root path does not exist: {project_root}")
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+except Exception as e:
+    raise Exception(f"Error setting project root path: {str(e)}")
+
+# Import all fixtures from central hub
+from Fixtures.base_resources import *
 
 # Initialize a manager for a thread-safe list to store test results
 manager = Manager()
@@ -31,30 +43,43 @@ def pytest_configure(config):
 
     # Initialize the model
     from model.Initialize_Model import initialize_model
-    from Environment.Airflow.Airflow import Airflow_Local
+
+    os.makedirs(".tmp", exist_ok=True)
+
+    # SQLite will create the database file automatically
+    with sqlite3.connect(".tmp/resources.db") as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS resources (id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id TEXT, type TEXT, creation_time REAL, worker_pid INTEGER, creation_duration REAL, description TEXT, status TEXT, custom_info TEXT)")
+
+    #with open(".tmp/resources.json", "w") as f:
+    #    json.dump([], f, indent=2)
+
 
     # set up the airflow docker container
 
     initialize_model()
 
     # initialize local airflow instance
-    airflow_local = Airflow_Local()
+    #airflow_local = Airflow_Local()
 
-    print("Initializing Airflow")
+    #print("Initializing Airflow")
     # start the airflow docker container
-    airflow_local.Start_Airflow()
+    #airflow_local.Start_Airflow()
 
 
 def pytest_runtest_logreport(report):
     if report.when == "call":
-        # Get model_runtime from user_properties
+        # Initialize variables with default values
         model_runtime = None
+        user_query = None
+        test_steps = None
+        
+        # Get values from user_properties if they exist
         for name, value in report.user_properties:
             if name == "model_runtime":
                 model_runtime = value
-            if name == "user_query":
+            elif name == "user_query":
                 user_query = value
-            if name == "test_steps":
+            elif name == "test_steps":
                 test_steps = value
 
         test_result = {
@@ -71,13 +96,33 @@ def pytest_runtest_logreport(report):
 
 def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
-    from Environment.Airflow.Airflow import Airflow_Local
+    from Fixtures.session_spindown import session_spindown
+    import shutil
 
-    airflow_local = Airflow_Local()
 
-    airflow_local.Stop_Airflow()
+    if os.path.exists(".tmp"):
+        print("TMP directory exists")
 
-    airflow_local.Cleanup_Airflow_Directories()
+
+        # input("Waiting here")
+
+        session_spindown()
+
+        #input("Waiting here")
+
+        if os.path.exists(".tmp"):
+            shutil.rmtree(".tmp/")
+
+
+
+        #now we want to check for information in there? on resources?
+
+
+    #airflow_local = Airflow_Local()
+
+    #airflow_local.Stop_Airflow()
+
+    #airflow_local.Cleanup_Airflow_Directories()
 
     # Only the main process should aggregate and display results
     if os.environ.get("PYTEST_XDIST_WORKER") is None:
@@ -111,5 +156,5 @@ def pytest_sessionfinish(session, exitstatus):
             #    print(f"  Failure Reason: {result['longrepr']}")
 
         # Optionally, save detailed results to a JSON file
-        with open("Results/Test_Results.json", "w") as f:
+        with open(f"{project_root}/Results/Test_Results.json", "w") as f:
             json.dump(results_json, f, indent=4)
