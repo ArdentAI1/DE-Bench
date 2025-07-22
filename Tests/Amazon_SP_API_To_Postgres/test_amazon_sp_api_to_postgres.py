@@ -335,7 +335,7 @@ def test_amazon_sp_api_to_postgres(request):
 
     finally:
         try:
-            print("Starting cleanup...")
+            input("Starting cleanup...")
 
             # Clean up Airflow DAG
             airflow_base_url = os.getenv("AIRFLOW_HOST")
@@ -420,6 +420,23 @@ def test_amazon_sp_api_to_postgres(request):
                 )
             print("Cleaned dags folder")
             
+            # Clean up requirements.txt - reset to blank
+            try:
+                requirements_path = os.getenv("AIRFLOW_REQUIREMENTS_PATH", "Requirements/")
+                requirements_file = repo.get_contents(f"{requirements_path}requirements.txt")
+                
+                # Set to empty content
+                repo.update_file(
+                    path=requirements_file.path,
+                    message="Reset requirements.txt to blank",
+                    content="",
+                    sha=requirements_file.sha,
+                    branch="main",
+                )
+                print("Reset requirements.txt file")
+            except Exception as e:
+                print(f"Error cleaning up requirements: {e}")
+
             # Clean up Airflow
             airflow_local.Cleanup_Airflow_Directories()
 
