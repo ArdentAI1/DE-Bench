@@ -68,17 +68,12 @@ MongoDB:
   - Read/Write to Collections
 
 6. Use pytest to run. 
+`pytest -n auto -sv` -- will run with default settings
 `pytest -sv -k "keyword"` -- run tests by keyword
 `pytest` -- will run all tests
 Pytest supports `and` & `or` operators too. Something like `pytest -m "one and two"` will work.
 
 7. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the necessary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind.
-
-Environment Variables Template:
-
-
-
-
 
 
 

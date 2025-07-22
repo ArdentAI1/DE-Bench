@@ -1,23 +1,17 @@
-import os
 import importlib
-import pytest
+import os
 import time
-from datetime import datetime, timedelta
-import mysql.connector
-from python_on_whales import DockerClient
-import base64
+from datetime import datetime
+
+import psycopg2
+import pytest
 import requests
 from github import Github
-import psycopg2
-import httpx
 from requests.auth import HTTPBasicAuth
 
-
-from Configs.ArdentConfig import Ardent_Client
-from model.Run_Model import run_model
 from Configs.MySQLConfig import connection as mysql_connection
 from model.Configure_Model import set_up_model_configs, remove_model_configs
-from Environment.Airflow.Airflow import Airflow_Local
+from model.Run_Model import run_model
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
@@ -30,11 +24,19 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.mysql
 @pytest.mark.pipeline
 @pytest.mark.database
-def test_postgres_to_mysql_pipeline(request):
+def test_postgres_to_mysql_pipeline(request, airflow_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
+    request.node.user_properties.append(("user_query", Test_Configs.User_Input))
+    
+    # Use the airflow_resource fixture instead of creating our own instance
+    airflow_local = airflow_resource["airflow_instance"]
 
-    # Create a Docker client with the compose file configuration
-    airflow_local = Airflow_Local()
+    # Get Airflow base URL and credentials from the fixture
+    airflow_base_url = airflow_resource["base_url"]
+    airflow_username = airflow_resource["username"]
+    airflow_password = airflow_resource["password"]
+
+    Test_Configs.Configs["services"]["airflow"]["host"] = airflow_base_url
 
 
     test_steps = [
@@ -298,10 +300,8 @@ def test_postgres_to_mysql_pipeline(request):
         # After creating the DAG, wait a bit for Airflow to detect it
         time.sleep(5)  # Give Airflow time to scan for new DAGs
 
-        # Trigger the DAG
-        airflow_base_url = os.getenv("AIRFLOW_HOST")
-        airflow_username = os.getenv("AIRFLOW_USERNAME")
-        airflow_password = os.getenv("AIRFLOW_PASSWORD")
+        # Trigger the DAG using fixture credentials
+        # airflow_base_url, airflow_username, airflow_password already set from fixture
 
         # Wait for DAG to appear and trigger it
         max_retries = 5
@@ -422,11 +422,9 @@ def test_postgres_to_mysql_pipeline(request):
         try:
             print("Starting cleanup...")
 
-            # Clean up Airflow DAG
-            airflow_base_url = os.getenv("AIRFLOW_HOST")
-            auth = HTTPBasicAuth(
-                os.getenv("AIRFLOW_USERNAME"), os.getenv("AIRFLOW_PASSWORD")
-            )
+            # Clean up Airflow DAG using fixture credentials
+            # airflow_base_url, airflow_username, airflow_password already set from fixture
+            auth = HTTPBasicAuth(airflow_username, airflow_password)
             headers = {"Content-Type": "application/json"}
 
             # First pause the DAG
@@ -529,7 +527,6 @@ def test_postgres_to_mysql_pipeline(request):
                     branch="main",
                 )
             print("Cleaned dags folder")
-            airflow_local.Cleanup_Airflow_Directories()
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
