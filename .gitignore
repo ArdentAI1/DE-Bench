@@ -24,3 +24,13 @@ Environment/Databricks/ephemeral.json
 
 # Temporary files for test coordination
 .tmp/
+
+Environment/Airflow/logs/*
+tmp_airflow_tests/*
+.idea/*
+
+# Ignore all .gitkeep files in Environment/Airflow recursively
+Environment/Airflow/**/.gitkeep
+.secrets
+*/**/.secrets
+.astro/*

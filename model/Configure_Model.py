@@ -25,6 +25,7 @@ def set_up_model_configs(Configs, custom_info=None):
                     host=service_config["host"],
                     username=service_config["username"],
                     password=service_config["password"],
+                    api_token=service_config["api_token"],
                     requirements_path=service_config["requirements_path"],
                 )
 
