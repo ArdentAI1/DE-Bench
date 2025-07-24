@@ -4,7 +4,6 @@ import pytest
 import time
 import requests
 from github import Github
-from requests.auth import HTTPBasicAuth
 import psycopg2
 
 from model.Run_Model import run_model
@@ -20,18 +19,14 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.pipeline
 @pytest.mark.database
 def test_yfinance_airflow_pipeline(request, airflow_resource):
-    print_dir = os.path.dirname(os.path.abspath(__file__))
+    input_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
     
-    # Use the airflow_resource fixture instead of creating our own instance
-    airflow_local = airflow_resource["airflow_instance"]
-
-    # Get Airflow base URL and credentials from the fixture
-    airflow_base_url = airflow_resource["base_url"]
-    airflow_username = airflow_resource["username"]
-    airflow_password = airflow_resource["password"]
-
-    Test_Configs.Configs["services"]["airflow"]["host"] = airflow_base_url
+    # Use the airflow_resource fixture - the Docker instance is already running
+    print(f"=== Starting YFinance Airflow Pipeline Test ===")
+    print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
+    print(f"Airflow base URL: {airflow_resource['base_url']}")
+    print(f"Test directory: {input_dir}")
 
     test_steps = [
         {
@@ -97,9 +92,8 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
             if "sha" not in str(e):
                 raise e
 
-        # Set up the airflow folder with the correct configs
-
         # Setup Postgres database
+        print("Setting up PostgreSQL database...")
         postgres_connection = psycopg2.connect(
             host=os.getenv("POSTGRES_HOSTNAME"),
             port=os.getenv("POSTGRES_PORT"),
@@ -111,7 +105,7 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
         postgres_connection.autocommit = True
         postgres_cursor = postgres_connection.cursor()
 
-        # Check and kill any existing connections
+        # Check and kill any existing connections (if we have permission)
         postgres_cursor.execute(
             """
             SELECT pid, usename, datname 
@@ -122,14 +116,19 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
         connections = postgres_cursor.fetchall()
         print(f"Found connections to stock_data db:", connections)
 
-        postgres_cursor.execute(
-            """
-            SELECT pg_terminate_backend(pid) 
-            FROM pg_stat_activity 
-            WHERE datname = 'stock_data'
-            """
-        )
-        print("Terminated all connections to stock_data db")
+        if connections:
+            try:
+                postgres_cursor.execute(
+                    """
+                    SELECT pg_terminate_backend(pid) 
+                    FROM pg_stat_activity 
+                    WHERE datname = 'stock_data'
+                    """
+                )
+                print("Terminated all connections to stock_data db")
+            except Exception as e:
+                print(f"Could not terminate connections (permission issue): {e}")
+                print("Continuing with database operations...")
 
         # Now safe to drop and recreate
         postgres_cursor.execute("DROP DATABASE IF EXISTS stock_data")
@@ -166,13 +165,18 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
             """
         )
         postgres_connection.commit()
+        print("Created tesla_stock table")
 
+        # Set up the airflow folder with the correct configs
+        # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
+        Test_Configs.Configs["services"]["airflow"]["host"] = airflow_resource["base_url"]
+        Test_Configs.Configs["services"]["airflow"]["username"] = airflow_resource["username"]
+        Test_Configs.Configs["services"]["airflow"]["password"] = airflow_resource["password"]
+        Test_Configs.Configs["services"]["airflow"]["api_token"] = airflow_resource["api_token"]
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
-
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
-        input("Run the model")
         run_model(
             container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
         )
@@ -201,87 +205,108 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
 
         if not target_pr:
             test_steps[1]["status"] = "failed"
-            test_steps[1]["Result_Message"] = "PR was not created"
-            raise Exception("PR was not created")
+            test_steps[1]["Result_Message"] = "PR 'Add Tesla Stock Data Pipeline' not found"
+            raise Exception("PR 'Add Tesla Stock Data Pipeline' not found")
 
         # Merge the PR
-        target_pr.merge(merge_method="merge")
-        time.sleep(5)
+        merge_result = target_pr.merge(
+            commit_title="Add Tesla Stock Data Pipeline", merge_method="squash"
+        )
 
-        # Get the DAGs from GitHub using the fixture's Airflow instance
-        airflow_local.Get_Airflow_Dags_From_Github()
-        time.sleep(10)
+        if not merge_result.merged:
+            raise Exception(f"Failed to merge PR: {merge_result.message}")
+
+        # Use the airflow instance from the fixture to pull DAGs from GitHub
+        # The fixture already has the Docker instance running
+        airflow_instance = airflow_resource["airflow_instance"]
+        if not airflow_instance.wait_for_airflow_to_be_ready(wait_time_in_minutes=10):
+            raise Exception("Airflow instance did not redeploy successfully.")
+
+        # Use the connection details from the fixture
+        airflow_base_url = airflow_resource["base_url"]
+        airflow_api_token = airflow_resource["api_token"]
+        
+        print(f"Connecting to Airflow at: {airflow_base_url}")
+        print(f"Using API Token: {airflow_api_token}")
 
         # Wait for DAG to appear and trigger it
         max_retries = 5
-        auth = HTTPBasicAuth(airflow_username, airflow_password)
-        headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
+        headers = airflow_resource["api_headers"]
 
+        print(f"Waiting for DAG 'tesla_stock_dag' to appear in Airflow...")
         for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
             # Check if DAG exists
             dag_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag",
-                auth=auth,
                 headers=headers,
             )
 
             if dag_response.status_code != 200:
+                print(f"DAG not found yet (status: {dag_response.status_code}), waiting...")
                 if attempt == max_retries - 1:
                     raise Exception("DAG not found after max retries")
                 time.sleep(10)
                 continue
 
-            # Unpause the DAG
+            print(f"DAG found! Unpausing DAG...")
+            # Unpause the DAG before triggering
             unpause_response = requests.patch(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag",
-                auth=auth,
                 headers=headers,
                 json={"is_paused": False},
             )
 
             if unpause_response.status_code != 200:
+                print(f"Failed to unpause DAG: {unpause_response.text}")
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
                 time.sleep(10)
                 continue
 
+            print(f"DAG unpaused successfully. Triggering DAG...")
             # Trigger the DAG
             trigger_response = requests.post(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag/dagRuns",
-                auth=auth,
                 headers=headers,
                 json={"conf": {}},
             )
 
             if trigger_response.status_code == 200:
                 dag_run_id = trigger_response.json()["dag_run_id"]
+                print(f"DAG triggered successfully! Run ID: {dag_run_id}")
                 break
             else:
+                print(f"Failed to trigger DAG: {trigger_response.text}")
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
                 time.sleep(10)
 
         # Monitor the DAG run
-        max_wait = 120
+        max_wait = 60 * 2
         start_time = time.time()
+        print(f"Monitoring DAG run {dag_run_id} for completion...")
         while time.time() - start_time < max_wait:
             status_response = requests.get(
                 f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag/dagRuns/{dag_run_id}",
-                auth=auth,
                 headers=headers,
             )
 
             if status_response.status_code == 200:
                 state = status_response.json()["state"]
+                print(f"DAG run state: {state}")
                 if state == "success":
+                    print("DAG run completed successfully!")
                     break
                 elif state in ["failed", "error"]:
                     raise Exception(f"DAG failed with state: {state}")
+
             time.sleep(5)
         else:
             raise Exception("DAG run timed out")
 
         # SECTION 3: VERIFY THE OUTCOMES
+        print("Verifying database results...")
         conn = psycopg2.connect(
             host=os.getenv("POSTGRES_HOSTNAME"),
             port=os.getenv("POSTGRES_PORT"),
@@ -315,43 +340,28 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
         
         assert expected_columns.issubset(actual_columns), "Missing expected columns in tesla_stock table"
         
+        print(f"✓ Successfully verified {row_count} days of Tesla stock data")
         test_steps[2]["status"] = "passed"
         test_steps[2]["Result_Message"] = f"Successfully stored {row_count} days of Tesla stock data"
 
     finally:
-        input("Waiting before cleanup")
         try:
-            # Clean up Airflow DAG using the fixture's instance
-            auth = HTTPBasicAuth(airflow_username, airflow_password)
-            headers = {"Content-Type": "application/json"}
-
-            # Pause the DAG
-            try:
-                pause_response = requests.patch(
-                    f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag",
-                    auth=auth,
-                    headers=headers,
-                    json={"is_paused": True},
-                )
-            except:
-                pass
-
-            # Remove the configs
+            # this function is for you to remove the configs for the test. They follow a set structure.
             remove_model_configs(
                 Configs=Test_Configs.Configs, custom_info=config_results
             )
 
-            # Clean up GitHub - delete branch
+            # Clean up GitHub - delete branch if it exists
             try:
                 ref = repo.get_git_ref(f"heads/feature/tesla_stock")
                 ref.delete()
             except Exception as e:
                 print(f"Branch might not exist or other error: {e}")
 
-            # Reset repo state
+            # Reset the repo to the original state
             dags_contents = repo.get_contents("dags")
             for content in dags_contents:
-                if content.name != ".gitkeep":
+                if content.name != ".gitkeep":  # Keep the .gitkeep file if it exists
                     repo.delete_file(
                         path=content.path,
                         message="Clear dags folder",
@@ -359,7 +369,7 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
                         branch="main",
                     )
 
-            # Ensure .gitkeep exists
+            # Ensure .gitkeep exists in dags folder
             try:
                 repo.get_contents("dags/.gitkeep")
             except:
@@ -384,9 +394,6 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
             except Exception as e:
                 print(f"Error cleaning up requirements: {e}")
 
-            # Clean up the fixture's Airflow directories
-            airflow_local.Cleanup_Airflow_Directories()
-
             # Clean up database
             postgres_connection = psycopg2.connect(
                 host=os.getenv("POSTGRES_HOSTNAME"),
@@ -406,11 +413,6 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
             postgres_cursor.close()
             postgres_connection.close()
 
-            # Database cleanup
-            postgres_cursor.close()
-            postgres_connection.close()
-            print("Closed test connections")
-
             # Connect to postgres database for cleanup
             postgres_connection = psycopg2.connect(
                 host=os.getenv("POSTGRES_HOSTNAME"),
@@ -423,7 +425,7 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
             postgres_connection.autocommit = True
             postgres_cursor = postgres_connection.cursor()
 
-            # Check and kill any remaining connections
+            # Check and kill any remaining connections (if we have permission)
             postgres_cursor.execute(
                 """
                 SELECT pid, usename, datname 
@@ -434,14 +436,19 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
             connections = postgres_cursor.fetchall()
             print(f"Found connections to stock_data db during cleanup:", connections)
 
-            postgres_cursor.execute(
-                """
-                SELECT pg_terminate_backend(pid) 
-                FROM pg_stat_activity 
-                WHERE datname = 'stock_data'
-                """
-            )
-            print("Terminated all connections to stock_data db")
+            if connections:
+                try:
+                    postgres_cursor.execute(
+                        """
+                        SELECT pg_terminate_backend(pid) 
+                        FROM pg_stat_activity 
+                        WHERE datname = 'stock_data'
+                        """
+                    )
+                    print("Terminated all connections to stock_data db")
+                except Exception as e:
+                    print(f"Could not terminate connections during cleanup (permission issue): {e}")
+                    print("Continuing with cleanup...")
 
             # Now safe to drop
             postgres_cursor.execute("DROP DATABASE IF EXISTS stock_data")
@@ -454,8 +461,3 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
-
-        finally:
-            remove_model_configs(
-                Configs=Test_Configs.Configs, custom_info=config_results
-            )
