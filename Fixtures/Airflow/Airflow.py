@@ -24,16 +24,17 @@ class Airflow_Local:
         # TODO: trigger the dag
         # TODO: wait for the dag to finish
 
-    def wait_for_airflow_to_be_ready(self) -> bool:
+    def wait_for_airflow_to_be_ready(self, wait_time_in_minutes: Optional[int] = 3) -> bool:
         """
         Wait for a total of 10 minutes for the Airflow webserver to be ready.
 
+        :param wait_time_in_minutes: The time to wait for the Airflow webserver to be ready, defaults to 3 minutes
         :return: True if the Airflow webserver is ready, False otherwise.
         :rtype: bool
         """
         import requests
-        # wait 3 minutes before checking if the webserver is ready
-        time.sleep(60 * 3)
+        # wait the specified time before checking if the webserver is ready
+        time.sleep(60 * wait_time_in_minutes)
 
         # check if the webserver is ready
         retries = 10
