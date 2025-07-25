@@ -2,7 +2,6 @@ import os
 import importlib
 import pytest
 import time
-import requests
 from github import Github
 import psycopg2
 
@@ -219,7 +218,7 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
         # Use the airflow instance from the fixture to pull DAGs from GitHub
         # The fixture already has the Docker instance running
         airflow_instance = airflow_resource["airflow_instance"]
-        if not airflow_instance.wait_for_airflow_to_be_ready(wait_time_in_minutes=10):
+        if not airflow_instance.wait_for_airflow_to_be_ready(wait_time_in_minutes=6):
             raise Exception("Airflow instance did not redeploy successfully.")
 
         # Use the connection details from the fixture
@@ -232,78 +231,11 @@ def test_yfinance_airflow_pipeline(request, airflow_resource):
         # Wait for DAG to appear and trigger it
         max_retries = 5
         headers = airflow_resource["api_headers"]
+        dag_id = "tesla_stock_dag"
+        airflow_instance.verify_airflow_dag_exists(dag_id)
+        dag_run_id = airflow_instance.unpause_and_trigger_airflow_dag(dag_id)
 
-        print(f"Waiting for DAG 'tesla_stock_dag' to appear in Airflow...")
-        for attempt in range(max_retries):
-            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
-            # Check if DAG exists
-            dag_response = requests.get(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag",
-                headers=headers,
-            )
-
-            if dag_response.status_code != 200:
-                print(f"DAG not found yet (status: {dag_response.status_code}), waiting...")
-                if attempt == max_retries - 1:
-                    raise Exception("DAG not found after max retries")
-                time.sleep(10)
-                continue
-
-            print(f"DAG found! Unpausing DAG...")
-            # Unpause the DAG before triggering
-            unpause_response = requests.patch(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag",
-                headers=headers,
-                json={"is_paused": False},
-            )
-
-            if unpause_response.status_code != 200:
-                print(f"Failed to unpause DAG: {unpause_response.text}")
-                if attempt == max_retries - 1:
-                    raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
-                time.sleep(10)
-                continue
-
-            print(f"DAG unpaused successfully. Triggering DAG...")
-            # Trigger the DAG
-            trigger_response = requests.post(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag/dagRuns",
-                headers=headers,
-                json={"conf": {}},
-            )
-
-            if trigger_response.status_code == 200:
-                dag_run_id = trigger_response.json()["dag_run_id"]
-                print(f"DAG triggered successfully! Run ID: {dag_run_id}")
-                break
-            else:
-                print(f"Failed to trigger DAG: {trigger_response.text}")
-                if attempt == max_retries - 1:
-                    raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
-                time.sleep(10)
-
-        # Monitor the DAG run
-        max_wait = 60 * 2
-        start_time = time.time()
-        print(f"Monitoring DAG run {dag_run_id} for completion...")
-        while time.time() - start_time < max_wait:
-            status_response = requests.get(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/tesla_stock_dag/dagRuns/{dag_run_id}",
-                headers=headers,
-            )
-
-            if status_response.status_code == 200:
-                state = status_response.json()["state"]
-                print(f"DAG run state: {state}")
-                if state == "success":
-                    print("DAG run completed successfully!")
-                    break
-                elif state in ["failed", "error"]:
-                    raise Exception(f"DAG failed with state: {state}")
-
-            time.sleep(5)
-        else:
-            raise Exception("DAG run timed out")
+        airflow_instance.verify_dag_id_ran(dag_id, dag_run_id)
 
         # SECTION 3: VERIFY THE OUTCOMES
         print("Verifying database results...")
