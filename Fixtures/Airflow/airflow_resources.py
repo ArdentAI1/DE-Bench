@@ -135,8 +135,8 @@ def airflow_resource(request):
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
             "username": os.getenv("AIRFLOW_USERNAME", "airflow"),
             "password": os.getenv("AIRFLOW_PASSWORD", "airflow"),
-            "airflow_instance": Airflow_Local(  # TODO: remove this eventually
-                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url  #
+            "airflow_instance": Airflow_Local(
+                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url
             ),
             "created_resources": created_resources,
         }
