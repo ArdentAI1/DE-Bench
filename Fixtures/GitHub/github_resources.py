@@ -131,5 +131,5 @@ def cleanup_github_resource(
     :param created_resources: The list of created resources.
     :param test_dir: The path to the test directory.
     """
-    github_manager.reset_repo_state()
+    github_manager.reset_repo_state("dags")
     github_manager.cleanup_requirements()

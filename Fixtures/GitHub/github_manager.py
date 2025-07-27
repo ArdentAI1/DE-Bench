@@ -6,7 +6,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 import github
-from github import Github
+from github import Github, Repository
 
 
 class GitHubManager:
@@ -26,9 +26,9 @@ class GitHubManager:
         self.repo_url = repo_url
         self.repo_name = self._parse_repo_name(repo_url)
         self.github_client = Github(access_token)
-        self.repo = self.github_client.get_repo(self.repo_name)
-        self.created_branches = []
-        self.created_files = []
+        self.repo: Repository = self.github_client.get_repo(self.repo_name)
+        self.branch_name = "main"
+        self.starting_commit = self.repo.get_commits()[0].sha
 
     @staticmethod
     def _parse_repo_name(repo_url: str) -> str:
@@ -199,6 +199,36 @@ class GitHubManager:
         except Exception as e:
             print(f"Error resetting repository state: {e}")
     
+    def check_if_action_is_complete(self, pr_title: str, wait_before_checking: Optional[int] = 60, max_retries: Optional[int] = 10, branch_name: Optional[str] = None) -> bool:
+        """
+        Check if an action is complete.
+        
+        :param str pr_title: Title of the PR to check the action for
+        :param int wait_before_checking: Time to wait before checking if the action is complete, defaults to 60 seconds
+        :param int max_retries: Maximum number of retries, defaults to 10
+        :param str branch_name: Name of the branch to check
+        :return: True if action is complete, False otherwise
+        """
+        import time
+        print(f"Waiting {wait_before_checking} seconds before checking if action is complete...")
+        time.sleep(wait_before_checking)
+        print(f"Checking if action is complete...")
+        if not branch_name:
+            branch_name = self.branch_name
+        for retry in range(max_retries):
+            workflow_runs = self.repo.get_workflow_runs(branch=branch_name)
+            if workflow_runs.totalCount > 0:
+                if filtered_runs := [run for run in workflow_runs if run.display_title.lower() == pr_title.lower()]:
+                    # check the first run in the list
+                    if filtered_runs[0].status == "completed":
+                        print(f"✓ Action is complete")
+                        return True
+                print(f"✗ Action is not complete")
+            print(f"Waiting 60 seconds before checking again...{retry + 1} of {max_retries}")
+            time.sleep(60)
+        print(f"✗ Action is not complete after {max_retries} retries")
+        return False
+    
     def cleanup_requirements(self, requirements_path: str = "Requirements/") -> None:
         """
         Reset requirements.txt to blank.
@@ -206,6 +236,7 @@ class GitHubManager:
         :param str requirements_path: Path to requirements folder
         :rtype: None
         """
+        #TODO: this can be removed once we reset the repo using a commit
         try:
             requirements_file = self.repo.get_contents(os.path.join(requirements_path, "requirements.txt"))
             self.repo.update_file(
