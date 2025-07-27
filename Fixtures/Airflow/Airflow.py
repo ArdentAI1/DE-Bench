@@ -150,6 +150,41 @@ class Airflow_Local:
                     continue
         return self.check_dag_task_instances(dag_id, dag_run_id)
     
+    def get_task_instance_logs(self, dag_id: str, dag_run_id: str, task_id: str) -> str:
+        """
+        Get the logs for a task instance.
+
+        :param str dag_id: The ID of the DAG to check for.
+        :param str dag_run_id: The ID of the DAG run to check for.
+        :param str task_id: The ID of the task to check for.
+        :return: The logs for the task instance.
+        :rtype: str
+        """
+        print(f"Retrieving logs for task '{task_id}'")
+        task_instance_response = requests.get(
+            f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs",
+            headers=self.API_HEADERS,
+        )
+        if task_instance_response.status_code != 200:
+            raise Exception(
+                f"Failed to retrieve task instance details: {task_instance_response.text}"
+            )
+        print(f"Task instance response: {task_instance_response.text}")
+        task_instance_data = task_instance_response.json()
+        try_number = task_instance_data.get(
+            "try_number", 1
+        )  # Default to 1 if not found
+        print(f"Fetching logs for task '{task_id}' with try number: {try_number}")
+        task_logs_response = requests.get(
+            f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{try_number}",
+            headers=self.API_HEADERS,
+        )
+        if task_logs_response.status_code != 200:
+            raise Exception(f"Failed to retrieve task logs: {task_logs_response.text}")
+        
+        print(f"Task logs received for task '{task_id}' with try number: {try_number}")
+        return task_logs_response.text
+    
     def check_dag_task_instances(self, dag_id: str, dag_run_id: str) -> bool:
         """
         Check if all tasks in a DAG have been executed.
