@@ -5,7 +5,7 @@ Create a simple Airflow DAG that:
 1. Prints "Hello Universe" to the logs
 2. Runs daily at midnight
 3. Has a single task named 'print_hello'
-4. Name the DAG 'hello_world_dag'
+4. Name the DAG 'hello_universe_dag'
 5. Create it in a branch called 'feature/hello_universe_dag'
 6. Name the PR 'Add Hello Universe DAG'
 """

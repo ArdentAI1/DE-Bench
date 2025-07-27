@@ -3,9 +3,6 @@ import os
 import time
 
 import pytest
-import requests
-from github import Github
-from requests.auth import HTTPBasicAuth
 
 from model.Configure_Model import remove_model_configs
 from model.Configure_Model import set_up_model_configs
@@ -22,7 +19,9 @@ Test_Configs = importlib.import_module(module_path)
 def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
+    github_manager = github_resource["github_manager"]
     dag_name = "hello_universe_dag"
+    pr_title = "Add Hello Universe DAG"
     
     # Use the airflow_resource fixture - the Docker instance is already running
     print(f"=== Starting Hello Universe Airflow Pipeline Test ===")
@@ -57,9 +56,6 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
     # SECTION 1: SETUP THE TEST
     config_results = None  # Initialize before try block
     try:
-        # Use the GitHub manager from the fixture
-        github_manager = github_resource["github_manager"]
-        
         # The dags folder is already set up by the fixture
         print("GitHub repository setup completed by fixture")
 
@@ -85,9 +81,9 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
             raise Exception(test_steps[0]["Result_Message"])
 
         pr_exists, test_steps[1] = github_manager.find_and_merge_pr(
-            pr_title="Add Hello Universe DAG", 
+            pr_title=pr_title, 
             test_step=test_steps[1], 
-            commit_title="Add Hello Universe DAG", 
+            commit_title=pr_title, 
             merge_method="squash"
         )
         if not pr_exists:
@@ -96,7 +92,14 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
         # Use the airflow instance from the fixture to pull DAGs from GitHub
         # The fixture already has the Docker instance running
         airflow_instance = airflow_resource["airflow_instance"]
-        if not airflow_instance.wait_for_airflow_to_be_ready():
+        if not airflow_instance.wait_for_airflow_to_be_ready(6):
+            raise Exception("Airflow instance did not redeploy successfully.")
+        
+        if not github_manager.check_if_action_is_complete(pr_title=pr_title):
+            raise Exception("Action is not complete")
+        
+        # verify the airflow instance is ready after the github action redeployed
+        if not airflow_instance.wait_for_airflow_to_be_ready(3):
             raise Exception("Airflow instance did not redeploy successfully.")
 
         # Use the connection details from the fixture
@@ -115,8 +118,6 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
             raise Exception("Failed to trigger DAG")
 
         # Monitor the DAG run
-        max_wait = 120  # 2 minutes timeout
-        start_time = time.time()
         print(f"Monitoring DAG run {dag_run_id} for completion...")
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
 
@@ -124,35 +125,8 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
         # Get the task logs to verify "Hello World" was printed
         print("Retrieving task logs to verify 'Hello World' output...")
 
-        # First, get task instance information
-        # TODO: use the airflow instance to get the task instance information
-        task_instance_response = requests.get(
-            f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_universe_dag/dagRuns/{dag_run_id}/taskInstances/print_hello",
-            headers=airflow_instance.API_HEADERS,
-        )
-
-        if task_instance_response.status_code != 200:
-            raise Exception(
-                f"Failed to retrieve task instance details: {task_instance_response.text}"
-            )
-
-        # Extract the try_number from the response
-        task_instance_data = task_instance_response.json()
-        try_number = task_instance_data.get(
-            "try_number", 1
-        )  # Default to 1 if not found
-
-        print(f"Retrieving logs for task 'print_hello', try number: {try_number}")
-        # Now get the logs with the correct try number
-        task_logs_response = requests.get(
-            f"{airflow_base_url.rstrip('/')}/api/v1/dags/hello_universe_dag/dagRuns/{dag_run_id}/taskInstances/print_hello/logs/{try_number}",
-            headers=airflow_instance.API_HEADERS,
-        )
-
-        if task_logs_response.status_code != 200:
-            raise Exception(f"Failed to retrieve task logs: {task_logs_response.text}")
-
-        logs = task_logs_response.text
+        # get the logs for the task
+        logs = airflow_instance.get_task_instance_logs(dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello")
         print(f"Task logs retrieved. Log content length: {len(logs)} characters")
         print(f"Log content preview: {logs[:200]}...")
         
