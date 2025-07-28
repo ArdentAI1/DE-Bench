@@ -162,7 +162,7 @@ class Airflow_Local:
         """
         print(f"Retrieving logs for task '{task_id}'")
         task_instance_response = requests.get(
-            f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs",
+            f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}",
             headers=self.API_HEADERS,
         )
         if task_instance_response.status_code != 200:
