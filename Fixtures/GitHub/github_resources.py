@@ -78,48 +78,6 @@ def github_resource(request):
         cleanup_github_resource(github_manager)
 
 
-def _check_and_update_gh_secrets(deployment_id: str, deployment_name: str, astro_access_token: str) -> None:
-    """
-    Checks if the GitHub secrets exists, deletes them if they do, and creates new ones with the given
-        deployment ID and name.
-
-    :param str deployment_id: The ID of the deployment.
-    :param str deployment_name: The name of the deployment.
-    :rtype: None
-    """
-    # TODO: update this to be able to update different secrets for different tests and use the github manager to do this
-    gh_secrets = {
-        "ASTRO_DEPLOYMENT_ID": deployment_id,
-        "ASTRO_DEPLOYMENT_NAME": deployment_name,
-        "ASTRO_ACCESS_TOKEN": astro_access_token,
-    }
-    airflow_github_repo = os.getenv("AIRFLOW_REPO")
-    g = Github(os.getenv("AIRFLOW_GITHUB_TOKEN"))
-    if "github.com" in airflow_github_repo:
-        # Extract owner/repo from URL
-        parts = airflow_github_repo.split("/")
-        airflow_github_repo = f"{parts[-2]}/{parts[-1]}"
-    repo = g.get_repo(airflow_github_repo)
-    try:
-        for secret, value in gh_secrets.items():
-            try:
-                if repo.get_secret(secret):
-                    print(f"Worker {os.getpid()}: {secret} already exists, deleting...")
-                    repo.delete_secret(secret)
-                print(f"Worker {os.getpid()}: Creating {secret}...")
-            except github.GithubException as e:
-                if e.status == 404:
-                    print(f"Worker {os.getpid()}: {secret} does not exist, creating...")
-                else:
-                    print(f"Worker {os.getpid()}: Error checking secret {secret}: {e}")
-                    raise e
-            repo.create_secret(secret, value)
-            print(f"Worker {os.getpid()}: {secret} created successfully.")
-    except Exception as e:
-        print(f"Worker {os.getpid()}: Error checking and updating GitHub secrets: {e}")
-        raise e from e
-
-
 def cleanup_github_resource(
     github_manager: GitHubManager,
 ):
