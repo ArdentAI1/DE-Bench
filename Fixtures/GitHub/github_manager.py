@@ -28,7 +28,6 @@ class GitHubManager:
         self.github_client = Github(access_token)
         self.repo: Repository = self.github_client.get_repo(self.repo_name)
         self.branch_name = "main"
-        self.target_branch = None
         self.starting_commit = self.repo.get_commits()[0].sha
         self.build_info = "./build-info.properties"
 
@@ -101,8 +100,18 @@ class GitHubManager:
         :return: True if branch exists, False otherwise, and the updated test step
         :rtype: Tuple[bool, Dict[str, str]]
         """
+        print(f"Checking if branch '{branch_name}' exists...")
+        
+        # List all branches for debugging
         try:
-            self.target_branch = self.repo.get_branch(branch_name)
+            branches = self.repo.get_branches()
+            print(f"Available branches in repository:")
+            for branch in branches:
+                print(f"{branch.name=}")
+        except Exception as e:
+            print(f"Error listing branches: {e}")
+        
+        try:
             test_step["status"] = "passed"
             test_step["Result_Message"] = f"Branch '{branch_name}' was created successfully"
             print(f"✓ Branch '{branch_name}' exists")
@@ -135,7 +144,10 @@ class GitHubManager:
         pulls = self.repo.get_pulls(state="open")
         target_pr = None
         
+        print(f"Searching for PR with title: '{pr_title}'")
+        print(f"Found {pulls.totalCount} open PRs:")
         for pr in pulls:
+            print(f"  - PR: '{pr.title}' (branch: {pr.head.ref})")
             if pr.title == pr_title:
                 target_pr = pr
                 test_step["status"] = "passed"
@@ -152,7 +164,9 @@ class GitHubManager:
         # Merge the PR
         try:
             if build_info:
-                self._update_build_info(build_info)
+                # Get the branch name from the target PR
+                branch_name = target_pr.head.ref
+                self._update_build_info(build_info, branch_name)
             merge_result = target_pr.merge(
                 commit_title=commit_title or pr_title,
                 merge_method=merge_method
@@ -168,11 +182,12 @@ class GitHubManager:
             print(f"✗ Failed to merge PR: {e}")
             return False, test_step
 
-    def _update_build_info(self, build_info: Dict[str, str]) -> None:
+    def _update_build_info(self, build_info: Dict[str, str], branch_name: str) -> None:
         """
         Update the build_info.txt file with the provided build info dictionary.
         
         :param Dict[str, str] build_info: Build info dictionary
+        :param str branch_name: Name of the branch to update the file on
         :rtype: None
         """
         # use github api to update the build_info.txt file
@@ -181,16 +196,16 @@ class GitHubManager:
             build_info_txt += f"{key.replace(' ', '_')}={value}\n"
         build_info_txt = build_info_txt.strip()
         try:
-            contents = self.repo.get_contents(self.build_info, ref=self.target_branch.name)
+            contents = self.repo.get_contents(self.build_info, ref=branch_name)
             # check if the file exists
             self.repo.update_file(
                 path=self.build_info,
                 message=f"Updated {self.build_info}",
                 content=build_info_txt,
-                branch=self.target_branch,
+                branch=branch_name,
                 sha=contents.sha,
             )
-            print(f"✓ Build info updated successfully for branch {self.target_branch}")
+            print(f"✓ Build info updated successfully for branch {branch_name}")
         except Exception as e:
             if e.status == 404:
                 try:
@@ -198,11 +213,11 @@ class GitHubManager:
                         path=self.build_info,
                         message=f"Created {self.build_info}",
                         content=build_info_txt,
-                        branch=self.target_branch.name,
+                        branch=branch_name,
                     )
-                    print(f"✓ Build info created successfully for branch {self.target_branch}")
+                    print(f"✓ Build info created successfully for branch {branch_name}")
                 except Exception as e:
-                    print(f"✗ Error creating build info for branch {self.target_branch}: {e}")
+                    print(f"✗ Error creating build info for branch {branch_name}: {e}")
                     raise e from e
 
     def check_and_update_gh_secrets(self, secrets: Dict[str, str]) -> None:
