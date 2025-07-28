@@ -52,7 +52,7 @@ def github_resource(request):
         
         # Create resource data
         resource_data = {
-            "resource_id": "github_resource",
+            "resource_id": f"{test_name}_github_resource",
             "type": "github_resource",
             "test_name": test_name,
             "creation_time": time.time(),
