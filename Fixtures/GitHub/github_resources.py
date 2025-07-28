@@ -24,6 +24,7 @@ def github_resource(request):
     A function-scoped fixture that provides a GitHub manager for test operations.
     Each test gets its own GitHub manager instance.
     """
+    resource_id = "github_resource"
     # Verify required environment variables
     required_envars = [
         "AIRFLOW_GITHUB_TOKEN",
@@ -52,7 +53,7 @@ def github_resource(request):
         
         # Create resource data
         resource_data = {
-            "resource_id": f"{test_name}_github_resource",
+            "resource_id": resource_id,
             "type": "github_resource",
             "test_name": test_name,
             "creation_time": time.time(),
@@ -64,7 +65,7 @@ def github_resource(request):
             "repo_info": github_manager.get_repo_info(),
         }
         
-        print(f"Worker {os.getpid()}: Created GitHub resource")
+        print(f"Worker {os.getpid()}: Created GitHub resource {resource_id}")
         
         fixture_end_time = time.time()
         print(f"Worker {os.getpid()}: GitHub fixture setup took {fixture_end_time - start_time:.2f}s total")
@@ -74,7 +75,7 @@ def github_resource(request):
         print(f"Worker {os.getpid()}: Error in GitHub fixture: {e}")
         raise e from e
     finally:
-        print(f"Worker {os.getpid()}: Cleaning up GitHub resource")
+        print(f"Worker {os.getpid()}: Cleaning up GitHub resource {resource_id}")
         cleanup_github_resource(github_manager)
 
 

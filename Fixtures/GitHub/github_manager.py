@@ -103,24 +103,24 @@ class GitHubManager:
         print(f"Checking if branch '{branch_name}' exists...")
         
         # List all branches for debugging
+        branch_exists = False
         try:
             branches = self.repo.get_branches()
-            print(f"Available branches in repository:")
-            for branch in branches:
-                print(f"{branch.name=}")
+            print(f"Found {branches.totalCount} branches in the {self.repo_name} repository.")
+            branch_exists = any(branch.name == branch_name for branch in branches)
+            print(f"{branch_exists=}")
         except Exception as e:
             print(f"Error listing branches: {e}")
         
-        try:
+        if branch_exists:
             test_step["status"] = "passed"
             test_step["Result_Message"] = f"Branch '{branch_name}' was created successfully"
             print(f"✓ Branch '{branch_name}' exists")
-            return True, test_step
-        except Exception as e:
+        else:
             test_step["status"] = "failed"
             test_step["Result_Message"] = f"Branch '{branch_name}' was not created: {str(e)}"
             print(f"✗ Branch '{branch_name}' was not created: {str(e)}")
-            return False, test_step
+        return branch_exists, test_step
     
     def find_and_merge_pr(
             self,
