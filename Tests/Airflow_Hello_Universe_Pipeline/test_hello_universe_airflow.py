@@ -22,6 +22,11 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
     github_manager = github_resource["github_manager"]
     dag_name = "hello_universe_dag"
     pr_title = "Add Hello Universe DAG"
+    github_manager.check_and_update_gh_secrets(
+        secrets={
+            "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
+        }
+    )
     
     # Use the airflow_resource fixture - the Docker instance is already running
     print(f"=== Starting Hello Universe Airflow Pipeline Test ===")
@@ -84,10 +89,14 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
             pr_title=pr_title, 
             test_step=test_steps[1], 
             commit_title=pr_title, 
-            merge_method="squash"
+            merge_method="squash",
+            build_info={
+                "deploymentId": airflow_resource["deployment_id"],
+                "deploymentName": airflow_resource["deployment_name"],
+            }
         )
         if not pr_exists:
-            raise Exception(test_steps[1]["Result_Message"])
+            raise Exception("Unable to find and merge PR. Please check the PR title and commit title.")
 
         # Use the airflow instance from the fixture to pull DAGs from GitHub
         # The fixture already has the Docker instance running
