@@ -130,6 +130,8 @@ def airflow_resource(request):
             "status": "active",
             "project_name": test_dir.stem,
             "base_url": base_url,
+            "deployment_id": astro_deployment_id,
+            "deployment_name": unique_id,
             "api_url": api_url,
             "api_token": api_token,
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
