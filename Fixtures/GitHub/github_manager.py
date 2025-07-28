@@ -28,7 +28,9 @@ class GitHubManager:
         self.github_client = Github(access_token)
         self.repo: Repository = self.github_client.get_repo(self.repo_name)
         self.branch_name = "main"
+        self.target_branch = None
         self.starting_commit = self.repo.get_commits()[0].sha
+        self.build_info = "./build-info.properties"
 
     @staticmethod
     def _parse_repo_name(repo_url: str) -> str:
@@ -100,7 +102,7 @@ class GitHubManager:
         :rtype: Tuple[bool, Dict[str, str]]
         """
         try:
-            _ = self.repo.get_branch(branch_name)
+            self.target_branch = self.repo.get_branch(branch_name)
             test_step["status"] = "passed"
             test_step["Result_Message"] = f"Branch '{branch_name}' was created successfully"
             print(f"✓ Branch '{branch_name}' exists")
@@ -111,7 +113,14 @@ class GitHubManager:
             print(f"✗ Branch '{branch_name}' was not created: {str(e)}")
             return False, test_step
     
-    def find_and_merge_pr(self, pr_title: str, test_step: Dict[str, str], commit_title: Optional[str] = None, merge_method: str = "squash") -> Tuple[bool, Dict[str, str]]:
+    def find_and_merge_pr(
+            self,
+            pr_title: str,
+            test_step: Dict[str, str],
+            commit_title: Optional[str] = None,
+            merge_method: str = "squash",
+            build_info: Optional[Dict[str, str]] = None
+    ) -> Tuple[bool, Dict[str, str]]:
         """
         Find a PR by title and merge it, updating test steps.
         
@@ -119,6 +128,7 @@ class GitHubManager:
         :param Dict[str, str] test_step: Test step dictionary
         :param str commit_title: Custom commit title for merge (optional)
         :param str merge_method: Merge method ('squash', 'merge', 'rebase')
+        :param Dict[str, str] build_info: Build info dictionary to update (optional)
         :return: True if PR was found and merged, False otherwise, and the updated test step
         :rtype: Tuple[bool, Dict[str, str]]
         """
@@ -141,6 +151,8 @@ class GitHubManager:
         
         # Merge the PR
         try:
+            if build_info:
+                self._update_build_info(build_info)
             merge_result = target_pr.merge(
                 commit_title=commit_title or pr_title,
                 merge_method=merge_method
@@ -155,6 +167,70 @@ class GitHubManager:
         except Exception as e:
             print(f"✗ Failed to merge PR: {e}")
             return False, test_step
+
+    def _update_build_info(self, build_info: Dict[str, str]) -> None:
+        """
+        Update the build_info.txt file with the provided build info dictionary.
+        
+        :param Dict[str, str] build_info: Build info dictionary
+        :rtype: None
+        """
+        # use github api to update the build_info.txt file
+        build_info_txt = ""
+        for key, value in build_info.items():
+            build_info_txt += f"{key.replace(' ', '_')}={value}\n"
+        build_info_txt = build_info_txt.strip()
+        try:
+            contents = self.repo.get_contents(self.build_info, ref=self.target_branch.name)
+            # check if the file exists
+            self.repo.update_file(
+                path=self.build_info,
+                message=f"Updated {self.build_info}",
+                content=build_info_txt,
+                branch=self.target_branch,
+                sha=contents.sha,
+            )
+            print(f"✓ Build info updated successfully for branch {self.target_branch}")
+        except Exception as e:
+            if e.status == 404:
+                try:
+                    self.repo.create_file(
+                        path=self.build_info,
+                        message=f"Created {self.build_info}",
+                        content=build_info_txt,
+                        branch=self.target_branch.name,
+                    )
+                    print(f"✓ Build info created successfully for branch {self.target_branch}")
+                except Exception as e:
+                    print(f"✗ Error creating build info for branch {self.target_branch}: {e}")
+                    raise e from e
+
+    def check_and_update_gh_secrets(self, secrets: Dict[str, str]) -> None:
+        """
+        Checks if the GitHub secrets exists, deletes them if they do, and creates new ones with the given
+            key value pairs.
+
+        :param Dict[str, str] secrets: Dictionary of secrets to update
+        :rtype: None
+        """
+        try:
+            for secret, value in secrets.items():
+                try:
+                    if self.repo.get_secret(secret):
+                        print(f"Worker {os.getpid()}: {secret} already exists, deleting...")
+                        self.repo.delete_secret(secret)
+                    print(f"Worker {os.getpid()}: Creating {secret}...")
+                except github.GithubException as e:
+                    if e.status == 404:
+                        print(f"Worker {os.getpid()}: {secret} does not exist, creating...")
+                    else:
+                        print(f"Worker {os.getpid()}: Error checking secret {secret}: {e}")
+                        raise e
+                self.repo.create_secret(secret, value)
+                print(f"Worker {os.getpid()}: {secret} created successfully.")
+        except Exception as e:
+            print(f"Worker {os.getpid()}: Error checking and updating GitHub secrets: {e}")
+            raise e from e
     
     def delete_branch(self, branch_name: str) -> None:
         """
@@ -216,7 +292,7 @@ class GitHubManager:
         if not branch_name:
             branch_name = self.branch_name
         for retry in range(max_retries):
-            workflow_runs = self.repo.get_workflow_runs(branch=branch_name)
+            workflow_runs = self.repo.get_workflow_runs(branch=branch_name)  # type: ignore
             if workflow_runs.totalCount > 0:
                 if filtered_runs := [run for run in workflow_runs if run.display_title.lower() == pr_title.lower()]:
                     # check the first run in the list
