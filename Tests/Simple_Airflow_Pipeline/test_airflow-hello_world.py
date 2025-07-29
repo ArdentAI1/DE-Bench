@@ -15,7 +15,7 @@ Test_Configs = importlib.import_module(module_path)
 
 @pytest.mark.airflow
 @pytest.mark.pipeline
-def test_simple_airflow_pipeline(request, airflow_resource, github_resource):
+def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
     github_manager = github_resource["github_manager"]
