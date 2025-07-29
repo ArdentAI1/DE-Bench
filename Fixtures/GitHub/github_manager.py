@@ -6,6 +6,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 import github
+import time
 from github import Github, Repository
 
 
@@ -15,7 +16,7 @@ class GitHubManager:
     Handles repository setup, branch management, PR operations, and cleanup.
     """
     
-    def __init__(self, access_token: str, repo_url: str):
+    def __init__(self, access_token: str, repo_url: str, test_name: str):
         """
         Initialize the GitHub manager.
         
@@ -27,9 +28,38 @@ class GitHubManager:
         self.repo_name = self._parse_repo_name(repo_url)
         self.github_client = Github(access_token)
         self.repo: Repository = self.github_client.get_repo(self.repo_name)
-        self.branch_name = "main"
+        self.branch_name = test_name
         self.starting_commit = self.repo.get_commits()[0].sha
         self.build_info = "./build-info.properties"
+        self.create_test_branch()
+
+    def create_test_branch(self) -> None:
+        """
+        Create a new branch for the test.
+        """
+        try:
+            self.repo.create_git_ref(ref=f"refs/heads/{self.branch_name}", sha=self.starting_commit)
+            print(f"✓ Created branch: {self.branch_name}")
+        except Exception as e:
+            if e.status == 422:
+                print(f"Branch '{self.branch_name}' already exists, skipping creation.")
+                return
+            raise Exception(f"✗ Error creating branch: {e}")
+
+    def add_merge_step_to_user_input(self, user_input: str) -> str:
+        """
+        Add merge step to the user input string.
+
+        :param str user_input: User input string to modify
+        :return: Modified user input string with merge step
+        :rtype: str
+        """
+        import re
+        numbers = [int(n) for n in re.findall(r'\d+', user_input)]
+        last_number = max(numbers) if numbers else 0
+        # add the test name to the user input
+        user_input += f"{last_number + 1}. Set the destination branch to '{self.branch_name}'."
+        return user_input
 
     @staticmethod
     def _parse_repo_name(repo_url: str) -> str:
@@ -108,7 +138,6 @@ class GitHubManager:
         print(f"Checking if branch '{branch_name}' exists...")
         
         # List all branches for debugging
-        branch_exists = False
         try:
             branches = self.repo.get_branches()
             print(f"Found {branches.totalCount} branches in the {self.repo_name} repository.")
@@ -133,7 +162,8 @@ class GitHubManager:
             test_step: Dict[str, str],
             commit_title: Optional[str] = None,
             merge_method: str = "squash",
-            build_info: Optional[Dict[str, str]] = None
+            build_info: Optional[Dict[str, str]] = None,
+            max_retries: Optional[int] = 10,
     ) -> Tuple[bool, Dict[str, str]]:
         """
         Find a PR by title and merge it, updating test steps.
@@ -143,6 +173,7 @@ class GitHubManager:
         :param str commit_title: Custom commit title for merge (optional)
         :param str merge_method: Merge method ('squash', 'merge', 'rebase')
         :param Dict[str, str] build_info: Build info dictionary to update (optional)
+        :param int max_retries: Maximum number of retries to find the PR, defaults to 10
         :return: True if PR was found and merged, False otherwise, and the updated test step
         :rtype: Tuple[bool, Dict[str, str]]
         """
@@ -160,7 +191,12 @@ class GitHubManager:
                 print(f"✓ Found PR: {pr_title}")
                 break
         
-        if not target_pr:
+        if not target_pr and max_retries > 0:
+            print(f"✗ PR '{pr_title}' not found, retrying... ({max_retries} retries left)")
+            # Retry finding the PR after a short delay
+            time.sleep(5)
+            self.find_and_merge_pr(pr_title, test_step, commit_title, merge_method, build_info, max_retries - 1)
+        elif not target_pr and max_retries <= 0:
             test_step["status"] = "failed"
             test_step["Result_Message"] = f"PR '{pr_title}' not found"
             print(f"✗ PR '{pr_title}' not found")

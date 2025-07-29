@@ -16,36 +16,33 @@ def github_resource(request):
     A function-scoped fixture that provides a GitHub manager for test operations.
     Each test gets its own GitHub manager instance.
     """
-    resource_id = "github_resource"
+    test_name = request.node.name
+    resource_id = f"github_resource_{test_name}"
     # Verify required environment variables
     required_envars = [
         "AIRFLOW_GITHUB_TOKEN",
         "AIRFLOW_REPO",
     ]
-    
+
     if missing_envars := [envar for envar in required_envars if not os.getenv(envar)]:
         raise ValueError(f"The following envars are not set: {missing_envars}")
-    
+
     start_time = time.time()
-    test_name = request.node.name
     print(f"Worker {os.getpid()}: Starting github_resource for {test_name}")
     
     # Create GitHub manager
     access_token = os.getenv("AIRFLOW_GITHUB_TOKEN")
     repo_url = os.getenv("AIRFLOW_REPO")
     
-    github_manager = GitHubManager(access_token, repo_url)
+    github_manager = GitHubManager(access_token, repo_url, test_name)
     
     try:
-        # Setup initial repository state with synchronization
-        with github_lock:
-            print(f"Worker {os.getpid()}: Acquired GitHub lock for {test_name}")
-            # Clear the main dags folder
-            try:
-                github_manager.clear_folder("dags", keep_file_names=[".gitkeep"])
-            except Exception as e:
-                print(f"Warning: Could not clear main dags folder: {e}")
-            print(f"Worker {os.getpid()}: Released GitHub lock for {test_name}")
+        # Clear the main dags folder
+        try:
+            github_manager.clear_folder("dags", keep_file_names=[".gitkeep"])
+        except Exception as e:
+            print(f"Warning: Could not clear main dags folder: {e}")
+        print(f"Worker {os.getpid()}: Released GitHub lock for {test_name}")
 
         creation_end = time.time()
         print(f"Worker {os.getpid()}: GitHub resource creation took {creation_end - start_time:.2f}s")
@@ -91,3 +88,4 @@ def cleanup_github_resource(
     """
     github_manager.reset_repo_state("dags")
     github_manager.cleanup_requirements()
+    github_manager.delete_branch(github_manager.branch_name)
