@@ -282,6 +282,11 @@ def test_simple_airflow_pipeline(request, airflow_resource):
             "Result_Message"
         ] = "DAG produced the expected results of Hello World printed to the logs"
 
+
+        input("Waiting here in test to inspect the airflow instance")
+
+
+
     finally:
         try:
             # this function is for you to remove the configs for the test. They follow a set structure.

@@ -303,6 +303,7 @@ def _create_deployment_in_astronomer(deployment_name: str) -> str:
                 "--name", deployment_name,
                 "--runtime-version", os.getenv("ASTRO_RUNTIME_VERSION", "13.1.0"),
                 "--development-mode", "enable",
+                "--scheduler-size", "small",  # ADD THIS LINE
                 "--cloud-provider", os.getenv("ASTRO_CLOUD_PROVIDER"),
                 "--region", os.getenv("ASTRO_REGION", "us-east-1"),
                 "--wait",
