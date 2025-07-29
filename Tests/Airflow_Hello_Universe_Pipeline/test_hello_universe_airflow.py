@@ -74,13 +74,18 @@ def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resou
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
-        run_model(
+        print("Running model to create DAG and PR...")
+        model_result = run_model(
             container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
         )
         end_time = time.time()
+        print(f"Model execution completed. Result: {model_result}")
         request.node.user_properties.append(("model_runtime", end_time - start_time))
 
         # Check if the branch exists and verify PR creation/merge
+        print("Waiting 10 seconds for model to create branch and PR...")
+        time.sleep(10)  # Give the model time to create the branch and PR
+        
         branch_exists, test_steps[0] = github_manager.verify_branch_exists("feature/hello_universe_dag", test_steps[0])
         if not branch_exists:
             raise Exception(test_steps[0]["Result_Message"])
