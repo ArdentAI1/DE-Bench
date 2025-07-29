@@ -87,9 +87,14 @@ class GitHubManager:
             self._iterate_directory_and_files(folder_name, keep_file_names)
 
         except github.GithubException as e:
-            if "sha" not in str(e):  # If error is not about folder already existing
+            if e.status == 404:
+                # Folder doesn't exist, create it with .gitkeep
+                print(f"Folder '{folder_name}' doesn't exist, creating it...")
+                self._iterate_directory_and_files(folder_name, keep_file_names)
+            elif "sha" not in str(e):  # If error is not about folder already existing
                 raise e
-            print(f"{folder_name} folder setup completed with warning: {e}")
+            else:
+                print(f"{folder_name} folder setup completed with warning: {e}")
     
     def verify_branch_exists(self, branch_name: str, test_step: Dict[str, str]) -> Tuple[bool, Dict[str, str]]:
         """
@@ -110,7 +115,7 @@ class GitHubManager:
             branch_exists = any(branch.name == branch_name for branch in branches)
             print(f"{branch_exists=}")
         except Exception as e:
-            print(f"Error listing branches: {e}")
+            raise Exception(f"Error listing branches: {e}")
         
         if branch_exists:
             test_step["status"] = "passed"
@@ -118,8 +123,8 @@ class GitHubManager:
             print(f"✓ Branch '{branch_name}' exists")
         else:
             test_step["status"] = "failed"
-            test_step["Result_Message"] = f"Branch '{branch_name}' was not created: {str(e)}"
-            print(f"✗ Branch '{branch_name}' was not created: {str(e)}")
+            test_step["Result_Message"] = f"Branch '{branch_name}' was not created."
+            print(f"✗ Branch '{branch_name}' was not created.")
         return branch_exists, test_step
     
     def find_and_merge_pr(
@@ -217,8 +222,9 @@ class GitHubManager:
                     )
                     print(f"✓ Build info created successfully for branch {branch_name}")
                 except Exception as e:
-                    print(f"✗ Error creating build info for branch {branch_name}: {e}")
-                    raise e from e
+                    raise Exception(f"✗ Error creating build info for branch {branch_name}: {e}")
+            else:
+                raise Exception(f"Error updating build info: {e}")
 
     def check_and_update_gh_secrets(self, secrets: Dict[str, str]) -> None:
         """

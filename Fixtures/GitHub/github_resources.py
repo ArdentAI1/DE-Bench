@@ -3,19 +3,11 @@ This module provides a pytest fixture for managing GitHub operations in Airflow 
 """
 
 import os
-import re
-import shutil
-import subprocess
-import tempfile
 import time
-from pathlib import Path
-from typing import Optional, Union
-from .github_manager import GitHubManager
-
-import github
-from github import Github
 
 import pytest
+
+from .github_manager import GitHubManager
 
 
 @pytest.fixture(scope="function")
@@ -45,12 +37,19 @@ def github_resource(request):
     github_manager = GitHubManager(access_token, repo_url)
     
     try:
-        # Setup initial repository state
-        github_manager.clear_folder("dags", keep_file_names=[".gitkeep"])
-        
+        # Setup initial repository state with synchronization
+        with github_lock:
+            print(f"Worker {os.getpid()}: Acquired GitHub lock for {test_name}")
+            # Clear the main dags folder
+            try:
+                github_manager.clear_folder("dags", keep_file_names=[".gitkeep"])
+            except Exception as e:
+                print(f"Warning: Could not clear main dags folder: {e}")
+            print(f"Worker {os.getpid()}: Released GitHub lock for {test_name}")
+
         creation_end = time.time()
         print(f"Worker {os.getpid()}: GitHub resource creation took {creation_end - start_time:.2f}s")
-        
+
         # Create resource data
         resource_data = {
             "resource_id": resource_id,
@@ -64,12 +63,12 @@ def github_resource(request):
             "github_manager": github_manager,
             "repo_info": github_manager.get_repo_info(),
         }
-        
+
         print(f"Worker {os.getpid()}: Created GitHub resource {resource_id}")
-        
+
         fixture_end_time = time.time()
         print(f"Worker {os.getpid()}: GitHub fixture setup took {fixture_end_time - start_time:.2f}s total")
-        
+
         yield resource_data
     except Exception as e:
         print(f"Worker {os.getpid()}: Error in GitHub fixture: {e}")
