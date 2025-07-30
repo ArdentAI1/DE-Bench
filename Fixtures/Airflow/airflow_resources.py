@@ -87,8 +87,10 @@ def airflow_resource(request):
         )
         base_url = api_url[: api_url.find("/api/v1")]
 
+        api_token = os.getenv("ASTRO_API_TOKEN")
+
         # create a token for the airflow resource
-        api_token = _run_and_validate_subprocess(
+        api_token = api_token or _run_and_validate_subprocess(
             [
                 "astro",
                 "deployment",
@@ -109,6 +111,9 @@ def airflow_resource(request):
             "creating Astro deployment API token",
             return_output=True,
         )
+        # check if the token has any prefix
+        if "astro api" in api_token.lower():
+            api_token = api_token[api_token.find('\n') + 1:-1].strip()
 
         # create a user in the airflow deployment (ardent needs username and password for the Airflowconfig)
         _create_user_in_airflow_deployment(unique_id)
@@ -307,6 +312,7 @@ def _create_deployment_in_astronomer(deployment_name: str) -> str:
                 "--development-mode", "enable",
                 "--cloud-provider", os.getenv("ASTRO_CLOUD_PROVIDER"),
                 "--region", os.getenv("ASTRO_REGION", "us-east-1"),
+                "--scheduler-size", "small",
                 "--wait",
             ],
             "creating Astronomer deployment",
