@@ -16,7 +16,7 @@ class GitHubManager:
     Handles repository setup, branch management, PR operations, and cleanup.
     """
     
-    def __init__(self, access_token: str, repo_url: str, test_name: str):
+    def __init__(self, access_token: str, repo_url: str, test_name: str, create_branch: bool = True, build_info: Optional[Dict[str, str]] = None):
         """
         Initialize the GitHub manager.
         
@@ -28,23 +28,38 @@ class GitHubManager:
         self.repo_name = self._parse_repo_name(repo_url)
         self.github_client = Github(access_token)
         self.repo: Repository = self.github_client.get_repo(self.repo_name)
-        self.branch_name = test_name
-        self.starting_commit = self.repo.get_commits()[0].sha
         self.build_info = "./build-info.properties"
-        self.create_test_branch()
+        self.create_branch = create_branch
+        self.branch_name = test_name
+        if create_branch:
+            self.branch_name = self.create_test_branch(
+                test_name=test_name,
+                build_info=build_info
+            )
 
-    def create_test_branch(self) -> None:
+    def create_test_branch(self, test_name: str, build_info: Optional[Dict[str, str]]) -> str:
         """
         Create a new branch for the test.
+
+        :param str test_name: Name of the test
+        :param Optional[Dict[str, str]] build_info: Build info dictionary to update
+        :return: Name of the new branch
+        :rtype: str
         """
         try:
-            self.repo.create_git_ref(ref=f"refs/heads/{self.branch_name}", sha=self.starting_commit)
+            commit_sha = self.repo.get_commits()[0].sha
+            self.repo.create_git_ref(ref=f"refs/heads/{test_name}", sha=commit_sha)
+            self.branch_name = test_name
             print(f"✓ Created branch: {self.branch_name}")
         except Exception as e:
-            if e.status == 422:
-                print(f"Branch '{self.branch_name}' already exists, skipping creation.")
-                return
+            if getattr(e, "status", None) == 422:
+                print(f"Branch '{test_name}' already exists, skipping creation.")
+                return getattr(self, "branch_name", test_name)
             raise Exception(f"✗ Error creating branch: {e}")
+        finally:
+            if build_info:
+                self._update_build_info(test_name)
+        return self.branch_name
 
     def add_merge_step_to_user_input(self, user_input: str) -> str:
         """
@@ -193,9 +208,16 @@ class GitHubManager:
         
         if not target_pr and max_retries > 0:
             print(f"✗ PR '{pr_title}' not found, retrying... ({max_retries} retries left)")
-            # Retry finding the PR after a short delay
             time.sleep(5)
-            self.find_and_merge_pr(pr_title, test_step, commit_title, merge_method, build_info, max_retries - 1)
+            # Return the result of the recursive retry so the caller gets the correct status
+            return self.find_and_merge_pr(
+                pr_title=pr_title,
+                test_step=test_step,
+                commit_title=commit_title,
+                merge_method=merge_method,
+                build_info=build_info,
+                max_retries=max_retries - 1,
+            )
         elif not target_pr and max_retries <= 0:
             test_step["status"] = "failed"
             test_step["Result_Message"] = f"PR '{pr_title}' not found"
