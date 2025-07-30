@@ -48,7 +48,7 @@ test_uuid = uuid.uuid4().hex[:8]
         }
     ]
 }], indirect=True)
-def test_add_record_to_postgresql_agent(request, postgres_resource):
+def test_postgresql_agent_add_record(request, postgres_resource):
     """Test that validates AI agent can add a record to PostgreSQL database via fixture."""
     
     # Set up test tracking

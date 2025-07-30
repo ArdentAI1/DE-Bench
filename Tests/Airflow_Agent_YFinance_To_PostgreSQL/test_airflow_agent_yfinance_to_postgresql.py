@@ -18,7 +18,7 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.airflow
 @pytest.mark.pipeline
 @pytest.mark.database
-def test_yfinance_airflow_pipeline(request, airflow_resource):
+def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
     

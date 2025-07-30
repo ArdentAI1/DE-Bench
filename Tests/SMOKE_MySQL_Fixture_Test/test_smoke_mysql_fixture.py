@@ -48,7 +48,7 @@ test_uuid = uuid.uuid4().hex[:8]
         }
     ]
 }], indirect=True)
-def test_mysql_fixture_validation(request, mysql_resource):
+def test_smoke_mysql_fixture_validation(request, mysql_resource):
     """Test that validates MySQL fixture creates and cleans up resources correctly."""
     
     # Set up test tracking

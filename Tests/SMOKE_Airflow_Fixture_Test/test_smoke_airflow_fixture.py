@@ -7,7 +7,7 @@ from requests.auth import HTTPBasicAuth
 
 
 @pytest.mark.airflow
-def test_airflow_fixture_basic(airflow_resource):
+def test_smoke_airflow_fixture_basic(airflow_resource):
     """
     Basic test to verify the airflow_resource fixture works.
     """
@@ -40,7 +40,7 @@ def test_airflow_fixture_basic(airflow_resource):
 
 
 @pytest.mark.airflow
-def test_airflow_fixture_unique_instances(airflow_resource):
+def test_smoke_airflow_fixture_unique_instances(airflow_resource):
     """
     Test that each test gets a unique Airflow instance.
     """

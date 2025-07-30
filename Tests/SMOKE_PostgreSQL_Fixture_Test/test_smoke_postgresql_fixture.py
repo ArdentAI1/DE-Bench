@@ -48,7 +48,7 @@ test_uuid = uuid.uuid4().hex[:8]
         }
     ]
 }], indirect=True)
-def test_postgresql_fixture_validation(request, postgres_resource):
+def test_smoke_postgresql_fixture_validation(request, postgres_resource):
     """Test that validates PostgreSQL fixture creates and cleans up resources correctly."""
     
     # Set up test tracking

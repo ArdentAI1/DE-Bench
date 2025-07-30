@@ -40,7 +40,7 @@ Test_Configs = importlib.import_module(module_path)
         }
     ]
 }], indirect=True)
-def test_add_mongodb_record(request, mongo_resource):
+def test_mongodb_agent_add_record(request, mongo_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))

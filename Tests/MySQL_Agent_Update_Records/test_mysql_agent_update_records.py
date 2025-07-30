@@ -49,7 +49,7 @@ test_uuid = uuid.uuid4().hex[:8]
         }
     ]
 }], indirect=True)
-def test_update_records_in_mysql_agent(request, mysql_resource):
+def test_mysql_agent_update_records(request, mysql_resource):
     """Test that validates AI agent can update records in MySQL database via fixture."""
     
     # Set up test tracking

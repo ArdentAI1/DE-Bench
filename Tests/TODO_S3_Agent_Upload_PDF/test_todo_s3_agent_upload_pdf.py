@@ -35,7 +35,7 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.AWS
 @pytest.mark.S3
 @pytest.mark.Data_Env_Search
-def test_Download_File(request):
+def test_todo_s3_agent_upload_pdf(request):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
     # we can add an option to do local runs with this container
