@@ -116,4 +116,4 @@ def test_mongodb_agent_add_record(request, mongo_resource, supabase_account_reso
                 )
 
         except Exception as e:
-            print(f"Error during cleanup: {e}")
+            pass  # Cleanup error handled silently

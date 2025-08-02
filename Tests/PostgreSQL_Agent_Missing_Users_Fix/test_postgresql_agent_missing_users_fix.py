@@ -94,7 +94,7 @@ def test_postgresql_agent_missing_users_fix(request, postgres_resource, supabase
     # SECTION 1: SETUP THE TEST
     config_results = None
     created_db_name = postgres_resource["created_resources"][0]["name"]
-    print(f"PostgreSQL Agent Missing Users Fix test using database: {created_db_name}")
+    # Database: {created_db_name}
     
     try:
         # Set up model configurations with actual database name and test-specific credentials
@@ -164,8 +164,7 @@ def test_postgresql_agent_missing_users_fix(request, postgres_resource, supabase
         db_cursor.close()
         db_connection.close()
         
-        print(f"\n=== ABOUT TO RUN MODEL ===")
-        print(f"Database: {created_db_name}")
+        # Running model on database: {created_db_name}
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
@@ -185,8 +184,7 @@ def test_postgresql_agent_missing_users_fix(request, postgres_resource, supabase
         test_steps[1]["status"] = "passed"
         test_steps[1]["Result_Message"] = "AI Agent completed missing users analysis and fix"
         
-        print(f"\n=== MODEL RUN COMPLETED ===")
-        print(f"Runtime: {end_time - start_time:.2f} seconds")
+        # Model run completed in {end_time - start_time:.2f} seconds
 
         # SECTION 3: VERIFY THE OUTCOMES
 

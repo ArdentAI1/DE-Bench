@@ -44,7 +44,6 @@ def set_up_model_configs(Configs, custom_info=None):
                     databases=service_config["databases"],
                 )
 
-                print(service_result)
 
             elif service == "postgreSQL":
                 service_result = Ardent_Client.set_config(

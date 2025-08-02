@@ -80,7 +80,6 @@ def test_postgresql_agent_add_record(request, postgres_resource, supabase_accoun
     # SECTION 1: SETUP THE TEST
     config_results = None
     created_db_name = postgres_resource["created_resources"][0]["name"]
-    print(f"Add Record to PostgreSQL Agent test using database: {created_db_name}")
     
     try:
         # Set up model configurations with actual database name and test-specific credentials
@@ -161,10 +160,7 @@ def test_postgresql_agent_add_record(request, postgres_resource, supabase_accoun
             total_count = db_cursor.fetchone()[0]
             
             if total_count == 4:
-                print("Add Record to PostgreSQL Agent test completed successfully!")
-                print(f"Database: {created_db_name}")
-                print(f"Total users: {total_count}")
-                print("Agent successfully added Alice Green without modifying existing records")
+                    # Test completed successfully - Alice Green added without modifying existing records
                 assert True, "Add Record to PostgreSQL Agent test passed - record inserted correctly"
             else:
                 raise AssertionError(f"Unexpected record count. Expected 4, got {total_count}")

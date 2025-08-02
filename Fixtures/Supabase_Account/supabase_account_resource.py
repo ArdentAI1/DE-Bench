@@ -10,8 +10,6 @@ from Configs.SupabaseConfig import supabase_client
 
 @pytest.fixture(scope="function")
 def supabase_account_resource(request):
-    print("SET UP SUPABASE ACCOUNT SO ARDENT HAS A UNIQUE ACCOUNT")
-
     isArdent = request.param.get("useArdent", False)
 
     # Create unique email for this test to avoid conflicts
@@ -90,7 +88,6 @@ def supabase_account_resource(request):
             
 
 
-    print(response)
     yield response
 
     

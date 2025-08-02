@@ -89,7 +89,7 @@ def test_postgresql_agent_denormalized_normalized_many_to_many(request, postgres
     # SECTION 1: SETUP THE TEST
     config_results = None
     created_db_name = postgres_resource["created_resources"][0]["name"]
-    print(f"PostgreSQL Agent Denormalized → Normalized Many-to-Many test using database: {created_db_name}")
+    # Database: {created_db_name}
     
     try:
         # Set up model configurations with actual database name and test-specific credentials
@@ -129,8 +129,7 @@ def test_postgresql_agent_denormalized_normalized_many_to_many(request, postgres
         db_cursor.close()
         db_connection.close()
 
-        print(f"\n=== ABOUT TO RUN MODEL ===")
-        print(f"Database: {created_db_name}")
+        # Running model on database: {created_db_name}
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
@@ -147,8 +146,7 @@ def test_postgresql_agent_denormalized_normalized_many_to_many(request, postgres
         end_time = time.time()
         request.node.user_properties.append(("model_runtime", end_time - start_time))
         
-        print(f"\n=== MODEL RUN COMPLETED ===")
-        print(f"Runtime: {end_time - start_time:.2f} seconds")
+        # Model run completed in {end_time - start_time:.2f} seconds
 
         test_steps[1]["status"] = "passed"
         test_steps[1]["Result_Message"] = "AI Agent completed denormalized → normalized transformation"
@@ -204,7 +202,7 @@ def test_postgresql_agent_denormalized_normalized_many_to_many(request, postgres
                         authors_found = True
                         
                 except Exception as e:
-                    print(f"Could not query table {table}: {e}")
+                    pass  # Table query failed, likely expected
                     continue
             
             if books_found and authors_found:
@@ -250,10 +248,7 @@ def test_postgresql_agent_denormalized_normalized_many_to_many(request, postgres
                 raise AssertionError("Core denormalization issue not resolved - many-to-many relationships still bundled")
             
             # Final success
-            print("PostgreSQL Agent Denormalized → Normalized Many-to-Many test completed successfully!")
-            print(f"Database: {created_db_name}")
-            print(f"Normalized tables created: {new_tables}")
-            print("✅ Denormalized co-authorship issue resolved through proper normalization!")
+                    # Test completed successfully - denormalized co-authorship issue resolved
             assert True, "Denormalized → Normalized many-to-many transformation successful - co-authors properly separated"
         
         finally:

@@ -81,7 +81,7 @@ def test_mysql_agent_update_records(request, mysql_resource, supabase_account_re
     # SECTION 1: SETUP THE TEST
     config_results = None
     created_db_name = mysql_resource["created_resources"][0]["name"]
-    print(f"Update Records in MySQL Agent test using database: {created_db_name}")
+    # Database: {created_db_name}
     
     try:
         # Set up model configurations with actual database name and test-specific credentials
@@ -167,10 +167,7 @@ def test_mysql_agent_update_records(request, mysql_resource, supabase_account_re
             ]
             
             if all_users == expected_final:
-                print("Update Records in MySQL Agent test completed successfully!")
-                print(f"Database: {created_db_name}")
-                print(f"Final user ages: {all_users}")
-                print("Agent successfully updated users over 30 to age 35")
+                    # Test completed successfully - users over 30 updated to age 35
                 assert True, "Update Records in MySQL Agent test passed - ages updated correctly"
             else:
                 raise AssertionError(f"Final state incorrect. Expected: {expected_final}, Got: {all_users}")
