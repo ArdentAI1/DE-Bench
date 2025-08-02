@@ -1,11 +1,19 @@
-from Configs.ArdentConfig import Ardent_Client
 import os
+from ardent import ArdentClient, ArdentError
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
 def set_up_model_configs(Configs, custom_info=None):
+
+    Ardent_Client = ArdentClient(
+        public_key=custom_info["publicKey"],
+        secret_key=custom_info["secretKey"],
+        base_url=os.getenv("ARDENT_BASE_URL"),
+    )
+
 
     results = {}
 
@@ -35,6 +43,7 @@ def set_up_model_configs(Configs, custom_info=None):
                     connection_string=service_config["connection_string"],
                     databases=service_config["databases"],
                 )
+
 
             elif service == "postgreSQL":
                 service_result = Ardent_Client.set_config(
@@ -90,7 +99,17 @@ def set_up_model_configs(Configs, custom_info=None):
 
 def remove_model_configs(Configs, custom_info=None):
     # This is a place where we can remove the model configs
+        
+
+
+
     if custom_info and "services" in Configs:
+        Ardent_Client = ArdentClient(
+            public_key=custom_info["publicKey"],
+            secret_key=custom_info["secretKey"],
+            base_url=os.getenv("ARDENT_BASE_URL"),
+        )
+        
         for service in Configs["services"]:
             if service in custom_info:
                 id = custom_info[service]["specific_config"]["id"]
