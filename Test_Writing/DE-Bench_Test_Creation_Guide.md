@@ -26,9 +26,20 @@ Tests/
 2. **`Dockerfile`** - Custom Docker configuration if needed
 3. **`docker-compose.yml`** - Multi-service Docker setup
 
+## 🏗️ Test Architecture
+
+DE-Bench uses a **standardized isolated test structure** to prevent resource conflicts:
+
+### 🔐 **Standard Test Pattern** (Per-Test User Isolation)
+- **Isolation**: Each test gets a unique Supabase user + API keys to prevent config clashing
+- **Resource Separation**: Backend configs are stored per-user, so parallel tests don't interfere
+- **Backend Integration**: Full integration with Ardent backend for realistic scenarios
+- **Automatic Cleanup**: Users, API keys, and backend configurations cleaned automatically
+- **Parallel Safe**: Multiple tests can run simultaneously without resource conflicts
+
 ## 🏗️ Standard Test Structure
 
-All tests follow a **3-section pattern**:
+All DE-Bench tests follow this **per-user isolation pattern** to prevent config conflicts:
 
 ```python
 # Import from the Model directory
@@ -48,15 +59,16 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.your_technology    # e.g., @pytest.mark.mongodb
 @pytest.mark.your_category     # e.g., @pytest.mark.database
 @pytest.mark.difficulty        # e.g., @pytest.mark.three
-def test_your_function_name(request, resource_fixture):
-    """Your test description."""
+@pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
+def test_your_function_name(request, resource_fixture, supabase_account_resource):
+    """Your test description with backend authentication."""
     
     # Set up test tracking
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
     
     test_steps = [
         {
-            "name": "Step 1 Name",
+            "name": "Step 1 Name", 
             "description": "What this step validates",
             "status": "did not reach",
             "Result_Message": "",
@@ -68,15 +80,26 @@ def test_your_function_name(request, resource_fixture):
     # SECTION 1: SETUP THE TEST
     config_results = None
     try:
-        # Set up model configurations
-        config_results = set_up_model_configs(Configs=Test_Configs.Configs)
+        # Set up model configurations with test-specific API keys
+        config_results = set_up_model_configs(
+            Configs=Test_Configs.Configs,
+            custom_info={
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
+        )
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
         model_result = run_model(
             container=None, 
             task=Test_Configs.User_Input, 
-            configs=Test_Configs.Configs
+            configs=Test_Configs.Configs,
+            extra_information={
+                "useArdent": True,
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
         )
         end_time = time.time()
         request.node.user_properties.append(("model_runtime", end_time - start_time))
@@ -96,11 +119,15 @@ def test_your_function_name(request, resource_fixture):
             raise AssertionError("Test failed because...")
 
     finally:
-        # CLEANUP
+        # CLEANUP - Include API keys for proper cleanup
         if config_results:
             remove_model_configs(
                 Configs=Test_Configs.Configs, 
-                custom_info=config_results
+                custom_info={
+                    **config_results,  # Spread all config results
+                    "publicKey": supabase_account_resource["publicKey"],
+                    "secretKey": supabase_account_resource["secretKey"],
+                }
             )
 ```
 
@@ -219,7 +246,7 @@ Use appropriate pytest markers to categorize your tests:
 
 ### Understanding Fixture Scopes
 
-DE-Bench uses **two types of fixtures** based on resource lifecycle needs:
+DE-Bench uses **three types of fixtures** based on resource lifecycle needs:
 
 #### **📍 Per-Test Fixtures (`scope="function"`)** 
 - **Creates fresh resources for EACH test**
@@ -230,6 +257,11 @@ DE-Bench uses **two types of fixtures** based on resource lifecycle needs:
 - **Creates ONE resource shared across ALL tests with same ID**
 - **Cleanup only at session end**
 - **Use when**: Resources are expensive, tests only read data, or sharing is safe
+
+#### **🔐 Authentication Fixtures (`scope="function"`)** 
+- **Creates unique user + API keys for EACH test**
+- **Complete isolation between parallel tests**
+- **Use when**: Tests require backend authentication via Ardent
 
 ### Available Fixtures
 
@@ -264,6 +296,27 @@ def test_airflow_function(request, airflow_resource):
     api_token = airflow_resource["api_token"]
 ```
 
+#### **Authentication Fixtures (Function-Scoped)**
+
+**Supabase Account Resource (NEW):**
+```python
+@pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
+def test_with_backend_auth(request, mongo_resource, supabase_account_resource):
+    # Each test gets unique Supabase user + API keys
+    public_key = supabase_account_resource["publicKey"]    # e.g., "ardent_pk_..."
+    secret_key = supabase_account_resource["secretKey"]    # e.g., "ardent_sk_..."  
+    user_id = supabase_account_resource["userID"]          # Unique user ID
+    
+    # Use in your test for backend authentication
+    # Automatic cleanup handles user + API key deletion
+```
+
+**Key Benefits:**
+- ✅ **Complete isolation**: Each test gets its own user account
+- ✅ **Parallel-safe**: No conflicts between concurrent tests  
+- ✅ **Automatic cleanup**: Users and API keys automatically deleted
+- ✅ **Secure**: Fresh credentials per test, no shared secrets
+
 #### **Shared Fixtures (Session-Scoped)**
 
 **Shared Resource (Multiple tests share same instance):**
@@ -293,6 +346,18 @@ def test_isolated_operation(request, shared_resource):
 | Expensive resource setup | **Shared** (`shared_resource`) | Amortize cost across tests |
 | Test isolation critical | **Per-Test** (`mongo_resource`) | Prevent test interference |
 | Multiple similar tests | **Shared** (`shared_resource`) | Resource efficiency |
+| **Backend authentication needed** | **Auth** (`supabase_account_resource`) | **Secure, isolated API access** |
+| **Parallel test execution** | **Auth** (`supabase_account_resource`) | **Prevent credential conflicts** |
+
+
+
+**Step 2: Will the test modify/delete data?**
+- ✅ **YES** → Use **Per-Test Fixtures** (`mongo_resource`, `airflow_resource`)
+- ❌ **NO** → Continue to Step 3
+
+**Step 3: Is resource setup expensive (>10 seconds)?**
+- ✅ **YES** → Use **Shared Fixtures** (`shared_resource` with descriptive ID)
+- ❌ **NO** → Use **Per-Test Fixtures** for simplicity
 
 ## ✅ Validation Patterns
 
@@ -360,14 +425,18 @@ User_Input = f"Create a resource named '{unique_name}' with..."
 
 ## 🌍 Environment Variables
 
-Define all required environment variables in your test's README:
+All DE-Bench tests require these environment variables in your test's README:
 
 ```markdown
 ## Environment Requirements
 
-Set the following environment variables:
-- `SERVICE_HOST`: Your service hostname
-- `SERVICE_TOKEN`: Your service access token  
+Set the following environment variables for test isolation:
+- `SUPABASE_URL`: Your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key (for user management)
+- `SUPABASE_JWT_SECRET`: JWT secret for token generation
+- `ARDENT_BASE_URL`: Your Ardent backend base URL
+
+
 - `SERVICE_DB` (optional): Database name (defaults to 'test')
 ```
 
@@ -507,19 +576,22 @@ When using this guide to auto-generate tests, follow these key principles:
 
 ### Fixture Selection Decision Tree:
 
-**Step 1: Will the test modify/delete data?**
-- ✅ **YES** → Use **Per-Test Fixtures** (`mongo_resource`, `airflow_resource`)
-- ❌ **NO** → Continue to Step 2
+**Step 1: User Isolation (Required for all tests)**
+- ✅ **Always use** `supabase_account_resource` with `{"useArdent": True}` to prevent config clashing
 
-**Step 2: Is resource setup expensive (>10 seconds)?**
+**Step 2: Will the test modify/delete data?**
+- ✅ **YES** → Use **Per-Test Fixtures** (`mongo_resource`, `airflow_resource`)
+- ❌ **NO** → Continue to Step 3
+
+**Step 3: Is resource setup expensive (>10 seconds)?**
 - ✅ **YES** → Use **Shared Fixtures** (`shared_resource` with descriptive ID)
 - ❌ **NO** → Use **Per-Test Fixtures** for simplicity
 
-**Step 3: Will multiple similar tests benefit from sharing?**
+**Step 4: Will multiple similar tests benefit from sharing?**
 - ✅ **YES** → Use **Shared Fixtures** (`shared_resource` with same ID)
 - ❌ **NO** → Use **Per-Test Fixtures**
 
-### Fixture Usage Patterns:
+### Additional Fixture Usage Patterns:
 
 **For Per-Test (Isolated) Resources:**
 ```python
@@ -538,11 +610,36 @@ def test_function(request, shared_resource):
     # Multiple tests with same ID share the resource
 ```
 
-### Variable Naming Conventions:
-- Test directory: `Tests/Descriptive_Test_Name/`
-- Test function: `test_descriptive_function_name()`
+### Naming Conventions:
+
+**Directory Structure:**
+- Pattern: `Technology_Agent/Chat_Source_Destination_Task` or `Technology_Agent_Task`
+- Examples: 
+  - `PostgreSQL_Agent_Add_Record/` (simple task)
+  - `MongoDB_Agent_Add_Record/` (simple task)
+  - `Airflow_Agent_Simple_Pipeline/` (simple task)
+  - `Airflow_Agent_Amazon_SP_API_To_PostgreSQL/` (source → destination)
+  - `Airflow_Agent_PostgreSQL_To_MySQL/` (source → destination)
+  - `PostgreSQL_Agent_Denormalized_Normalized_ManyToMany/` (schema transformation)
+  - `Databricks_Hello_World/` (simple task)
+
+**File Naming:**
+- Main test file: `test_` + lowercase directory name with underscores
+- Config file: `Test_Configs.py` (exact capitalization)
+- Examples:
+  - Directory: `PostgreSQL_Agent_Add_Record/` → File: `test_postgresql_agent_add_record.py`
+  - Directory: `PostgreSQL_Agent_Denormalized_Normalized_ManyToMany/` → File: `test_postgresql_agent_denormalized_normalized_many_to_many.py`
+
+**Function Naming:**
+- Test function: `test_` + lowercase description with underscores
+- Examples:
+  - `test_postgresql_agent_add_record()`
+  - `test_postgresql_agent_denormalized_normalized_many_to_many()`
+
+**Resource and Variable Naming:**
 - Resource fixture parameter: Choose based on lifecycle needs:
   - `mongo_resource` (per-test isolation)
+  - `postgres_resource` (per-test isolation)
   - `airflow_resource` (per-test isolation)  
   - `shared_resource` (cross-test sharing)
 - Shared resource IDs: Use descriptive names like `"read_only_mongo_setup"`, `"shared_test_database"`
@@ -562,7 +659,10 @@ def test_function(request, shared_resource):
 
 ### Resource Lifecycle Awareness:
 - **Per-Test fixtures**: Can safely modify data, each test starts clean
-- **Shared fixtures**: Should only read data or perform non-destructive operations
-- **Resource cleanup**: Per-test fixtures clean automatically; shared fixtures clean at session end
+- **Shared fixtures**: Should only read data or perform non-destructive operations  
+- **Isolation fixtures**: Each test gets unique user + API keys to prevent config conflicts, automatic cleanup
+- **Resource cleanup**: Per-test fixtures clean automatically; shared fixtures clean at session end; isolation fixtures clean users and backend configs
+
+
 
 This guide provides the foundation for creating consistent, reliable tests in the DE-Bench framework. Follow these patterns to ensure your tests integrate seamlessly with the existing test suite and provide meaningful validation of agent capabilities. 
