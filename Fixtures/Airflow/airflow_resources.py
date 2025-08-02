@@ -45,7 +45,11 @@ def airflow_resource(request):
 
     start_time = time.time()
     test_name = request.node.name
-    unique_id = f"{test_name}_{int(time.time())}"
+    print(f"Original test name: {test_name}")
+    # Sanitize test name for Astro CLI (remove square brackets and other special characters)
+    sanitized_test_name = re.sub(r'[^\w\-]', '_', test_name)
+    unique_id = f"{sanitized_test_name}_{int(time.time())}"
+    print(f"Sanitized unique_id: {unique_id}")
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
 
     # Create Airflow resource
@@ -87,8 +91,10 @@ def airflow_resource(request):
         )
         base_url = api_url[: api_url.find("/api/v1")]
 
+        api_token = os.getenv("ASTRO_API_TOKEN")
+
         # create a token for the airflow resource
-        api_token = _run_and_validate_subprocess(
+        api_token = api_token or _run_and_validate_subprocess(
             [
                 "astro",
                 "deployment",
@@ -109,6 +115,9 @@ def airflow_resource(request):
             "creating Astro deployment API token",
             return_output=True,
         )
+        # check if the token has any prefix
+        if "astro api" in api_token.lower():
+            api_token = api_token[api_token.find('\n') + 1:-1].strip()
 
         # create a user in the airflow deployment (ardent needs username and password for the Airflowconfig)
         _create_user_in_airflow_deployment(unique_id)
@@ -130,13 +139,15 @@ def airflow_resource(request):
             "status": "active",
             "project_name": test_dir.stem,
             "base_url": base_url,
+            "deployment_id": astro_deployment_id,
+            "deployment_name": unique_id,
             "api_url": api_url,
             "api_token": api_token,
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
             "username": os.getenv("AIRFLOW_USERNAME", "airflow"),
             "password": os.getenv("AIRFLOW_PASSWORD", "airflow"),
-            "airflow_instance": Airflow_Local(  # TODO: remove this eventually
-                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url  #
+            "airflow_instance": Airflow_Local(
+                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url
             ),
             "created_resources": created_resources,
         }
@@ -153,8 +164,8 @@ def airflow_resource(request):
         raise e from e
     finally:
         # clean up the airflow resource after the test completes
-        # cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
         print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
+        cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
 
 
 def _parse_astro_version() -> None:
@@ -303,9 +314,9 @@ def _create_deployment_in_astronomer(deployment_name: str) -> str:
                 "--name", deployment_name,
                 "--runtime-version", os.getenv("ASTRO_RUNTIME_VERSION", "13.1.0"),
                 "--development-mode", "enable",
-                "--scheduler-size", "small",  # ADD THIS LINE
                 "--cloud-provider", os.getenv("ASTRO_CLOUD_PROVIDER"),
                 "--region", os.getenv("ASTRO_REGION", "us-east-1"),
+                "--scheduler-size", "small",
                 "--wait",
             ],
             "creating Astronomer deployment",

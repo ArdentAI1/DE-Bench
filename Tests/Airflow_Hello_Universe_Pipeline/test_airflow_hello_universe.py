@@ -17,13 +17,13 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.airflow
 @pytest.mark.pipeline
 @pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
-def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource, supabase_account_resource):
+def test_airflow_hello_universe_pipeline(request, airflow_resource, github_resource, supabase_account_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     github_manager = github_resource["github_manager"]
     Test_Configs.User_Input = github_manager.add_merge_step_to_user_input(Test_Configs.User_Input)
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-    dag_name = "hello_world_dag"
-    pr_title = "Add Hello World DAG"
+    dag_name = "hello_universe_dag"
+    pr_title = "Add Hello Universe DAG"
     github_manager.check_and_update_gh_secrets(
         secrets={
             "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
@@ -31,7 +31,7 @@ def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource
     )
     
     # Use the airflow_resource fixture - the Docker instance is already running
-    print(f"=== Starting Simple Airflow Pipeline Test ===")
+    print(f"=== Starting Hello Universe Airflow Pipeline Test ===")
     print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
     print(f"Using GitHub instance from fixture: {github_resource['resource_id']}")
     print(f"Airflow base URL: {airflow_resource['base_url']}")
@@ -101,7 +101,7 @@ def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource
         print("Waiting 10 seconds for model to create branch and PR...")
         time.sleep(10)  # Give the model time to create the branch and PR
         
-        branch_exists, test_steps[0] = github_manager.verify_branch_exists("feature/hello_world_dag", test_steps[0])
+        branch_exists, test_steps[0] = github_manager.verify_branch_exists("feature/hello_universe_dag", test_steps[0])
         if not branch_exists:
             raise Exception(test_steps[0]["Result_Message"])
 
@@ -139,7 +139,6 @@ def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource
         print(f"Using API Token: {airflow_api_token}")
 
         # Wait for DAG to appear and trigger it
-        # Wait for DAG to appear and trigger it
         if not airflow_instance.verify_airflow_dag_exists(dag_name):
             raise Exception(f"DAG '{dag_name}' did not appear in Airflow")
 
@@ -159,13 +158,13 @@ def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource
         logs = airflow_instance.get_task_instance_logs(dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello")
         print(f"Task logs retrieved. Log content length: {len(logs)} characters")
         print(f"Log content preview: {logs[:200]}...")
-
-        assert "Hello World" in logs, "Expected 'Hello World' in task logs"
-        print("✓ 'Hello World' found in task logs!")
+        
+        assert "Hello Universe" in logs, "Expected 'Hello Universe' in task logs"
+        print("✓ 'Hello Universe' found in task logs!")
         test_steps[2]["status"] = "passed"
         test_steps[2][
             "Result_Message"
-        ] = "DAG produced the expected results of Hello World printed to the logs"
+        ] = "DAG produced the expected results of Hello Universe printed to the logs"
 
     finally:
         try:
@@ -179,7 +178,7 @@ def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource
                 }
             )
             # Delete the branch from github using the github manager
-            github_manager.delete_branch("feature/hello_world_dag")
+            github_manager.delete_branch("feature/hello_universe_dag")
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
