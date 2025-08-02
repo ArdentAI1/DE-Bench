@@ -16,8 +16,9 @@ Test_Configs = importlib.import_module(module_path)
 
 @pytest.mark.airflow
 @pytest.mark.pipeline
+@pytest.mark.two  # Difficulty 2 - involves DAG creation, PR management, and validation
 @pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
-def test_airflow_hello_world_pipeline(request, airflow_resource, github_resource, supabase_account_resource):
+def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resource, supabase_account_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     github_manager = github_resource["github_manager"]
     Test_Configs.User_Input = github_manager.add_merge_step_to_user_input(Test_Configs.User_Input)
