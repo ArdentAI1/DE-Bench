@@ -47,7 +47,7 @@ class Airflow_Local:
             time.sleep(60)
         print("Airflow webserver is not ready")
         return False
-    
+
     def verify_airflow_dag_exists(self, dag_id: str) -> bool:
         """
         Verify if a DAG exists using the dag_id in Airflow via API call.
@@ -75,7 +75,7 @@ class Airflow_Local:
             print(f"DAG found!")
             return True
         return False
-    
+
     def unpause_and_trigger_airflow_dag(self, dag_id: str) -> Optional[str]:
         """
         Unpause a DAG using the dag_id in Airflow via API call.
@@ -119,7 +119,7 @@ class Airflow_Local:
                 time.sleep(10)
                 continue
         return None
-    
+
     def verify_dag_id_ran(self, dag_id: str, dag_run_id: str) -> bool:
         """
         Verify if a DAG has been executed.
@@ -149,7 +149,7 @@ class Airflow_Local:
                     time.sleep(60)
                     continue
         return self.check_dag_task_instances(dag_id, dag_run_id)
-    
+
     def get_task_instance_logs(self, dag_id: str, dag_run_id: str, task_id: str) -> str:
         """
         Get the logs for a task instance.
@@ -181,10 +181,10 @@ class Airflow_Local:
         )
         if task_logs_response.status_code != 200:
             raise Exception(f"Failed to retrieve task logs: {task_logs_response.text}")
-        
+
         print(f"Task logs received for task '{task_id}' with try number: {try_number}")
         return task_logs_response.text
-    
+
     def check_dag_task_instances(self, dag_id: str, dag_run_id: str) -> bool:
         """
         Check if all tasks in a DAG have been executed.

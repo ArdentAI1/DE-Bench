@@ -40,7 +40,7 @@ Test_Configs = importlib.import_module(module_path)
         }
     ]
 }], indirect=True)
-def test_add_mongodb_record(request, mongo_resource):
+def test_mongodb_agent_add_record(request, mongo_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
 
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
@@ -63,7 +63,7 @@ def test_add_mongodb_record(request, mongo_resource):
         # container = load_docker(input_directory=input_dir)
 
         # MongoDB setup is now handled by the fixture
-        
+
         # Set up model configs using the configuration from Test_Configs
         config_results = set_up_model_configs(Configs=Test_Configs.Configs)
 

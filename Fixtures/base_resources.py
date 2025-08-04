@@ -7,6 +7,8 @@ Import all fixtures here to make them available to tests.
 from Fixtures.Airflow.airflow_resources import *
 from Fixtures.GitHub.github_resources import *
 from Fixtures.MongoDB.mongo_resources import *
+from Fixtures.MySQL.mysql_resources import *
+from Fixtures.PostgreSQL.postgres_resources import *
 from Fixtures.Test.shared_resources import *
 
 # Future imports for other categories:
