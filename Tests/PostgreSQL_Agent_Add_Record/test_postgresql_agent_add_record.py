@@ -23,6 +23,7 @@ test_uuid = uuid.uuid4().hex[:8]
 @pytest.mark.database
 @pytest.mark.code_writing
 @pytest.mark.two
+@pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
 @pytest.mark.parametrize("postgres_resource", [{
     "resource_id": f"add_record_postgresql_{test_timestamp}_{test_uuid}",
     "databases": [
@@ -48,7 +49,7 @@ test_uuid = uuid.uuid4().hex[:8]
         }
     ]
 }], indirect=True)
-def test_postgresql_agent_add_record(request, postgres_resource):
+def test_postgresql_agent_add_record(request, postgres_resource, supabase_account_resource):
     """Test that validates AI agent can add a record to PostgreSQL database via fixture."""
     
     # Set up test tracking
@@ -79,20 +80,30 @@ def test_postgresql_agent_add_record(request, postgres_resource):
     # SECTION 1: SETUP THE TEST
     config_results = None
     created_db_name = postgres_resource["created_resources"][0]["name"]
-    print(f"Add Record to PostgreSQL Agent test using database: {created_db_name}")
     
     try:
-        # Set up model configurations with actual database name
+        # Set up model configurations with actual database name and test-specific credentials
         test_configs = Test_Configs.Configs.copy()
         test_configs["services"]["postgreSQL"]["databases"] = [{"name": created_db_name}]
-        config_results = set_up_model_configs(Configs=test_configs)
+        config_results = set_up_model_configs(
+            Configs=test_configs,
+            custom_info={
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
+        )
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
         model_result = run_model(
             container=None, 
             task=Test_Configs.User_Input, 
-            configs=test_configs
+            configs=test_configs,
+            extra_information={
+                "useArdent": True,
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
         )
         end_time = time.time()
         request.node.user_properties.append(("model_runtime", end_time - start_time))
@@ -149,10 +160,7 @@ def test_postgresql_agent_add_record(request, postgres_resource):
             total_count = db_cursor.fetchone()[0]
             
             if total_count == 4:
-                print("Add Record to PostgreSQL Agent test completed successfully!")
-                print(f"Database: {created_db_name}")
-                print(f"Total users: {total_count}")
-                print("Agent successfully added Alice Green without modifying existing records")
+                    # Test completed successfully - Alice Green added without modifying existing records
                 assert True, "Add Record to PostgreSQL Agent test passed - record inserted correctly"
             else:
                 raise AssertionError(f"Unexpected record count. Expected 4, got {total_count}")
@@ -174,5 +182,9 @@ def test_postgresql_agent_add_record(request, postgres_resource):
         if config_results:
             remove_model_configs(
                 Configs=test_configs, 
-                custom_info=config_results
+                custom_info={
+                    **config_results,
+                    "publicKey": supabase_account_resource["publicKey"],
+                    "secretKey": supabase_account_resource["secretKey"],
+                }
             ) 

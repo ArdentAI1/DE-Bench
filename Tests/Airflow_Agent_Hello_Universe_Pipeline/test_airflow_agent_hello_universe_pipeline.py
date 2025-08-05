@@ -1,6 +1,7 @@
 import importlib
 import os
 import pytest
+import re
 import time
 
 from model.Configure_Model import remove_model_configs
@@ -17,21 +18,21 @@ Test_Configs = importlib.import_module(module_path)
 @pytest.mark.pipeline
 @pytest.mark.two  # Difficulty 2 - involves DAG creation, PR management, and validation
 @pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
-def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resource, supabase_account_resource):
+def test_airflow_agent_hello_universe_pipeline(request, airflow_resource, github_resource, supabase_account_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     github_manager = github_resource["github_manager"]
     Test_Configs.User_Input = github_manager.add_merge_step_to_user_input(Test_Configs.User_Input)
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-    dag_name = "hello_world_dag"
-    pr_title = "Add Hello World DAG"
+    dag_name = "hello_universe_dag"
+    pr_title = "Add Hello Universe DAG"
     github_manager.check_and_update_gh_secrets(
         secrets={
             "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
         }
     )
-
+    
     # Use the airflow_resource fixture - the Docker instance is already running
-    print(f"=== Starting Simple Airflow Pipeline Test ===")
+    print(f"=== Starting Hello Universe Airflow Pipeline Test ===")
     print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
     print(f"Using GitHub instance from fixture: {github_resource['resource_id']}")
     print(f"Airflow base URL: {airflow_resource['base_url']}")
@@ -84,8 +85,8 @@ def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resourc
         start_time = time.time()
         print("Running model to create DAG and PR...")
         model_result = run_model(
-            container=None,
-            task=Test_Configs.User_Input,
+            container=None, 
+            task=Test_Configs.User_Input, 
             configs=Test_Configs.Configs,
             extra_information={
                 "useArdent": True,
@@ -100,15 +101,15 @@ def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resourc
         # Check if the branch exists and verify PR creation/merge
         print("Waiting 10 seconds for model to create branch and PR...")
         time.sleep(10)  # Give the model time to create the branch and PR
-
-        branch_exists, test_steps[0] = github_manager.verify_branch_exists("feature/hello_world_dag", test_steps[0])
+        
+        branch_exists, test_steps[0] = github_manager.verify_branch_exists("feature/hello_universe_dag", test_steps[0])
         if not branch_exists:
             raise Exception(test_steps[0]["Result_Message"])
 
         pr_exists, test_steps[1] = github_manager.find_and_merge_pr(
-            pr_title=pr_title,
-            test_step=test_steps[1],
-            commit_title=pr_title,
+            pr_title=pr_title, 
+            test_step=test_steps[1], 
+            commit_title=pr_title, 
             merge_method="squash",
             build_info={
                 "deploymentId": airflow_resource["deployment_id"],
@@ -123,10 +124,10 @@ def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resourc
         airflow_instance = airflow_resource["airflow_instance"]
         if not airflow_instance.wait_for_airflow_to_be_ready(6):
             raise Exception("Airflow instance did not redeploy successfully.")
-
+        
         if not github_manager.check_if_action_is_complete(pr_title=pr_title):
             raise Exception("Action is not complete")
-
+        
         # verify the airflow instance is ready after the github action redeployed
         if not airflow_instance.wait_for_airflow_to_be_ready(3):
             raise Exception("Airflow instance did not redeploy successfully.")
@@ -158,19 +159,19 @@ def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resourc
         logs = airflow_instance.get_task_instance_logs(dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello")
         print(f"Task logs retrieved. Log content length: {len(logs)} characters")
         print(f"Log content preview: {logs[:200]}...")
-
-        assert "Hello World" in logs, "Expected 'Hello World' in task logs"
-        print("✓ 'Hello World' found in task logs!")
+        
+        assert "Hello Universe" in logs, "Expected 'Hello Universe' in task logs"
+        print("✓ 'Hello Universe' found in task logs!")
         test_steps[2]["status"] = "passed"
         test_steps[2][
             "Result_Message"
-        ] = "DAG produced the expected results of Hello World printed to the logs"
+        ] = "DAG produced the expected results of Hello Universe printed to the logs"
 
     finally:
         try:
             # this function is for you to remove the configs for the test. They follow a set structure.
             remove_model_configs(
-                Configs=Test_Configs.Configs,
+                Configs=Test_Configs.Configs, 
                 custom_info={
                     **config_results,  # Spread all config results
                     "publicKey": supabase_account_resource["publicKey"],
@@ -178,7 +179,7 @@ def test_airflow_agent_simple_pipeline(request, airflow_resource, github_resourc
                 }
             )
             # Delete the branch from github using the github manager
-            github_manager.delete_branch("feature/hello_world_dag")
+            github_manager.delete_branch("feature/hello_universe_dag")
 
         except Exception as e:
             print(f"Error during cleanup: {e}")

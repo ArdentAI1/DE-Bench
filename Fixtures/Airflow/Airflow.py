@@ -47,6 +47,176 @@ class Airflow_Local:
             time.sleep(60)
         print("Airflow webserver is not ready")
         return False
+    
+    def verify_airflow_dag_exists(self, dag_id: str) -> bool:
+        """
+        Verify if a DAG exists using the dag_id in Airflow via API call.
+
+        :param dag_id: The ID of the DAG to check for.
+        :return: True if the DAG exists, False otherwise.
+        :rtype: bool
+        """
+        max_retries = copy.deepcopy(self.max_retries)
+        for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
+            # Check if DAG exists
+            dag_response = requests.get(
+                f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}",
+                headers=self.API_HEADERS,
+            )
+
+            if dag_response.status_code != 200:
+                print(f"DAG not found yet (status: {dag_response.status_code}), waiting...")
+                if attempt == max_retries - 1:
+                    raise Exception("DAG not found after max retries")
+                time.sleep(10)
+                continue
+
+            print(f"DAG found!")
+            return True
+        return False
+    
+    def unpause_and_trigger_airflow_dag(self, dag_id: str) -> Optional[str]:
+        """
+        Unpause a DAG using the dag_id in Airflow via API call.
+
+        :param str dag_id: The ID of the DAG to unpause.
+        :return: The dag_run_id if it was triggered successfully, else None
+        :rtype: Optional[str]
+        """
+        max_retries = copy.deepcopy(self.max_retries)
+        for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
+            # Check if DAG exists
+            unpause_response = requests.patch(
+                f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}",
+                headers=self.API_HEADERS,
+                json={"is_paused": False},
+            )
+            if unpause_response.status_code != 200:
+                print(f"Failed to unpause DAG: {unpause_response.text}")
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
+                time.sleep(10)
+                continue
+
+            print(f"DAG unpaused successfully. Triggering DAG...")
+            # Trigger the DAG
+            trigger_response = requests.post(
+                f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns",
+                headers=self.API_HEADERS,
+                json={"conf": {}},
+            )
+
+            if trigger_response.status_code == 200:
+                dag_run_id = trigger_response.json()["dag_run_id"]
+                print(f"DAG triggered successfully! Run ID: {dag_run_id}")
+                return dag_run_id
+            else:
+                print(f"Failed to trigger DAG: {trigger_response.text}")
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
+                time.sleep(10)
+                continue
+        return None
+    
+    def verify_dag_id_ran(self, dag_id: str, dag_run_id: str) -> bool:
+        """
+        Verify if a DAG has been executed.
+
+        :param str dag_id: The ID of the DAG to check for.
+        :param str dag_run_id: The ID of the DAG run to check for.
+        :return: True if the DAG has been executed, False otherwise.
+        :rtype: bool
+        """
+        max_retries = copy.deepcopy(self.max_retries)
+        print(f"Monitoring DAG run {dag_run_id} for completion...")
+        for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG run...")
+            status_response = requests.get(
+                f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}",
+                headers=self.API_HEADERS,
+            )
+
+            if status_response.status_code == 200:
+                state = status_response.json()["state"]
+                print(f"DAG run state: {state}")
+                if state in ["success", "failed", "error"]:
+                    print(f"DAG ran to completion with state: {state}")
+                    return True
+                else:
+                    print(f"DAG run state: {state}")
+                    time.sleep(60)
+                    continue
+        return self.check_dag_task_instances(dag_id, dag_run_id)
+    
+    def get_task_instance_logs(self, dag_id: str, dag_run_id: str, task_id: str) -> str:
+        """
+        Get the logs for a task instance.
+
+        :param str dag_id: The ID of the DAG to check for.
+        :param str dag_run_id: The ID of the DAG run to check for.
+        :param str task_id: The ID of the task to check for.
+        :return: The logs for the task instance.
+        :rtype: str
+        """
+        print(f"Retrieving logs for task '{task_id}'")
+        task_instance_response = requests.get(
+            f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}",
+            headers=self.API_HEADERS,
+        )
+        if task_instance_response.status_code != 200:
+            raise Exception(
+                f"Failed to retrieve task instance details: {task_instance_response.text}"
+            )
+        print(f"Task instance response: {task_instance_response.text}")
+        task_instance_data = task_instance_response.json()
+        try_number = task_instance_data.get(
+            "try_number", 1
+        )  # Default to 1 if not found
+        print(f"Fetching logs for task '{task_id}' with try number: {try_number}")
+        task_logs_response = requests.get(
+            f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{try_number}",
+            headers=self.API_HEADERS,
+        )
+        if task_logs_response.status_code != 200:
+            raise Exception(f"Failed to retrieve task logs: {task_logs_response.text}")
+        
+        print(f"Task logs received for task '{task_id}' with try number: {try_number}")
+        return task_logs_response.text
+    
+    def check_dag_task_instances(self, dag_id: str, dag_run_id: str) -> bool:
+        """
+        Check if all tasks in a DAG have been executed.
+        """
+        max_retries = copy.deepcopy(self.max_retries)
+        for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG task instances...")
+            task_instances_response = requests.get(
+                f"{self.AIRFLOW_HOST.rstrip('/')}/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances?limit=100",
+                headers=self.API_HEADERS,
+            )
+            if task_instances_response.status_code == 200:
+                task_instances = task_instances_response.json()["task_instances"]
+                if task_instances_response.json()["total_entries"] == 0:
+                    print("Rechecking task instances...")
+                    time.sleep(30)
+                    continue
+                elif task_instances_response.json()["total_entries"] >= 1:
+                    for task_instance in task_instances:
+                        if task_instance["state"] in ["success", "failed", "error", "up_for_retry"]:
+                            print(f"Task instance {task_instance['task_id']} completed successfully")
+                            return True
+                        else:
+                            print(f"Task instance {task_instance['task_id']} is still running")
+                            continue
+                else:
+                    print(f"Task instances found: {len(task_instances)}")
+                    time.sleep(30)
+                    continue
+                time.sleep(30)
+                continue
+        raise Exception("DAG task instances timed out")
 
     def verify_airflow_dag_exists(self, dag_id: str) -> bool:
         """

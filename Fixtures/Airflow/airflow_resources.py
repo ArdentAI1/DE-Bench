@@ -45,7 +45,11 @@ def airflow_resource(request):
 
     start_time = time.time()
     test_name = request.node.name
-    unique_id = f"{test_name}_{int(time.time())}"
+    print(f"Original test name: {test_name}")
+    # Sanitize test name for Astro CLI (remove square brackets and other special characters)
+    sanitized_test_name = re.sub(r'[^\w\-]', '_', test_name)
+    unique_id = f"{sanitized_test_name}_{int(time.time())}"
+    print(f"Sanitized unique_id: {unique_id}")
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
 
     # Create Airflow resource
