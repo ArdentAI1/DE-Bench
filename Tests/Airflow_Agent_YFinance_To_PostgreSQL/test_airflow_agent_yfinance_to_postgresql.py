@@ -3,6 +3,7 @@ import os
 import pytest
 import re
 import time
+import uuid
 import psycopg2
 
 from model.Configure_Model import remove_model_configs
@@ -14,13 +15,39 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
+# Generate unique identifiers for parallel execution
+test_timestamp = int(time.time())
+test_uuid = uuid.uuid4().hex[:8]
+
 
 @pytest.mark.airflow
 @pytest.mark.pipeline
 @pytest.mark.database
 @pytest.mark.two  # Difficulty 2 - involves DAG creation, PR management, and database validation
 @pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
-def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_resource, supabase_account_resource):
+@pytest.mark.parametrize("postgres_resource", [{
+    "resource_id": f"yfinance_test_{test_timestamp}_{test_uuid}",
+    "databases": [
+        {
+            "name": f"stock_data_{test_timestamp}_{test_uuid}",
+            "tables": [
+                {
+                    "name": "tesla_stock",
+                    "columns": [
+                        {"name": "date", "type": "DATE", "primary_key": True},
+                        {"name": "open", "type": "DECIMAL(10,2)"},
+                        {"name": "high", "type": "DECIMAL(10,2)"},
+                        {"name": "low", "type": "DECIMAL(10,2)"},
+                        {"name": "close", "type": "DECIMAL(10,2)"},
+                        {"name": "volume", "type": "BIGINT"}
+                    ],
+                    "data": []  # Empty initial data, will be populated by the DAG
+                }
+            ]
+        }
+    ]
+}], indirect=True)
+def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_resource, supabase_account_resource, postgres_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
     github_manager = github_resource["github_manager"]
     Test_Configs.User_Input = github_manager.add_merge_step_to_user_input(Test_Configs.User_Input)
@@ -34,9 +61,10 @@ def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_
     )
     
     # Use the airflow_resource fixture - the Docker instance is already running
-    print(f"=== Starting YFinance Airflow Pipeline Test ===")
+    print("=== Starting YFinance Airflow Pipeline Test ===")
     print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
     print(f"Using GitHub instance from fixture: {github_resource['resource_id']}")
+    print(f"Using PostgreSQL instance from fixture: {postgres_resource['resource_id']}")
     print(f"Airflow base URL: {airflow_resource['base_url']}")
     print(f"Test directory: {input_dir}")
 
@@ -67,81 +95,14 @@ def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_
     config_results = None  # Initialize before try block
     try:
         # The dags folder is already set up by the fixture
+        # The PostgreSQL database is already set up by the postgres_resource fixture
 
-        # Setup Postgres database
-        print("Setting up PostgreSQL database...")
-        postgres_connection = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOSTNAME"),
-            port=os.getenv("POSTGRES_PORT"),
-            user=os.getenv("POSTGRES_USERNAME"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            database="postgres",
-            sslmode="require",
-        )
-        postgres_connection.autocommit = True
-        postgres_cursor = postgres_connection.cursor()
+        # Get the actual database name from the fixture
+        db_name = postgres_resource["created_resources"][0]["name"]
+        print(f"Using PostgreSQL database: {db_name}")
 
-        # Check and kill any existing connections (if we have permission)
-        postgres_cursor.execute(
-            """
-            SELECT pid, usename, datname 
-            FROM pg_stat_activity 
-            WHERE datname = 'stock_data'
-            """
-        )
-        connections = postgres_cursor.fetchall()
-        print(f"Found connections to stock_data db: {connections}")
-
-        if connections:
-            try:
-                postgres_cursor.execute(
-                    """
-                    SELECT pg_terminate_backend(pid) 
-                    FROM pg_stat_activity 
-                    WHERE datname = 'stock_data'
-                    """
-                )
-                print("Terminated all connections to stock_data db")
-            except Exception as e:
-                print(f"Could not terminate connections (permission issue): {e}")
-                print("Continuing with database operations...")
-
-        # Now safe to drop and recreate
-        postgres_cursor.execute("DROP DATABASE IF EXISTS stock_data")
-        print("Dropped existing stock_data db if it existed")
-        postgres_cursor.execute("CREATE DATABASE stock_data")
-        print("Created new stock_data db")
-
-        # Close connection to postgres database
-        postgres_cursor.close()
-        postgres_connection.close()
-
-        # Reconnect to the new database
-        postgres_connection = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOSTNAME"),
-            port=os.getenv("POSTGRES_PORT"),
-            user=os.getenv("POSTGRES_USERNAME"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            database="stock_data",
-            sslmode="require",
-        )
-        postgres_cursor = postgres_connection.cursor()
-
-        # Create tesla_stock table
-        postgres_cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tesla_stock (
-                date DATE PRIMARY KEY,
-                open DECIMAL(10,2),
-                high DECIMAL(10,2),
-                low DECIMAL(10,2),
-                close DECIMAL(10,2),
-                volume BIGINT
-            )
-            """
-        )
-        postgres_connection.commit()
-        print("Created tesla_stock table")
+        # Update the configs to use the fixture-created database
+        Test_Configs.Configs["services"]["postgreSQL"]["databases"][0]["name"] = db_name
 
         # set the airflow folder with the correct configs
         # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
@@ -234,7 +195,7 @@ def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_
             port=os.getenv("POSTGRES_PORT"),
             user=os.getenv("POSTGRES_USERNAME"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            database="stock_data",
+            database=db_name,
             sslmode="require"
         )
         cur = conn.cursor()
@@ -279,71 +240,6 @@ def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_
             )
             # Delete the branch from github using the github manager
             github_manager.delete_branch("feature/tesla_stock")
-
-            # Clean up database
-            postgres_connection = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOSTNAME"),
-                port=os.getenv("POSTGRES_PORT"),
-                user=os.getenv("POSTGRES_USERNAME"),
-                password=os.getenv("POSTGRES_PASSWORD"),
-                database="stock_data",
-                sslmode="require",
-            )
-            postgres_cursor = postgres_connection.cursor()
-
-            # Drop tesla_stock table
-            postgres_cursor.execute("DROP TABLE IF EXISTS tesla_stock")
-            postgres_connection.commit()
-
-            # Close connection to postgres database
-            postgres_cursor.close()
-            postgres_connection.close()
-
-            # Connect to postgres database for cleanup
-            postgres_connection = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOSTNAME"),
-                port=os.getenv("POSTGRES_PORT"),
-                user=os.getenv("POSTGRES_USERNAME"),
-                password=os.getenv("POSTGRES_PASSWORD"),
-                database="postgres",
-                sslmode="require",
-            )
-            postgres_connection.autocommit = True
-            postgres_cursor = postgres_connection.cursor()
-
-            # Check and kill any remaining connections (if we have permission)
-            postgres_cursor.execute(
-                """
-                SELECT pid, usename, datname 
-                FROM pg_stat_activity 
-                WHERE datname = 'stock_data'
-                """
-            )
-            connections = postgres_cursor.fetchall()
-            print(f"Found connections to stock_data db during cleanup:", connections)
-
-            if connections:
-                try:
-                    postgres_cursor.execute(
-                        """
-                        SELECT pg_terminate_backend(pid) 
-                        FROM pg_stat_activity 
-                        WHERE datname = 'stock_data'
-                        """
-                    )
-                    print("Terminated all connections to stock_data db")
-                except Exception as e:
-                    print(f"Could not terminate connections during cleanup (permission issue): {e}")
-                    print("Continuing with cleanup...")
-
-            # Now safe to drop
-            postgres_cursor.execute("DROP DATABASE IF EXISTS stock_data")
-            print("Dropped stock_data db in cleanup")
-
-            # Close final connection
-            postgres_cursor.close()
-            postgres_connection.close()
-            print("Database cleanup completed successfully")
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
