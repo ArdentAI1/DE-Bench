@@ -46,7 +46,7 @@ def airflow_resource(request):
 
     start_time = time.time()
     test_name = parse_test_name(request.node.name)
-    print(f"Test name: {test_name}")
+    unique_id = f"{test_name}_{int(time.time())}"
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
 
     # Create Airflow resource
