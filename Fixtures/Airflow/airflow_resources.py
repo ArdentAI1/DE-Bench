@@ -45,6 +45,8 @@ def airflow_resource(request):
 
     start_time = time.time()
     test_name = request.node.name
+    # remove pytest parametrization brackets from the test name
+    test_name = test_name[:test_name.find("[")].strip() if "[" in test_name else test_name.strip()
     print(f"Original test name: {test_name}")
     # Sanitize test name for Astro CLI (remove square brackets and other special characters)
     sanitized_test_name = re.sub(r'[^\w\-]', '_', test_name)
