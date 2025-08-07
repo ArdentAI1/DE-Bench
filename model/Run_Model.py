@@ -14,13 +14,13 @@ def run_model(container, task, configs, extra_information = {}):
     # A Wrapper for your model to do things.
 
     #create the ardent client with the specific creds then we go!
-    if extra_information["useArdent"] == True:
+    if extra_information.get("useArdent", False) == True:
         Ardent_Client = ArdentClient(
-        public_key=extra_information["publicKey"],
-        secret_key=extra_information["secretKey"],
-        base_url=os.getenv("ARDENT_BASE_URL"),
-    )
-            
+            public_key=extra_information.get("publicKey", os.getenv("ARDENT_PUBLIC_KEY")),
+            secret_key=extra_information.get("secretKey", os.getenv("ARDENT_SECRET_KEY")),
+            base_url=extra_information.get("base_url", os.getenv("ARDENT_BASE_URL")),
+        )
+
     result = Ardent_Client.create_and_execute_job(
         message=task,
     )
