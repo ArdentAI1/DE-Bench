@@ -1,16 +1,19 @@
 import importlib
 import os
+import pytest
+import re
 import time
+import uuid
 from datetime import datetime
 
 import psycopg2
-import pytest
 import requests
 from github import Github
 from requests.auth import HTTPBasicAuth
 
 from Configs.MySQLConfig import connection as mysql_connection
-from model.Configure_Model import set_up_model_configs, remove_model_configs
+from model.Configure_Model import remove_model_configs
+from model.Configure_Model import set_up_model_configs
 from model.Run_Model import run_model
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,28 +21,72 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
+# Generate unique identifiers for parallel execution
+test_timestamp = int(time.time())
+test_uuid = uuid.uuid4().hex[:8]
+
 
 @pytest.mark.airflow
 @pytest.mark.postgres
 @pytest.mark.mysql
 @pytest.mark.pipeline
 @pytest.mark.database
-def test_airflow_agent_postgresql_to_mysql(request, airflow_resource):
+@pytest.mark.three  # Difficulty 3 - involves database operations, DAG creation, and data validation
+@pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
+@pytest.mark.parametrize("postgres_resource", [{
+    "resource_id": f"postgresql_to_mysql_test_{test_timestamp}_{test_uuid}",
+    "databases": [
+        {
+            "name": f"sales_db_{test_timestamp}_{test_uuid}",
+            "tables": [
+                {
+                    "name": "transactions",
+                    "columns": [
+                        {"name": "transaction_id", "type": "SERIAL", "primary_key": True},
+                        {"name": "user_id", "type": "INTEGER", "not_null": True},
+                        {"name": "product_id", "type": "INTEGER", "not_null": True},
+                        {"name": "sale_amount", "type": "DECIMAL(10,2)", "not_null": True},
+                        {"name": "cost_amount", "type": "DECIMAL(10,2)", "not_null": True},
+                        {"name": "transaction_date", "type": "DATE", "not_null": True}
+                    ],
+                    "data": [
+                        {"user_id": 1, "product_id": 101, "sale_amount": 100.00, "cost_amount": 60.00, "transaction_date": "2024-01-01"},
+                        {"user_id": 1, "product_id": 102, "sale_amount": 150.00, "cost_amount": 90.00, "transaction_date": "2024-01-01"},
+                        {"user_id": 2, "product_id": 101, "sale_amount": 200.00, "cost_amount": 120.00, "transaction_date": "2024-01-01"}
+                    ]
+                }
+            ]
+        }
+    ]
+}], indirect=True)
+def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_resource, supabase_account_resource, postgres_resource):
     input_dir = os.path.dirname(os.path.abspath(__file__))
+    github_manager = github_resource["github_manager"]
+    Test_Configs.User_Input = github_manager.add_merge_step_to_user_input(Test_Configs.User_Input)
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
+    dag_name = "sales_profit_pipeline"
+    pr_title = "Merge_Sales_Profit_Pipeline"
+    github_manager.check_and_update_gh_secrets(
+        secrets={
+            "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
+        }
+    )
     
-    # Use the airflow_resource fixture instead of creating our own instance
-    airflow_local = airflow_resource["airflow_instance"]
-
-    # Get Airflow base URL and credentials from the fixture
-    airflow_base_url = airflow_resource["base_url"]
-    airflow_username = airflow_resource["username"]
-    airflow_password = airflow_resource["password"]
-
-    Test_Configs.Configs["services"]["airflow"]["host"] = airflow_base_url
-
+    # Use the airflow_resource fixture - the Docker instance is already running
+    print("=== Starting PostgreSQL to MySQL Airflow Pipeline Test ===")
+    print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
+    print(f"Using GitHub instance from fixture: {github_resource['resource_id']}")
+    print(f"Using PostgreSQL instance from fixture: {postgres_resource['resource_id']}")
+    print(f"Airflow base URL: {airflow_resource['base_url']}")
+    print(f"Test directory: {input_dir}")
 
     test_steps = [
+        {
+            "name": "Database Setup",
+            "description": "Setting up PostgreSQL and MySQL databases with test data",
+            "status": "did not reach",
+            "Result_Message": "",
+        },
         {
             "name": "Checking Git Branch Existence",
             "description": "Checking if the git branch exists with the right name",
@@ -53,7 +100,7 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource):
             "Result_Message": "",
         },
         {
-            "name": "Checking Dag Results",
+            "name": "Checking DAG Results",
             "description": "Checking if the DAG produces the expected results",
             "status": "did not reach",
             "Result_Message": "",
@@ -61,155 +108,22 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource):
     ]
 
     request.node.user_properties.append(("test_steps", test_steps))
-    request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-
-    config_results = None
 
     # SECTION 1: SETUP THE TEST
+    config_results = None  # Initialize before try block
     try:
-        # Setup GitHub repository with empty dags folder
-        access_token = os.getenv("AIRFLOW_GITHUB_TOKEN")
-        airflow_github_repo = os.getenv("AIRFLOW_REPO")
+        # The dags folder is already set up by the fixture
+        # The PostgreSQL database is already set up by the postgres_resource fixture
 
-        # Convert full URL to owner/repo format if needed
-        if "github.com" in airflow_github_repo:
-            # Extract owner/repo from URL
-            parts = airflow_github_repo.split("/")
-            airflow_github_repo = f"{parts[-2]}/{parts[-1]}"
+        # Get the actual database name from the fixture
+        db_name = postgres_resource["created_resources"][0]["name"]
+        print(f"Using PostgreSQL database: {db_name}")
 
-        print("Using repo format:", airflow_github_repo)
-        g = Github(access_token)
-        repo = g.get_repo(airflow_github_repo)
-        main_branch = repo.get_branch("main")
-
-        print("GitHub repository:", airflow_github_repo)
-
-        try:
-            # First, clear only the dags folder
-            dags_contents = repo.get_contents("dags")
-            for content in dags_contents:
-                if content.name != ".gitkeep":  # Keep the .gitkeep file if it exists
-                    repo.delete_file(
-                        path=content.path,
-                        message="Clear dags folder",
-                        sha=content.sha,
-                        branch="main",
-                    )
-
-            # Ensure .gitkeep exists in dags folder
-            try:
-                repo.get_contents("dags/.gitkeep")
-            except:
-                repo.create_file(
-                    path="dags/.gitkeep",
-                    message="Add .gitkeep to dags folder",
-                    content="",
-                    branch="main",
-                )
-            print("Cleaned dags folder.")
-
-        except Exception as e:
-            if "sha" not in str(e):  # If error is not about folder already existing
-                raise e
-
-        # Setup Postgres database and sample data
-        connection = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOSTNAME"),
-            port=os.getenv("POSTGRES_PORT"),
-            user=os.getenv("POSTGRES_USERNAME"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            database="postgres",
-            sslmode="require",
-        )
-        postgres_cursor = connection.cursor()
-
-        # First connect to postgres database
-        postgres_connection = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOSTNAME"),
-            port=os.getenv("POSTGRES_PORT"),
-            user=os.getenv("POSTGRES_USERNAME"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            database="postgres",
-            sslmode="require",
-        )
-        postgres_connection.autocommit = True
-        postgres_cursor = postgres_connection.cursor()
-
-        # Check and kill any existing connections
-        postgres_cursor.execute(
-            """
-            SELECT pid, usename, datname 
-            FROM pg_stat_activity 
-            WHERE datname = 'sales_db'
-        """
-        )
-        connections = postgres_cursor.fetchall()
-        print(f"Found connections to sales_db:", connections)
-
-        postgres_cursor.execute(
-            """
-            SELECT pg_terminate_backend(pid) 
-            FROM pg_stat_activity 
-            WHERE datname = 'sales_db'
-        """
-        )
-        print("Terminated all connections to sales_db")
-
-        # Now safe to drop and recreate
-        postgres_cursor.execute("DROP DATABASE IF EXISTS sales_db")
-        print("Dropped existing sales_db if it existed")
-        postgres_cursor.execute("CREATE DATABASE sales_db")
-        print("Created new sales_db")
-
-        # Close connection to postgres database
-        postgres_cursor.close()
-        postgres_connection.close()
-
-        # Reconnect to the new database
-        postgres_connection = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOSTNAME"),
-            port=os.getenv("POSTGRES_PORT"),
-            user=os.getenv("POSTGRES_USERNAME"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            database="sales_db",
-            sslmode="require",
-        )
-        postgres_cursor = postgres_connection.cursor()
-
-        # Create test table
-        postgres_cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS transactions (
-                transaction_id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                product_id INTEGER NOT NULL,
-                sale_amount DECIMAL(10,2) NOT NULL,
-                cost_amount DECIMAL(10,2) NOT NULL,
-                transaction_date DATE NOT NULL
-            )
-        """
-        )
-
-        # Insert sample data
-        postgres_cursor.execute(
-            """
-            INSERT INTO transactions 
-            (user_id, product_id, sale_amount, cost_amount, transaction_date)
-            VALUES 
-            (1, 101, 100.00, 60.00, '2024-01-01'),
-            (1, 102, 150.00, 90.00, '2024-01-01'),
-            (2, 101, 200.00, 120.00, '2024-01-01')
-        """
-        )
-
-        # Make sure to commit the transaction
-        postgres_connection.commit()
-
-        # Verify the insert
-        postgres_cursor.execute("SELECT * FROM transactions")
-        data = postgres_cursor.fetchall()
+        # Update the configs to use the fixture-created database
+        Test_Configs.Configs["services"]["postgreSQL"]["databases"][0]["name"] = db_name
 
         # Setup MySQL database
+        print("Setting up MySQL database...")
         mysql_cursor = mysql_connection.cursor()
         mysql_cursor.execute("CREATE DATABASE IF NOT EXISTS analytics_db")
         mysql_cursor.execute("USE analytics_db")
@@ -233,155 +147,94 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource):
         # Verify table creation
         mysql_cursor.execute("SHOW TABLES")
         tables = mysql_cursor.fetchall()
+        print(f"MySQL tables created: {tables}")
 
-        # Verify table structure
-        mysql_cursor.execute("DESCRIBE daily_profits")
-        structure = mysql_cursor.fetchall()
+        test_steps[0]["status"] = "passed"
+        test_steps[0]["Result_Message"] = "PostgreSQL and MySQL databases set up successfully with test data"
 
-        # Configure Ardent with database connections
-        config_results = set_up_model_configs(Test_Configs.Configs)
+        # set the airflow folder with the correct configs
+        # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
+        Test_Configs.Configs["services"]["airflow"]["host"] = airflow_resource["base_url"]
+        Test_Configs.Configs["services"]["airflow"]["username"] = airflow_resource["username"]
+        Test_Configs.Configs["services"]["airflow"]["password"] = airflow_resource["password"]
+        Test_Configs.Configs["services"]["airflow"]["api_token"] = airflow_resource["api_token"]
+        config_results = set_up_model_configs(
+            Configs=Test_Configs.Configs,
+            custom_info={
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
+        )
 
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
-        run_model(
-            container=None, task=Test_Configs.User_Input, configs=Test_Configs.Configs
+        print("Running model to create DAG and PR...")
+        model_result = run_model(
+            container=None, 
+            task=Test_Configs.User_Input, 
+            configs=Test_Configs.Configs,
+            extra_information={
+                "useArdent": True,
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
         )
         end_time = time.time()
+        print(f"Model execution completed. Result: {model_result}")
         request.node.user_properties.append(("model_runtime", end_time - start_time))
 
-        time.sleep(10)
+        # Check if the branch exists and verify PR creation/merge
+        print("Waiting 10 seconds for model to create branch and PR...")
+        time.sleep(10)  # Give the model time to create the branch and PR
+        
+        branch_exists, test_steps[1] = github_manager.verify_branch_exists("feature/sales_profit_pipeline", test_steps[1])
+        if not branch_exists:
+            raise Exception(test_steps[1]["Result_Message"])
 
-        # Check if the branch exists
-        try:
-            branch = repo.get_branch("feature/sales_profit_pipeline")
-            test_steps[0]["status"] = "passed"
-            test_steps[0][
-                "Result_Message"
-            ] = "Branch 'feature/sales_profit_pipeline' was created successfully"
-        except Exception as e:
-            test_steps[0]["status"] = "failed"
-            test_steps[0][
-                "Result_Message"
-            ] = f"Branch 'feature/sales_profit_pipeline' was not created: {str(e)}"
-            raise Exception(
-                f"Branch 'feature/sales_profit_pipeline' was not created: {str(e)}"
-            )
-
-        # After model creates the PR, find and merge it
-        pulls = repo.get_pulls(state="open")
-        target_pr = None
-        for pr in pulls:
-            if pr.title == "Merge_Sales_Profit_Pipeline":
-                target_pr = pr
-                test_steps[1]["status"] = "passed"
-                test_steps[1][
-                    "Result_Message"
-                ] = "PR 'Merge_Sales_Profit_Pipeline' was created successfully"
-                break
-
-        if not target_pr:
-            test_steps[1]["status"] = "failed"
-            test_steps[1][
-                "Result_Message"
-            ] = "PR 'Merge_Sales_Profit_Pipeline' not found"
-            raise Exception("PR 'Merge_Sales_Profit_Pipeline' not found")
-
-        # Merge the PR
-        merge_result = target_pr.merge(
-            commit_title="Merge_Sales_Profit_Pipeline", merge_method="squash"
+        pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
+            pr_title=pr_title, 
+            test_step=test_steps[2], 
+            commit_title=pr_title, 
+            merge_method="squash",
+            build_info={
+                "deploymentId": airflow_resource["deployment_id"],
+                "deploymentName": airflow_resource["deployment_name"],
+            }
         )
+        if not pr_exists:
+            raise Exception("Unable to find and merge PR. Please check the PR title and commit title.")
 
-        if not merge_result.merged:
-            raise Exception(f"Failed to merge PR: {merge_result.message}")
+        # Use the airflow instance from the fixture to pull DAGs from GitHub
+        # The fixture already has the Docker instance running
+        airflow_instance = airflow_resource["airflow_instance"]
+        if not airflow_instance.wait_for_airflow_to_be_ready(6):
+            raise Exception("Airflow instance did not redeploy successfully.")
+        
+        if not github_manager.check_if_action_is_complete(pr_title=pr_title):
+            raise Exception("Action is not complete")
+        
+        # verify the airflow instance is ready after the github action redeployed
+        if not airflow_instance.wait_for_airflow_to_be_ready(3):
+            raise Exception("Airflow instance did not redeploy successfully.")
 
-        # now we run the function to get the dag
-        airflow_local.Get_Airflow_Dags_From_Github()
-
-        # After creating the DAG, wait a bit for Airflow to detect it
-        time.sleep(5)  # Give Airflow time to scan for new DAGs
-
-        # Trigger the DAG using fixture credentials
-        # airflow_base_url, airflow_username, airflow_password already set from fixture
+        # Use the connection details from the fixture
+        airflow_base_url = airflow_resource["base_url"]
+        airflow_api_token = airflow_resource["api_token"]
+        
+        print(f"Connecting to Airflow at: {airflow_base_url}")
+        print(f"Using API Token: {airflow_api_token}")
 
         # Wait for DAG to appear and trigger it
-        max_retries = 5
-        auth = HTTPBasicAuth(airflow_username, airflow_password)
-        headers = {"Content-Type": "application/json", "Cache-Control": "no-cache"}
+        if not airflow_instance.verify_airflow_dag_exists(dag_name):
+            raise Exception(f"DAG '{dag_name}' did not appear in Airflow")
 
-        for attempt in range(max_retries):
-            # Check if DAG exists
-            print("Checking if the DAG exists...")
-            dag_response = requests.get(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
-                auth=auth,
-                headers=headers,
-            )
-
-            if dag_response.status_code != 200:
-                if attempt == max_retries - 1:
-                    raise Exception("DAG not found after max retries")
-                print(f"DAG not found, attempt {attempt + 1} of {max_retries}")
-                time.sleep(10)
-                continue
-
-            print("Unpausing the DAG...")
-            # Unpause the DAG before triggering
-            unpause_response = requests.patch(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
-                auth=auth,
-                headers=headers,
-                json={"is_paused": False},
-            )
-
-            if unpause_response.status_code != 200:
-                if attempt == max_retries - 1:
-                    raise Exception(f"Failed to unpause DAG: {unpause_response.text}")
-                print(f"Failed to unpause DAG, attempt {attempt + 1} of {max_retries}")
-                time.sleep(10)
-                continue
-
-            print("Triggering the DAG...")
-            # Trigger the DAG
-            trigger_response = requests.post(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns",
-                auth=auth,
-                headers=headers,
-                json={"conf": {}},
-            )
-
-            if trigger_response.status_code == 200:
-                dag_run_id = trigger_response.json()["dag_run_id"]
-                print("DAG triggered successfully")
-                break
-            else:
-                if attempt == max_retries - 1:
-                    raise Exception(f"Failed to trigger DAG: {trigger_response.text}")
-                print(f"Failed to trigger DAG, attempt {attempt + 1} of {max_retries}")
-                time.sleep(10)
+        dag_run_id = airflow_instance.unpause_and_trigger_airflow_dag(dag_name)
+        if not dag_run_id:
+            raise Exception("Failed to trigger DAG")
 
         # Monitor the DAG run
-        print("Monitoring the DAG run...")
-        max_wait = 300  # 5 minutes timeout
-        start_time = time.time()
-        while time.time() - start_time < max_wait:
-            status_response = requests.get(
-                f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline/dagRuns/{dag_run_id}",
-                auth=auth,
-                headers=headers,
-            )
-
-            if status_response.status_code == 200:
-                state = status_response.json()["state"]
-                print(f"DAG state: {state}")
-                if state == "success":
-                    print("DAG completed successfully")
-                    break
-                elif state in ["failed", "error"]:
-                    raise Exception(f"DAG failed with state: {state}")
-
-            time.sleep(10)
-        else:
-            raise Exception("DAG run timed out")
+        print(f"Monitoring DAG run {dag_run_id} for completion...")
+        airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
 
         # SECTION 3: VERIFY THE OUTCOMES
         print("Verifying the outcomes...")
@@ -413,120 +266,34 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource):
         assert results[1][3] == 120.00, "Incorrect total costs"
         assert float(results[1][4]) == 80.00, "Incorrect total profit"  # 200 - 120
 
-        test_steps[2]["status"] = "passed"
-        test_steps[2][
-            "Result_Message"
-        ] = "DAG successfully transferred and transformed data from Postgres to MySQL"
+        test_steps[3]["status"] = "passed"
+        test_steps[3]["Result_Message"] = "DAG successfully transferred and transformed data from Postgres to MySQL"
 
     finally:
         try:
-            print("Starting cleanup...")
-
-            # Clean up Airflow DAG using fixture credentials
-            # airflow_base_url, airflow_username, airflow_password already set from fixture
-            auth = HTTPBasicAuth(airflow_username, airflow_password)
-            headers = {"Content-Type": "application/json"}
-
-            # First pause the DAG
+            # this function is for you to remove the configs for the test. They follow a set structure.
+            remove_model_configs(
+                Configs=Test_Configs.Configs, 
+                custom_info={
+                    **config_results,  # Spread all config results
+                    "publicKey": supabase_account_resource["publicKey"],
+                    "secretKey": supabase_account_resource["secretKey"],
+                }
+            )
+            
+            # Clean up MySQL database
+            print("Starting MySQL cleanup...")
             try:
-                requests.patch(
-                    f"{airflow_base_url.rstrip('/')}/api/v1/dags/sales_profit_pipeline",
-                    auth=auth,
-                    headers=headers,
-                    json={"is_paused": True},
-                )
-                print("Paused the DAG")
+                mysql_cursor.execute("DROP DATABASE IF EXISTS analytics_db")
+                mysql_connection.commit()
+                mysql_cursor.close()
+                mysql_connection.close()
+                print("MySQL cleanup completed")
             except Exception as e:
-                print(f"Error pausing DAG: {e}")
+                print(f"Error during MySQL cleanup: {e}")
 
-            # Rest of your existing cleanup...
-            # First close our connection to sales_db
-            postgres_cursor.close()
-            postgres_connection.close()
-            print("Closed test connections")
-
-            # Connect to postgres database for cleanup
-            postgres_connection = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOSTNAME"),
-                port=os.getenv("POSTGRES_PORT"),
-                user=os.getenv("POSTGRES_USERNAME"),
-                password=os.getenv("POSTGRES_PASSWORD"),
-                database="postgres",
-                sslmode="require",
-            )
-            postgres_connection.autocommit = True
-            postgres_cursor = postgres_connection.cursor()
-
-            # Check and kill any remaining connections
-            postgres_cursor.execute(
-                """
-                SELECT pid, usename, datname 
-                FROM pg_stat_activity 
-                WHERE datname = 'sales_db'
-            """
-            )
-            connections = postgres_cursor.fetchall()
-            print(f"Found connections to sales_db during cleanup:", connections)
-
-            postgres_cursor.execute(
-                """
-                SELECT pg_terminate_backend(pid) 
-                FROM pg_stat_activity 
-                WHERE datname = 'sales_db'
-            """
-            )
-            print("Terminated all connections to sales_db")
-
-            # Now safe to drop
-            postgres_cursor.execute("DROP DATABASE IF EXISTS sales_db")
-            print("Dropped sales_db in cleanup")
-
-            # Close final connection
-            postgres_cursor.close()
-            postgres_connection.close()
-            print("Cleanup completed successfully")
-
-            # MySQL cleanup
-            mysql_cursor.execute("DROP DATABASE IF EXISTS analytics_db")
-            mysql_connection.commit()
-            mysql_cursor.close()
-            mysql_connection.close()
-            print("MySQL cleanup completed")
-
-            # Delete Ardent configs
-            remove_model_configs(Test_Configs.Configs, config_results)
-
-            # Clean up GitHub - delete branch if it exists
-            try:
-                ref = repo.get_git_ref(f"heads/feature/sales_profit_pipeline")
-                ref.delete()
-                print("Deleted feature branch")
-            except Exception as e:
-                print(f"Branch might not exist or other error: {e}")
-
-            # reset the repo to the original state
-            # First, clear only the dags folder
-            dags_contents = repo.get_contents("dags")
-            for content in dags_contents:
-                if content.name != ".gitkeep":  # Keep the .gitkeep file if it exists
-                    repo.delete_file(
-                        path=content.path,
-                        message="Clear dags folder",
-                        sha=content.sha,
-                        branch="main",
-                    )
-
-            # Ensure .gitkeep exists in dags folder
-            try:
-                repo.get_contents("dags/.gitkeep")
-            except:
-                repo.create_file(
-                    path="dags/.gitkeep",
-                    message="Add .gitkeep to dags folder",
-                    content="",
-                    branch="main",
-                )
-            print("Cleaned dags folder")
+            # Delete the branch from github using the github manager
+            github_manager.delete_branch("feature/sales_profit_pipeline")
 
         except Exception as e:
             print(f"Error during cleanup: {e}")
