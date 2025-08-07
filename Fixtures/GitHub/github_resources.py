@@ -3,13 +3,12 @@ This module provides a pytest fixture for managing GitHub operations in Airflow 
 """
 
 import os
-import re
 import time
 
 import pytest
 
 from .github_manager import GitHubManager
-
+from Fixtures import parse_test_name
 
 @pytest.fixture(scope="function")
 def github_resource(request):
@@ -17,9 +16,7 @@ def github_resource(request):
     A function-scoped fixture that provides a GitHub manager for test operations.
     Each test gets its own GitHub manager instance.
     """
-    raw_test_name = request.node.name
-    # Sanitize test name to remove pytest parametrization brackets  
-    test_name = re.sub(r'[^\w\-]', '_', raw_test_name)
+    test_name = parse_test_name(request.node.name)
     resource_id = f"github_resource_{test_name}"
     # Verify required environment variables
     required_envars = [

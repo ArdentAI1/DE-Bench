@@ -17,6 +17,7 @@ from github import Github
 import pytest
 
 from .Airflow import Airflow_Local
+from Fixtures import parse_test_name
 
 VALIDATE_ASTRO_INSTALL = "Please check if the Astro CLI is installed and in PATH."
 
@@ -44,14 +45,8 @@ def airflow_resource(request):
     _parse_astro_version()
 
     start_time = time.time()
-    test_name = request.node.name
-    # remove pytest parametrization brackets from the test name
-    test_name = test_name[:test_name.find("[")].strip() if "[" in test_name else test_name.strip()
-    print(f"Original test name: {test_name}")
-    # Sanitize test name for Astro CLI (remove square brackets and other special characters)
-    sanitized_test_name = re.sub(r'[^\w\-]', '_', test_name)
-    unique_id = f"{sanitized_test_name}_{int(time.time())}"
-    print(f"Sanitized unique_id: {unique_id}")
+    test_name = parse_test_name(request.node.name)
+    print(f"Test name: {test_name}")
     print(f"Worker {os.getpid()}: Starting airflow_resource for {test_name}")
 
     # Create Airflow resource
