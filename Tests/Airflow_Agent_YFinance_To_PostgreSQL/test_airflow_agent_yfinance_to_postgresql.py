@@ -208,6 +208,7 @@ def test_airflow_agent_yfinance_to_postgresql(request, airflow_resource, github_
         """)
         row_count = cur.fetchone()[0]
         
+        # TODO: need to update this check because the DAG was hitting the API too much and getting rate limited
         assert row_count > 0, "No Tesla stock data found in the database"
         assert row_count <= 10, "Too many days of data found"
 
