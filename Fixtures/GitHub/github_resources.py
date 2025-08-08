@@ -8,7 +8,7 @@ import time
 import pytest
 
 from Fixtures import parse_test_name
-from .github_manager import GitHubManager
+from Fixtures.GitHub.github_manager import GitHubManager
 
 
 @pytest.fixture(scope="function")
