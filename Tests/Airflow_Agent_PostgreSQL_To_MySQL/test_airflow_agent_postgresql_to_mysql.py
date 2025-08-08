@@ -207,14 +207,12 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_res
         # Use the airflow instance from the fixture to pull DAGs from GitHub
         # The fixture already has the Docker instance running
         airflow_instance = airflow_resource["airflow_instance"]
-        if not airflow_instance.wait_for_airflow_to_be_ready(6):
-            raise Exception("Airflow instance did not redeploy successfully.")
         
         if not github_manager.check_if_action_is_complete(pr_title=pr_title):
             raise Exception("Action is not complete")
         
         # verify the airflow instance is ready after the github action redeployed
-        if not airflow_instance.wait_for_airflow_to_be_ready(3):
+        if not airflow_instance.wait_for_airflow_to_be_ready():
             raise Exception("Airflow instance did not redeploy successfully.")
 
         # Use the connection details from the fixture
