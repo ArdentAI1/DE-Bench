@@ -3,12 +3,12 @@ This module provides a pytest fixture for managing GitHub operations in Airflow 
 """
 
 import os
-import re
 import time
 
 import pytest
 
-from .github_manager import GitHubManager
+from Fixtures import parse_test_name
+from Fixtures.GitHub.github_manager import GitHubManager
 
 
 @pytest.fixture(scope="function")
@@ -17,9 +17,7 @@ def github_resource(request):
     A function-scoped fixture that provides a GitHub manager for test operations.
     Each test gets its own GitHub manager instance.
     """
-    raw_test_name = request.node.name
-    # Sanitize test name to remove pytest parametrization brackets  
-    test_name = re.sub(r'[^\w\-]', '_', raw_test_name)
+    test_name = parse_test_name(request.node.name)
     resource_id = f"github_resource_{test_name}"
     # Verify required environment variables
     required_envars = [
@@ -80,14 +78,12 @@ def github_resource(request):
 
 def cleanup_github_resource(
     github_manager: GitHubManager,
-):
+) -> None:
     """
     Cleans up a GitHub resource, including the temp directory and the created resources in GitHub.
 
-    :param test_name: The name of the test.
-    :param resource_id: The ID of the resource.
-    :param created_resources: The list of created resources.
-    :param test_dir: The path to the test directory.
+    :param GitHubManager github_manager : The GitHubManager instance managing the GitHub operations.
+    :rtype: None
     """
     github_manager.reset_repo_state("dags")
     github_manager.cleanup_requirements()

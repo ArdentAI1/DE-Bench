@@ -391,9 +391,12 @@ class GitHubManager:
         :param str requirements_path: Path to requirements folder
         :rtype: None
         """
-        #TODO: this can be removed once we reset the repo using a commit
         try:
             requirements_file = self.repo.get_contents(os.path.join(requirements_path, "requirements.txt"))
+            # check if the file has no content before resetting it
+            if requirements_file.decoded_content == b"":
+                print("✓ Requirements.txt is already blank")
+                return
             self.repo.update_file(
                 path=requirements_file.path,
                 message="Reset requirements.txt to blank",
