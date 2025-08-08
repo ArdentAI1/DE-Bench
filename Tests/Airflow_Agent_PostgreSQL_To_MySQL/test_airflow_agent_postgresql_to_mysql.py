@@ -82,12 +82,6 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_res
 
     test_steps = [
         {
-            "name": "Database Setup",
-            "description": "Setting up PostgreSQL and MySQL databases with test data",
-            "status": "did not reach",
-            "Result_Message": "",
-        },
-        {
             "name": "Checking Git Branch Existence",
             "description": "Checking if the git branch exists with the right name",
             "status": "did not reach",
@@ -149,9 +143,6 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_res
         tables = mysql_cursor.fetchall()
         print(f"MySQL tables created: {tables}")
 
-        test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = "PostgreSQL and MySQL databases set up successfully with test data"
-
         # set the airflow folder with the correct configs
         # this function is for you to take the configs for the test and set them up however you want. They follow a set structure
         Test_Configs.Configs["services"]["airflow"]["host"] = airflow_resource["base_url"]
@@ -187,13 +178,13 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_res
         print("Waiting 10 seconds for model to create branch and PR...")
         time.sleep(10)  # Give the model time to create the branch and PR
         
-        branch_exists, test_steps[1] = github_manager.verify_branch_exists("feature/sales_profit_pipeline", test_steps[1])
+        branch_exists, test_steps[0] = github_manager.verify_branch_exists("feature/sales_profit_pipeline", test_steps[0])
         if not branch_exists:
-            raise Exception(test_steps[1]["Result_Message"])
+            raise Exception(test_steps[0]["Result_Message"])
 
-        pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
+        pr_exists, test_steps[1] = github_manager.find_and_merge_pr(
             pr_title=pr_title, 
-            test_step=test_steps[2], 
+            test_step=test_steps[1], 
             commit_title=pr_title, 
             merge_method="squash",
             build_info={
@@ -207,14 +198,12 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_res
         # Use the airflow instance from the fixture to pull DAGs from GitHub
         # The fixture already has the Docker instance running
         airflow_instance = airflow_resource["airflow_instance"]
-        if not airflow_instance.wait_for_airflow_to_be_ready(6):
-            raise Exception("Airflow instance did not redeploy successfully.")
         
         if not github_manager.check_if_action_is_complete(pr_title=pr_title):
             raise Exception("Action is not complete")
         
         # verify the airflow instance is ready after the github action redeployed
-        if not airflow_instance.wait_for_airflow_to_be_ready(3):
+        if not airflow_instance.wait_for_airflow_to_be_ready():
             raise Exception("Airflow instance did not redeploy successfully.")
 
         # Use the connection details from the fixture
@@ -266,8 +255,8 @@ def test_airflow_agent_postgresql_to_mysql(request, airflow_resource, github_res
         assert results[1][3] == 120.00, "Incorrect total costs"
         assert float(results[1][4]) == 80.00, "Incorrect total profit"  # 200 - 120
 
-        test_steps[3]["status"] = "passed"
-        test_steps[3]["Result_Message"] = "DAG successfully transferred and transformed data from Postgres to MySQL"
+        test_steps[2]["status"] = "passed"
+        test_steps[2]["Result_Message"] = "DAG successfully transferred and transformed data from Postgres to MySQL"
 
     finally:
         try:

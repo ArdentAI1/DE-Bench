@@ -16,7 +16,7 @@ from github import Github
 
 import pytest
 
-from .Airflow import Airflow_Local
+from Fixtures.Airflow.Airflow import Airflow_Local
 from Fixtures import parse_test_name
 
 VALIDATE_ASTRO_INSTALL = "Please check if the Astro CLI is installed and in PATH."
