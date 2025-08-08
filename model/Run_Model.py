@@ -16,9 +16,9 @@ def run_model(container, task, configs, extra_information = {}):
     #create the ardent client with the specific creds then we go!
     if extra_information.get("useArdent", False) == True:
         Ardent_Client = ArdentClient(
-            public_key=extra_information.get("publicKey", os.getenv("ARDENT_PUBLIC_KEY")),
-            secret_key=extra_information.get("secretKey", os.getenv("ARDENT_SECRET_KEY")),
-            base_url=extra_information.get("base_url", os.getenv("ARDENT_BASE_URL")),
+            public_key=extra_information["publicKey"],
+            secret_key=extra_information["secretKey"],
+            base_url=extra_information["base_url"],
         )
 
     result = Ardent_Client.create_and_execute_job(
