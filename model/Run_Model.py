@@ -18,7 +18,7 @@ def run_model(container, task, configs, extra_information = {}):
         Ardent_Client = ArdentClient(
             public_key=extra_information["publicKey"],
             secret_key=extra_information["secretKey"],
-            base_url=extra_information["base_url"],
+            base_url=os.getenv("ARDENT_BASE_URL"),
         )
 
     result = Ardent_Client.create_and_execute_job(
