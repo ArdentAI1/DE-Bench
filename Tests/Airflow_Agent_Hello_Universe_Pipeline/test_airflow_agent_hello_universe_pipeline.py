@@ -1,11 +1,10 @@
 import importlib
 import os
-import pytest
-import re
 import time
 
-from model.Configure_Model import remove_model_configs
-from model.Configure_Model import set_up_model_configs
+import pytest
+
+from model.Configure_Model import remove_model_configs, set_up_model_configs
 from model.Run_Model import run_model
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
