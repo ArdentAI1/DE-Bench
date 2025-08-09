@@ -1,0 +1,509 @@
+"""
+Helper classes for managing Databricks resources.
+"""
+
+import hashlib
+import importlib
+import json
+import os
+import time
+from threading import Lock
+from typing import Any, Optional
+
+import pytest
+from databricks_api import DatabricksAPI
+
+from Environment.Databricks import get_or_create_cluster
+
+
+class DatabricksManager:
+    """
+    A class to manage Databricks resources such as clusters, jobs, and notebooks.
+
+    :param Optional[dict] config: Configuration dictionary containing Databricks connection details, defaults to None.
+    :param Optional[pytest.FixtureRequest] request: pytest.FixtureRequest object containing the test request, defaults to None.
+    """
+
+    def __init__(self, config: Optional[dict] = None, request: Optional[pytest.FixtureRequest] = None):
+        self.config = self.verify_config_and_envars(config)
+        self.status: str = "creating"  # Initial status
+        self.error: str = ""  # Error message if any
+        self.token: str = config["token"]
+        self.host: str = config["host"] if config["host"].startswith("https://") else f"https://{config['host']}"
+        self.cluster_id: Optional[str] = config.get("cluster_id", os.getenv("DATABRICKS_CLUSTER_ID"))
+        self.client = None  # Will be set by create_databricks_client
+        self.creation_time = time.time()
+        self.worker_pid = os.getpid()
+        self.is_shared = False
+        self.created_by_us = False
+        self.create_databricks_client(request)
+        self.cluster_config_hash = self.get_cluster_config_hash()
+        self.config_hash = self.cluster_config_hash
+        self.headers = {
+            "Authorization": f"Bearer {self.config['token']}",
+            "Content-Type": "application/json"
+        }
+        self.shared_clusters = {}
+        self.cluster_locks = {}
+        self.cluster_usage_count = {}
+        self.registry_lock = Lock()  # Protects the global registries themselves
+
+    def verify_config_and_envars(self, config: Optional[dict] = None) -> dict[str, Any]:
+        """
+        Method to verify and return the configuration dictionary by using environment variables or provided config.
+
+        :param Optional[dict] config: Config dictionary containing Databricks connection details, defaults to None.
+        :return: Verified configuration dictionary with host, token, and cluster_id.
+        :rtype: dict[str, Any]
+        """
+        backup_config = {
+            "host": os.getenv("DATABRICKS_HOST", ""),
+            "token": os.getenv("DATABRICKS_TOKEN", ""),
+            "cluster_id": os.getenv("DATABRICKS_CLUSTER_ID", "")
+        }
+        if config is None:
+            config = {}
+        for key, env_var in backup_config.items():
+            if key not in config:
+                config[key] = os.getenv(env_var, "")
+        if missing_keys := [key for key in backup_config.keys() if key not in config or config[key] == ""]:
+            raise ValueError(f"Missing required keys in config: {", ".join(missing_keys)}")
+        return config
+
+    def get_cluster_config_hash(self) -> str:
+        """
+        Create a unique hash for cluster configuration, excluding test-specific fields.
+        Only configuration that affects cluster creation should be included.
+
+        :return: Unique hash for cluster configuration.
+        :rtype: str
+        """
+        cluster_relevant_config = {
+            "host": self.host,
+            "cluster_name": self.config.get("cluster_name", ""),
+            "node_type_id": self.config.get("node_type_id", ""),
+            "spark_version": self.config.get("spark_version", ""),
+            "num_workers": self.config.get("num_workers", 1),
+            "autotermination_minutes": self.config.get("autotermination_minutes", 120),
+            "spark_conf": self.config.get("spark_conf", {}),
+            "aws_attributes": self.config.get("aws_attributes", {}),
+            # Excludes: resource_id, test_id, unique_message, delta_table_path, etc.
+        }
+        config_str = json.dumps(cluster_relevant_config, sort_keys=True)
+        return hashlib.md5(config_str.encode()).hexdigest()
+
+    def wait_for_cluster_creation(self, timeout=300, poll_interval=5, fallback=True) -> "DatabricksManager":
+        """
+        Wait for another worker to finish creating the cluster.
+
+        :param int timeout: Maximum time to wait for cluster creation, defaults to 300 seconds.
+        :param int poll_interval: Time to wait between checks, defaults to 5 seconds.
+        :param bool fallback: Whether to create a fallback cluster if the shared cluster creation fails, defaults to True.
+        :raises RuntimeError: If shared cluster creation fails and fallback is disabled.
+        :return: DataBricks manager instance with shared cluster information.
+        :rtype: DatabricksManager
+        """
+        start_time = time.time()
+        print(f"Worker {os.getpid()}: Waiting for shared cluster creation (config_hash: {self.cluster_config_hash[:8]}..., timeout={timeout}s)")
+        
+        while time.time() - start_time < timeout:
+            time.sleep(poll_interval)
+            
+            if self.cluster_config_hash in self.shared_clusters:
+                cluster_info = self.shared_clusters[self.cluster_config_hash]
+                
+                if cluster_info.status == "ready":
+                    with self.registry_lock:
+                        self.cluster_usage_count[self.cluster_config_hash] += 1
+                    print(f"Worker {os.getpid()}: Shared cluster {cluster_info.cluster_id} is now ready")
+                    self.cluster_id = cluster_info.cluster_id
+                    self.created_by_us = False
+                    self.creation_time = cluster_info.creation_time
+                    self.worker_pid = os.getpid()
+                    self.is_shared = True
+                    self.config_hash = self.cluster_config_hash
+                    self.client = cluster_info.client_info
+                    return self                
+                elif cluster_info.status == "failed":
+                    print(f"Worker {os.getpid()}: Shared cluster creation failed: {cluster_info.error}")
+                    break
+        
+        # Timeout or failure - handle based on fallback setting
+        if fallback:
+            print(f"Worker {os.getpid()}: Timeout/failure waiting for shared cluster, creating fallback cluster")
+            return self.create_fallback_cluster()
+        else:
+            error_msg = "Shared cluster creation failed/timed out and fallback is disabled"
+            print(f"Worker {os.getpid()}: {error_msg}")
+            raise RuntimeError(error_msg)
+
+    def create_fallback_cluster(self) -> "DatabricksManager":
+        """
+        Create a fallback cluster when shared cluster creation fails or times out.
+
+        :return: DatabricksManager instance with fallback cluster information.
+        :rtype: DatabricksManager
+        """
+        print(f"Worker {os.getpid()}: Creating fallback cluster")
+        cluster_id, cluster_created_by_us = get_or_create_cluster(self.client, self.config)
+        
+        self.cluster_id = cluster_id
+        self.created_by_us = cluster_created_by_us
+        self.creation_time = time.time()
+        self.is_shared = False
+        self.status = "ready"
+        return self
+
+    def create_new_shared_cluster(self) -> "DatabricksManager":
+        """
+        Create a new shared cluster and register it in the global registry.
+
+        :return: DatabricksManager instance with new shared cluster information.
+        :rtype: DatabricksManager
+        """        
+        print(f"Worker {os.getpid()}: Creating new shared cluster (config_hash: {self.cluster_config_hash[:8]}...)")
+        
+        with self.registry_lock:
+            self.shared_clusters[self.cluster_config_hash] = self
+            self.cluster_usage_count[self.cluster_config_hash] = 1  # This worker will use it
+        
+        try:
+            # Actually create the cluster
+            cluster_id, cluster_created_by_us = get_or_create_cluster(self.client, self.config)
+            
+            print(f"Worker {os.getpid()}: Successfully created shared cluster {cluster_id}")
+            
+            self.cluster_id = cluster_id
+            self.created_by_us = cluster_created_by_us
+            self.worker_pid = os.getpid()
+            self.creation_time = time.time()
+            self.is_shared = True
+            self.status = "ready"
+            return self
+            
+        except Exception as e:
+            # Mark as failed on error
+            self.status = "failed"
+            self.error = str(e)
+            
+            with self.registry_lock:
+                self.cluster_usage_count[self.cluster_config_hash] -= 1  # This worker won't use it
+            
+            print(f"Worker {os.getpid()}: Failed to create shared cluster: {e}")
+            
+            # Fall back to creating our own cluster
+            return self.create_fallback_cluster()
+
+    def create_shared_cluster_with_mutex(self, timeout: Optional[int] = 300, fallback: Optional[bool] = True) -> "DatabricksManager":
+        """
+        Thread-safe shared cluster creation with mutex/wait mechanism.
+
+        :param Optional[int] timeout: Maximum time to wait for cluster creation, defaults to 300 seconds.
+        :param Optional[bool] fallback: Whether to create a fallback cluster if the shared cluster creation fails, defaults to True.
+        :return: DatabricksManager instance with shared cluster information.
+        :rtype: None
+        """
+        print(f"Worker {os.getpid()}: Requesting shared cluster (config_hash: {self.cluster_config_hash[:8]}..., timeout={timeout}s)")
+        
+        # Get or create lock for this config
+        with self.registry_lock:
+            if self.cluster_config_hash not in self.cluster_locks:
+                self.cluster_locks[self.cluster_config_hash] = Lock()
+                self.cluster_usage_count[self.cluster_config_hash] = 0
+        
+        with self.cluster_locks[self.cluster_config_hash]:
+            # Check if cluster already exists and is ready
+            if self.cluster_config_hash in self.shared_clusters:
+                cluster_info = self.shared_clusters[self.cluster_config_hash]
+                
+                if cluster_info.status == "ready":
+                    # Cluster is ready, increment usage and return
+                    with self.registry_lock:
+                        self.cluster_usage_count[self.cluster_config_hash] += 1
+                    print(f"Worker {os.getpid()}: Reusing existing shared cluster {cluster_info.cluster_id}")
+                    self.cluster_id = cluster_info.cluster_id
+                    self.created_by_us = False
+                    self.creation_time = cluster_info.creation_time
+                    self.worker_pid = os.getpid()
+                    self.is_shared = True
+                    self.config_hash = self.cluster_config_hash
+                    self.client = cluster_info.client_info
+                elif cluster_info.status == "failed":
+                    # Previous creation failed, clean up and try again
+                    print(f"Worker {os.getpid()}: Previous shared cluster creation failed, retrying")
+                    with self.registry_lock:
+                        if self.cluster_config_hash in self.shared_clusters:
+                            del self.shared_clusters[self.cluster_config_hash]
+                        self.cluster_usage_count[self.cluster_config_hash] = 0
+                
+                elif cluster_info.status == "creating":
+                    # Another worker is creating, wait for it
+                    print(f"Worker {os.getpid()}: Another worker ({cluster_info.creator_pid}) is creating shared cluster")
+                    # Release the config-specific lock to allow creator to work
+        
+        # Check if we need to wait for creation (outside the lock)
+        if self.cluster_config_hash in self.shared_clusters and self.shared_clusters[self.cluster_config_hash].status == "creating":
+            return self.wait_for_cluster_creation(timeout=timeout, fallback=fallback)
+        
+        # We need to create the cluster
+        print(f"Worker {os.getpid()}: Creating new shared cluster (config_hash: {self.cluster_config_hash[:8]}...)")
+        return self.create_new_shared_cluster()
+
+    def cleanup_shared_cluster(self) -> None:
+        """
+        Coordinate cleanup of shared clusters - only delete when no tests are using it.
+
+        :rtype: None
+        """
+        if self.cluster_config_hash not in self.cluster_usage_count:
+            print(f"Worker {os.getpid()}: No usage count found for cluster {self.cluster_id}")
+            return
+        
+        print(f"Worker {os.getpid()}: Cleaning up shared cluster {self.cluster_id} (config_hash: {self.cluster_config_hash[:8]}...)")
+        
+        should_delete = False
+        
+        with self.registry_lock:
+            if self.cluster_config_hash in self.cluster_usage_count:
+                self.cluster_usage_count[self.cluster_config_hash] -= 1
+                remaining_count = self.cluster_usage_count[self.cluster_config_hash]
+                
+                if remaining_count <= 0:
+                    # No more tests using this cluster, safe to delete
+                    if self.cluster_config_hash in self.shared_clusters:
+                        cluster_info = self.shared_clusters[self.cluster_config_hash]
+                        should_delete = cluster_info.created_by_us
+                        
+                        # Clean up registry
+                        del self.shared_clusters[self.cluster_config_hash]
+                        del self.cluster_usage_count[self.cluster_config_hash]
+                        if self.cluster_config_hash in self.cluster_locks:
+                            del self.cluster_locks[self.cluster_config_hash]
+                else:
+                    print(f"Worker {os.getpid()}: Shared cluster {self.cluster_id} still in use by {remaining_count} other test(s)")
+        
+        if should_delete:
+            print(f"Worker {os.getpid()}: Deleting shared cluster {self.cluster_id} (last user)")
+            try:
+                self.client.clusters.delete_cluster(self.cluster_id)
+                print(f"Worker {os.getpid()}: Successfully deleted shared cluster {self.cluster_id}")
+            except Exception as e:
+                print(f"Warning: Could not delete shared cluster {self.cluster_id}: {e}")
+        else:
+            print(f"Worker {os.getpid()}: Not deleting shared cluster {self.cluster_id} (not creator or still in use)")
+
+    def create_databricks_client(self, request: Optional[pytest.FixtureRequest] = None) -> None:
+        """
+        Shared method to create a Databricks API client.
+        Can be used by fixtures or directly by test code.
+
+        :param Optional[pytest.FixtureRequest] request: pytest.FixtureRequest object containing the test request.
+        :raises ValueError: If Databricks credentials are not configured.
+        :raises pytest.skip: If Databricks configuration is not found and request is provided.
+        :rtype: None
+        """
+        start_time = time.time()
+        test_name = request.node.name if request and hasattr(request.node, 'name') else "direct_call"
+        print(f"Worker {os.getpid()}: Starting databricks_client for {test_name}")
+        
+        # Try to get config from param first, then fall back to test directory detection
+        if not self.config:
+            if request:
+                current_dir = os.path.dirname(os.path.abspath(request.fspath))
+                parent_dir_name = os.path.basename(current_dir)
+                try:
+                    module_path = f"Tests.{parent_dir_name}.Test_Configs"
+                    Test_Configs = importlib.import_module(module_path)
+                    self.config = Test_Configs.Configs["services"]["databricks"]
+                    self.token = self.config.get("token")
+                except (ImportError, KeyError, ValueError) as e:
+                    print(f"Worker {os.getpid()}: Error importing Databricks configuration: {e}")
+                    raise e
+            else:
+                raise ValueError("Either config parameter or request parameter must be provided")
+        
+        # Check if required environment variables are set
+        if not self.config["host"] or not self.config["token"]:
+            error_msg = "Databricks credentials not configured. Set DATABRICKS_HOST and DATABRICKS_TOKEN environment variables."
+            if request:
+                pytest.skip(error_msg)
+            else:
+                raise ValueError(error_msg)
+        
+        self.client = DatabricksAPI(host=self.host, token=self.config["token"])
+        
+        setup_time = time.time() - start_time
+        print(f"Worker {os.getpid()}: Databricks client setup took {setup_time:.2f}s")
+
+    def create_shared_cluster(self, timeout: Optional[int] = 300, fallback: Optional[bool] = True) -> "DatabricksManager":
+        """
+        Shared method to create or get a shared cluster with mutex coordination.
+        Can be used by fixtures or directly by test code.
+
+        :param Optional[int] timeout: Maximum time to wait for cluster creation, defaults to 300 seconds.
+        :param Optional[bool] fallback: Whether to create a fallback cluster if the shared cluster creation fails, defaults to True.
+        :return: DatabricksManager instance with shared cluster information.
+        :rtype: DatabricksManager
+        """
+        start_time = time.time()
+        print(f"Worker {os.getpid()}: Starting shared_cluster setup with mutex")
+        
+        # Use the new mutex-based approach
+        databricks_manager = self.create_shared_cluster_with_mutex(timeout=timeout, fallback=fallback)
+        
+        setup_time = time.time() - start_time
+        print(f"Worker {os.getpid()}: Shared cluster setup took {setup_time:.2f}s")
+        print(f"Worker {os.getpid()}: Using cluster {self.cluster_id} (created_by_us: {self.created_by_us})")
+        return databricks_manager
+
+    @staticmethod
+    def extract_warehouse_id_from_http_path(http_path: str) -> Optional[str]:
+        """
+        Extract warehouse ID from HTTP path like /sql/1.0/warehouses/abc123
+
+        :param str http_path: HTTP path to extract warehouse ID from.
+        :return: Warehouse ID or None if not found.
+        :rtype: Optional[str]
+        """
+        if "/warehouses/" in http_path:
+            return http_path.split("/warehouses/")[-1]
+        return None
+
+    def execute_sql_query(
+            self, 
+            warehouse_id: str, 
+            sql_query: str, 
+            catalog: Optional[str] = "hive_metastore", 
+            schema: Optional[str] = "default", 
+            timeout: Optional[int] = 30
+        ) -> dict[str, Any]:
+        """
+        Execute SQL query using Databricks SQL Statement Execution API
+
+        :param str warehouse_id: Warehouse ID to execute SQL query on.
+        :param str sql_query: SQL query to execute.
+        :param Optional[str] catalog: Catalog to execute SQL query on, defaults to "hive_metastore".
+        :param Optional[str] schema: Schema to execute SQL query on, defaults to "default".
+        :param Optional[int] timeout: Timeout for SQL query execution, defaults to 30 seconds.
+        :return: Dictionary containing query result.
+        :rtype: dict[str, Any]
+        """        
+        from urllib.parse import urljoin
+
+        import requests
+
+        # Databricks SQL API requires wait_timeout to be 0 or between 5-50 seconds
+        sql_timeout = min(max(timeout, 5), 50) if timeout > 0 else 0
+        
+        # Prepare request payload for SQL execution
+        payload = {
+            "warehouse_id": warehouse_id,
+            "catalog": catalog,
+            "schema": schema,
+            "statement": sql_query,
+            "wait_timeout": f"{sql_timeout}s",
+            "format": "JSON_ARRAY",
+            "disposition": "INLINE"
+        }
+
+        try:
+            # Execute SQL statement
+            response = requests.post(
+                urljoin(self.host, "/api/2.0/sql/statements/"),
+                headers=self.headers,
+                json=payload,
+                timeout=timeout + 10  # Add buffer for HTTP timeout
+            )
+            
+            if response.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {response.text}",
+                    "status_code": response.status_code
+                }
+            
+            result = response.json()
+            
+            # Check if statement executed successfully
+            if result.get("status", {}).get("state") == "SUCCEEDED":
+                return {
+                    "success": True,
+                    "data": result.get("result", {}).get("data_array", []),
+                    "schema": result.get("manifest", {}).get("schema", {}),
+                    "row_count": result.get("manifest", {}).get("total_row_count", 0)
+                }
+            elif result.get("status", {}).get("state") == "PENDING":
+                return {
+                    "success": False,
+                    "error": f"Query timed out after {timeout} seconds",
+                    "state": "PENDING"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Query failed with state: {result.get('status', {}).get('state')}",
+                    "details": result
+                }
+                
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "error": f"Request failed: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Unexpected error: {str(e)}"
+            }
+        
+    def _cleanup_shared_resources(self, resource_data: dict[str, Any]) -> None:
+        """
+        Cleanup shared resources.
+
+        :param dict[str, Any] resource_data: Dictionary containing resource data.
+        :rtype: None
+        """
+        cluster_id = resource_data["cluster_id"]
+        cluster_created_by_us = resource_data["cluster_created_by_us"]
+
+        # Handle shared cluster cleanup with coordination
+        if resource_data.get("is_shared_cluster", False) and resource_data.get("cluster_config_hash"):
+            self.cleanup_shared_cluster()
+        elif cluster_id and not resource_data.get("is_shared_cluster", False):
+            # Handle non-shared cluster cleanup (fallback clusters, etc.)
+            if cluster_created_by_us:
+                try:
+                    self.client.clusters.delete_cluster(cluster_id)
+                    print(f"Worker {os.getpid()}: Deleted non-shared cluster {cluster_id}")
+                except Exception as e:
+                    print(f"Warning: Could not delete non-shared cluster {cluster_id}: {e}")            
+
+    def cleanup_databricks_resources(self, resources: list[dict[str, Any]], resource_data: dict[str, Any]) -> None:
+        """
+        Cleanup Databricks resources.   
+
+        :param list[dict[str, Any]] resources: List of resources to cleanup.
+        :param dict[str, Any] resource_data: Dictionary containing resource data.
+        :rtype: None
+        """
+        warning_message = "An error occurred during cleanup"
+        try:
+            for resource in reversed(resources):
+                if resource["type"] == "table":
+                    warning_message = f"Could not drop table {resource['full_name']}"
+                    self.client.sql.execute_query(f"DROP TABLE IF EXISTS {resource['full_name']}")
+                elif resource["type"] == "database":
+                    warning_message = f"Could not drop database {resource['name']}"
+                    self.client.sql.execute_query(f"DROP DATABASE IF EXISTS {resource['name']} CASCADE")
+                elif resource["type"] == "notebook":
+                    warning_message = f"Could not delete notebook {resource['path']}"
+                    self.client.workspace.delete(resource["path"], recursive=False)
+                elif resource["type"] == "cluster" and resource.get("created_by_us", False):
+                    # This handles non-shared clusters
+                    warning_message = f"Could not delete cluster {resource['cluster_id']}"
+                    self.client.clusters.delete_cluster(resource["cluster_id"])
+        except Exception as e:
+            print(f"{warning_message}: {e}")
+        
+        self._cleanup_shared_resources(resource_data)
+        print(f"Worker {os.getpid()}: Databricks resource {resource_data['resource_id']} cleaned up successfully")
