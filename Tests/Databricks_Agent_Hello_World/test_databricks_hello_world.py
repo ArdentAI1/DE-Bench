@@ -1,27 +1,23 @@
+import importlib
 import os
 import time
-import json
-import pytest
-import importlib
-import requests
-from databricks_api import DatabricksAPI
 
-from model.Run_Model import run_model
-from model.Configure_Model import set_up_model_configs, remove_model_configs
+import pytest
+
 from Environment.Databricks import (
-    get_or_create_cluster,
     setup_databricks_environment,
     cleanup_databricks_environment,
     extract_warehouse_id_from_http_path,
     execute_sql_query
 )
+from model.Configure_Model import set_up_model_configs, remove_model_configs
+from model.Run_Model import run_model
 
 # Import test configurations
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
-
 
 
 def validate_hello_world_results(client, config, timeout=60):
