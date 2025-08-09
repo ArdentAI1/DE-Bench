@@ -22,8 +22,6 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
-# Databricks resource fixture is now imported from Fixtures/Databricks via conftest.py
-
 
 
 def validate_hello_world_results(client, config, timeout=60):
@@ -164,7 +162,8 @@ def update_test_step(test_steps, step_name, status, message):
 ], indirect=True)
 @pytest.mark.databricks
 @pytest.mark.hello_world
-def test_databricks_hello_world(request, databricks_resource):
+@pytest.mark.parametrize("supabase_account_resource", [{"useArdent": True}], indirect=True)
+def test_databricks_hello_world(request, databricks_resource, supabase_account_resource):
     """
     Test Databricks Hello World with unique string validation:
     - Uses databricks_resource fixture for setup
@@ -230,7 +229,13 @@ def test_databricks_hello_world(request, databricks_resource):
         update_test_step(test_steps, "Environment Setup", "passed", f"Environment setup completed for test ID: {config['test_id']}")
         
         # Step 3: Set up model configuration
-        config_results = set_up_model_configs(Configs=Test_Configs.Configs)
+        config_results = set_up_model_configs(
+            Configs=Test_Configs.Configs,
+            custom_info={
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
+        )
         update_test_step(test_steps, "Model Configuration", "passed", "Model configuration completed successfully")
         
         # Step 4: Run model
@@ -238,7 +243,12 @@ def test_databricks_hello_world(request, databricks_resource):
         result = run_model(
             container=None,
             task=Test_Configs.User_Input,
-            configs=Test_Configs.Configs
+            configs=Test_Configs.Configs,
+            extra_information={
+                "useArdent": True,
+                "publicKey": supabase_account_resource["publicKey"],
+                "secretKey": supabase_account_resource["secretKey"],
+            }
         )
         model_end_time = time.time()
         request.node.user_properties.append(("model_runtime", model_end_time - model_start_time))
