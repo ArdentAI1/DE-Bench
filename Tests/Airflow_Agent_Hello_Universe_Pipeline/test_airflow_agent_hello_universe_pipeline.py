@@ -31,7 +31,7 @@ def test_airflow_agent_hello_universe_pipeline(request, airflow_resource, github
     )
     
     # Use the airflow_resource fixture - the Docker instance is already running
-    print(f"=== Starting Hello Universe Airflow Pipeline Test ===")
+    print("=== Starting Hello Universe Airflow Pipeline Test ===")
     print(f"Using Airflow instance from fixture: {airflow_resource['resource_id']}")
     print(f"Using GitHub instance from fixture: {github_resource['resource_id']}")
     print(f"Airflow base URL: {airflow_resource['base_url']}")
