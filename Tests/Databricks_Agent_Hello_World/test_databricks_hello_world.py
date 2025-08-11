@@ -248,7 +248,7 @@ def test_databricks_hello_world(request, databricks_resource, supabase_account_r
         # Step 5: Validate Results
         print(f"Starting validation for unique message: {config['unique_message']}")
         try:
-            validation_results = validate_hello_world_results(databricks_client, config)
+            validation_results = validate_hello_world_results(config, databricks_manager)
             print(f"Validation Results: {validation_results}")
             
             # Check if validation passed
