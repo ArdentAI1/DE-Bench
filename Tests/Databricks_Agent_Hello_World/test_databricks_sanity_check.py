@@ -30,7 +30,7 @@ module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
 # Import validation function from main test
-from Tests.Databricks_Hello_World.test_databricks_hello_world import validate_hello_world_results, update_test_step
+from Tests.Databricks_Agent_Hello_World.test_databricks_hello_world import validate_hello_world_results, update_test_step
 
 
 def create_sanity_check_config():

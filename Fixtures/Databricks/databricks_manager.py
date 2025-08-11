@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import pytest
 from databricks_api import DatabricksAPI
+from dotenv import load_dotenv
 
 from Environment.Databricks import get_or_create_cluster
 
@@ -28,9 +29,9 @@ class DatabricksManager:
         self.config = self.verify_config_and_envars(config)
         self.status: str = "creating"  # Initial status
         self.error: str = ""  # Error message if any
-        self.token: str = config["token"]
-        self.host: str = config["host"] if config["host"].startswith("https://") else f"https://{config['host']}"
-        self.cluster_id: Optional[str] = config.get("cluster_id", os.getenv("DATABRICKS_CLUSTER_ID"))
+        self.token: str = self.config["token"]
+        self.host: str = self.config["host"] if self.config["host"].startswith("https://") else f"https://{self.config['host']}"
+        self.cluster_id: Optional[str] = self.config.get("cluster_id", os.getenv("DATABRICKS_CLUSTER_ID"))
         self.client = None  # Will be set by create_databricks_client
         self.creation_time = time.time()
         self.worker_pid = os.getpid()
@@ -56,6 +57,9 @@ class DatabricksManager:
         :return: Verified configuration dictionary with host, token, and cluster_id.
         :rtype: dict[str, Any]
         """
+        # Load environment variables from .env file
+        load_dotenv()
+        
         backup_config = {
             "host": os.getenv("DATABRICKS_HOST", ""),
             "token": os.getenv("DATABRICKS_TOKEN", ""),
@@ -63,9 +67,9 @@ class DatabricksManager:
         }
         if config is None:
             config = {}
-        for key, env_var in backup_config.items():
-            if key not in config:
-                config[key] = os.getenv(env_var, "")
+        for key, env_value in backup_config.items():
+            if key not in config or not config[key]:
+                config[key] = env_value
         if missing_keys := [key for key in backup_config.keys() if key not in config or config[key] == ""]:
             raise ValueError(f"Missing required keys in config: {", ".join(missing_keys)}")
         return config

@@ -72,8 +72,15 @@ def supabase_account_resource(request):
             timeout=10
         )
 
-        publicKey = token_creation_response.json()["publicKey"]
-        secretKey = token_creation_response.json()["secretKey"]
+        # Check if the response was successful before trying to parse JSON
+        if not token_creation_response.ok:
+            raise requests.exceptions.ConnectionError(
+                f"Failed to create keys: HTTP {token_creation_response.status_code} - {token_creation_response.text}"
+            )
+
+        token_data = token_creation_response.json()
+        publicKey = token_data["publicKey"]
+        secretKey = token_data["secretKey"]
 
 
         response["publicKey"] = publicKey
