@@ -68,7 +68,7 @@ def databricks_resource(request):
     elif "cluster_config" in build_template:
         # Create a specific cluster for this resource
         cluster_config = {**config, **build_template["cluster_config"]}
-        cluster_id, cluster_created_by_us = databricks_manager.get_or_create_cluster()
+        cluster_id, cluster_created_by_us = databricks_manager.get_or_create_cluster(cluster_config)
         created_resources.append({"type": "cluster", "cluster_id": cluster_id, "created_by_us": cluster_created_by_us})
         is_shared_cluster = False
     
