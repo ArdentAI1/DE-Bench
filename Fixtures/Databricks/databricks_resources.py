@@ -5,7 +5,6 @@ from threading import Lock
 
 import pytest
 
-from Environment.Databricks import get_or_create_cluster
 from Fixtures.Databricks.databricks_manager import DatabricksManager
 
 # Global registry for shared cluster coordination
@@ -69,7 +68,7 @@ def databricks_resource(request):
     elif "cluster_config" in build_template:
         # Create a specific cluster for this resource
         cluster_config = {**config, **build_template["cluster_config"]}
-        cluster_id, cluster_created_by_us = get_or_create_cluster(databricks_manager.client, cluster_config)
+        cluster_id, cluster_created_by_us = databricks_manager.get_or_create_cluster()
         created_resources.append({"type": "cluster", "cluster_id": cluster_id, "created_by_us": cluster_created_by_us})
         is_shared_cluster = False
     
@@ -168,12 +167,12 @@ def databricks_resource(request):
         "description": f"A Databricks resource for {test_name}",
         "status": "active",
         "created_resources": created_resources,
-        "client": databricks_manager.client,
         "config": config,
         "cluster_id": cluster_id,
         "cluster_created_by_us": cluster_created_by_us,
         "is_shared_cluster": is_shared_cluster,
-        "cluster_config_hash": cluster_config_hash
+        "cluster_config_hash": cluster_config_hash,
+        "databricks_manager": databricks_manager
     }
     
     print(f"Worker {os.getpid()}: Created Databricks resource {resource_id}")
