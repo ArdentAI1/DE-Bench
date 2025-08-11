@@ -65,9 +65,12 @@ def databricks_resource(request):
         cluster_config_hash = databricks_manager.cluster_config_hash
         is_shared_cluster = databricks_manager.is_shared
         # Don't add to created_resources since this is a shared cluster managed globally
-    elif "cluster_config" in build_template:
+    else:
+        if "cluster_config" in build_template:
+            cluster_config = {**config, **build_template["cluster_config"]}
+        else:
+            cluster_config = config
         # Create a specific cluster for this resource
-        cluster_config = {**config, **build_template["cluster_config"]}
         cluster_id, cluster_created_by_us = databricks_manager.get_or_create_cluster(cluster_config)
         created_resources.append({"type": "cluster", "cluster_id": cluster_id, "created_by_us": cluster_created_by_us})
         is_shared_cluster = False
