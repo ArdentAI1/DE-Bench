@@ -14,7 +14,6 @@ import pytest
 from databricks_api import DatabricksAPI
 from dotenv import load_dotenv
 
-from Environment.Databricks import get_or_create_cluster
 from Fixtures import parse_test_name
 from Fixtures.Databricks.cache_manager import CacheManager
 
@@ -205,9 +204,7 @@ class DatabricksManager:
         :rtype: DatabricksManager
         """
         print(f"Worker {os.getpid()}: Creating fallback cluster")
-        cluster_id, cluster_created_by_us = get_or_create_cluster(
-            self.client, self.config
-        )
+        cluster_id, cluster_created_by_us = self.get_or_create_cluster()
 
         self.cluster_id = cluster_id
         self.created_by_us = cluster_created_by_us
@@ -235,9 +232,7 @@ class DatabricksManager:
 
         try:
             # Actually create the cluster
-            cluster_id, cluster_created_by_us = get_or_create_cluster(
-                self.client, self.config
-            )
+            cluster_id, cluster_created_by_us = self.get_or_create_cluster()
 
             print(
                 f"Worker {os.getpid()}: Successfully created shared cluster {cluster_id}"
@@ -285,9 +280,7 @@ class DatabricksManager:
 
         try:
             # Actually create the cluster
-            cluster_id, cluster_created_by_us = get_or_create_cluster(
-                self.client, self.config
-            )
+            cluster_id, cluster_created_by_us = self.get_or_create_cluster()
 
             print(
                 f"Worker {os.getpid()}: Successfully created non-shared cluster {cluster_id}"
@@ -709,6 +702,7 @@ class DatabricksManager:
         print(f"Creating test cluster: {self.test_name}")
         response = self.client.cluster.create_cluster(**cluster_config)
         cluster_id = response["cluster_id"]
+        self.cluster_id = cluster_id
         
         # Wait for cluster to start
         print(f"Waiting for cluster {cluster_id} to start...")
@@ -733,7 +727,7 @@ class DatabricksManager:
     
     def get_or_create_cluster(self) -> Tuple[str, bool]:
         """Get existing cluster or create a new one if needed, with caching support"""
-        cluster_id = self.config.get("cluster_id")
+        cluster_id = self.config.get("cluster_id", getattr(self, "cluster_id"))
         
         # Check cache first
         cache_data = self.cache_manager.load_cluster_cache()
