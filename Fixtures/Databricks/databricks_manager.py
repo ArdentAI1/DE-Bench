@@ -8,13 +8,15 @@ import json
 import os
 import time
 from threading import Lock
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import pytest
 from databricks_api import DatabricksAPI
 from dotenv import load_dotenv
 
 from Environment.Databricks import get_or_create_cluster
+from Fixtures import parse_test_name
+from Fixtures.Databricks.cache_manager import CacheManager
 
 
 class DatabricksManager:
@@ -23,14 +25,18 @@ class DatabricksManager:
 
     :param Optional[dict] config: Configuration dictionary containing Databricks connection details, defaults to None.
     :param Optional[pytest.FixtureRequest] request: pytest.FixtureRequest object containing the test request, defaults to None.
+    :param Optional[int] default_expiry_hours: Default expiry time for cached clusters, defaults to 1 hour.
     """
 
     def __init__(
         self,
         config: Optional[dict] = None,
         request: Optional[pytest.FixtureRequest] = None,
+        default_expiry_hours: Optional[int] = 1,
     ):
         self.config: dict = self.verify_config_and_envars(config)
+        self.test_name: str = parse_test_name(getattr(request.node, "name", "direct_call"))
+        self.cache_manager: CacheManager = CacheManager(default_expiry_hours=default_expiry_hours)
         self.status: str = "creating"  # Initial status
         self.error: str = ""  # Error message if any
         self.token: str = self.config["token"]
@@ -92,6 +98,28 @@ class DatabricksManager:
                 f"Missing required keys in config: {', '.join(missing_keys)}"
             )
         return config
+
+    def setup_databricks_environment(self, cluster_id: str, config: dict[str, Any]) -> None:
+        """
+        Set up the Databricks environment for testing.
+
+        :param str cluster_id: The ID of the cluster to set up the environment for.
+        :param dict[str, Any] config: Configuration dictionary containing Databricks connection details.
+        :rtype: None
+        """
+        # Update config with the cluster_id we're using
+        config["cluster_id"] = cluster_id
+
+        # Ensure output directory is clean
+        try:
+            self.client.dbfs.delete(
+                path=config["delta_table_path"].replace("dbfs:", ""),
+                recursive=True
+            )
+            print(f"Cleaned up existing output directory: {config['delta_table_path']}")
+        except Exception as e:
+            if "not found" not in str(e).lower():
+                print(f"Warning during cleanup: {e}")
 
     def get_cluster_config_hash(self) -> str:
         """
@@ -428,12 +456,7 @@ class DatabricksManager:
         :rtype: None
         """
         start_time = time.time()
-        test_name = (
-            request.node.name
-            if request and hasattr(request.node, "name")
-            else "direct_call"
-        )
-        print(f"Worker {os.getpid()}: Starting databricks_client for {test_name}")
+        print(f"Worker {os.getpid()}: Starting databricks_client for {self.test_name}")
 
         # Try to get config from param first, then fall back to test directory detection
         if not self.config:
@@ -658,3 +681,170 @@ class DatabricksManager:
         print(
             f"Worker {os.getpid()}: Databricks resource {resource_data['resource_id']} cleaned up successfully"
         )
+
+    def create_test_cluster(self) -> str:
+        """Create a test cluster for the Hello World test"""
+        cluster_config = {
+            "cluster_name": self.test_name,
+            "spark_version": "13.3.x-scala2.12",  # Latest LTS version
+            "node_type_id": "m5.large",  # Small, supported instance type
+            "num_workers": 0,  # Single node cluster to minimize cost
+            "autotermination_minutes": 120,  # Auto-terminate after 2 hours (longer than our cache)
+            "spark_conf": {
+                "spark.databricks.cluster.profile": "singleNode",
+                "spark.master": "local[*]"
+            },
+            "aws_attributes": {
+                "ebs_volume_type": "GENERAL_PURPOSE_SSD",
+                "ebs_volume_count": 1,
+                "ebs_volume_size": 100  # Minimum size in GB
+            },
+            "custom_tags": {
+                "purpose": "de-bench-hello-world-testing",
+                "auto-created": "true",
+                "cached": "true"
+            }
+        }
+        
+        print(f"Creating test cluster: {self.test_name}")
+        response = self.client.cluster.create_cluster(**cluster_config)
+        cluster_id = response["cluster_id"]
+        
+        # Wait for cluster to start
+        print(f"Waiting for cluster {cluster_id} to start...")
+        max_wait = 1200  # 20 minutes timeout
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            cluster_info = self.client.cluster.get_cluster(cluster_id)
+            state = cluster_info["state"]
+
+            print(f"Cluster {cluster_id} is in state: {state}")
+            
+            if state == "RUNNING":
+                print(f"Cluster {cluster_id} is now running")
+                return cluster_id
+            elif state in ["ERROR", "TERMINATED"]:
+                raise Exception(f"Cluster failed to start. State: {state}")
+            
+            time.sleep(5)
+        
+        raise Exception(f"Cluster {cluster_id} failed to start within {max_wait} seconds")
+    
+    def get_or_create_cluster(self) -> Tuple[str, bool]:
+        """Get existing cluster or create a new one if needed, with caching support"""
+        cluster_id = self.config.get("cluster_id")
+        
+        # Check cache first
+        cache_data = self.cache_manager.load_cluster_cache()
+        if cache_data and not self.cache_manager.is_cluster_cache_valid(cache_data):
+            print(f"Found expired cached cluster {cache_data.get('cluster_id', 'unknown')}, clearing cache")
+            self.cache_manager.clear_cluster_cache()
+            cache_data = {}
+        
+        if self.cache_manager.is_cluster_cache_valid(cache_data):
+            cached_cluster_id = cache_data["cluster_id"]
+            print(f"Found valid cached cluster: {cached_cluster_id}")
+            
+            # Verify the cached cluster is still available and running
+            try:
+                cluster_info = self.client.cluster.get_cluster(cached_cluster_id)
+                state = cluster_info["state"]
+                
+                if state == "RUNNING":
+                    print(f"Using cached running cluster: {cached_cluster_id}")
+                    return cached_cluster_id, False
+                elif state == "TERMINATED":
+                    print(f"Cached cluster {cached_cluster_id} is terminated, creating new one")
+                    # Clear the cache since this cluster is terminated
+                    self.cache_manager.clear_cluster_cache()
+                else:
+                    print(f"Cached cluster {cached_cluster_id} is in state {state}, creating new one")
+                    # Clear the cache since this cluster is in an unexpected state
+                    self.cache_manager.clear_cluster_cache()
+            except Exception as e:
+                print(f"Error with cached cluster {cached_cluster_id}: {e}. Creating new cluster.")
+                # Clear the cache since this cluster is problematic
+                self.cache_manager.clear_cluster_cache()
+        
+        # If cluster_id is provided in config, try to use it
+        if cluster_id:
+            try:
+                cluster_info = self.client.cluster.get_cluster(cluster_id)
+                state = cluster_info["state"]
+                
+                if state == "RUNNING":
+                    print(f"Using existing running cluster: {cluster_id}")
+                    # Cache this cluster for future use
+                    self.cache_manager.cache_new_cluster(cluster_id)
+                    return cluster_id, False  # False = not created by us
+                elif state == "TERMINATED":
+                    print(f"Existing cluster {cluster_id} is terminated, creating new cluster")
+                else:
+                    print(f"Cluster {cluster_id} is in state {state}, creating new cluster")
+                    
+            except Exception as e:
+                print(f"Error with cluster {cluster_id}: {e}. Creating new cluster.")
+        
+        # Create a new cluster and cache it
+        print("Creating new test cluster")
+        new_cluster_id = self.create_test_cluster()
+        self.cache_manager.cache_new_cluster(new_cluster_id)
+        return new_cluster_id, True  # True = created by us
+
+    def cleanup_databricks_environment(self, config: dict[str, Any]) -> None:
+        """Clean up the Databricks environment after testing"""
+        print("Starting cleanup...")
+
+        # 1. Try to drop the table if we have SQL capabilities
+        try:
+            warehouse_id = self.extract_warehouse_id_from_http_path(config.get("http_path", ""))
+            if warehouse_id:
+                catalog = config["catalog"]
+                schema = config["schema"]
+                table = config["table"]
+
+                drop_table_query = f"DROP TABLE IF EXISTS {catalog}.{schema}.{table}"
+                result = self.execute_sql_query(warehouse_id, drop_table_query, catalog, schema)
+
+                if result["success"]:
+                    print(f"✓ Dropped table: {catalog}.{schema}.{table}")
+                else:
+                    print(f"Warning: Could not drop table: {result['error']}")
+            else:
+                print("Note: Table cleanup skipped (no warehouse ID available)")
+        except Exception as e:
+            print(f"Warning: Could not drop table: {e}")
+
+        # 2. Remove the output directory
+        try:
+            self.client.dbfs.delete(
+                path=config["delta_table_path"].replace("dbfs:", ""),
+                recursive=True
+            )
+            print(f"✓ Removed Delta table directory: {config['delta_table_path']}")
+        except Exception as e:
+            print(f"Warning: Could not delete output directory: {e}")
+
+        # # 3. DO NOT terminate cached clusters - let them expire naturally
+        # # Only terminate if explicitly created by us and not cached
+        # cluster_from_env = os.getenv("DATABRICKS_CLUSTER_ID") is not None
+        # cache_data = load_cluster_cache()
+        # cluster_is_cached = cache_data.get("cluster_id") == config.get("cluster_id")
+
+        # if cluster_created_by_us and config.get("cluster_id") and not cluster_from_env and not cluster_is_cached:
+        #     try:
+        #         print(f"Terminating test cluster: {config['cluster_id']}")
+        #         client.cluster.delete_cluster(config["cluster_id"])
+        #         print(f"✓ Terminated cluster: {config['cluster_id']}")
+        #     except Exception as e:
+        #         print(f"Warning: Could not terminate cluster: {e}")
+        # else:
+        #     if cluster_from_env:
+        #         print(f"Cluster cleanup skipped (cluster from env var: {config.get('cluster_id')})")
+        #     elif cluster_is_cached:
+        #         print(f"Cluster cleanup skipped (cached cluster: {config.get('cluster_id')})")
+        #     else:
+        #         print(f"Cluster cleanup skipped (using existing cluster: {config.get('cluster_id')})")
+
+        print("Cleanup completed.")
