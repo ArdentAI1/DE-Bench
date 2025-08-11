@@ -725,8 +725,16 @@ class DatabricksManager:
         
         raise Exception(f"Cluster {cluster_id} failed to start within {max_wait} seconds")
     
-    def get_or_create_cluster(self) -> Tuple[str, bool]:
-        """Get existing cluster or create a new one if needed, with caching support"""
+    def get_or_create_cluster(self, cluster_config: Optional[dict[str, Any]] = None) -> Tuple[str, bool]:
+        """
+        Get existing cluster or create a new one if needed, with caching support
+
+        :param Optional[dict[str, Any]] cluster_config: Configuration dictionary containing Databricks connection details, defaults to None.
+        :return: Tuple containing cluster ID and boolean indicating if the cluster was created by us.
+        :rtype: Tuple[str, bool]
+        """
+        if cluster_config:
+            self.config = cluster_config
         cluster_id = self.config.get("cluster_id", getattr(self, "cluster_id"))
         
         # Check cache first
@@ -739,52 +747,48 @@ class DatabricksManager:
         if self.cache_manager.is_cluster_cache_valid(cache_data):
             cached_cluster_id = cache_data["cluster_id"]
             print(f"Found valid cached cluster: {cached_cluster_id}")
-            
-            # Verify the cached cluster is still available and running
-            try:
-                cluster_info = self.client.cluster.get_cluster(cached_cluster_id)
-                state = cluster_info["state"]
-                
-                if state == "RUNNING":
-                    print(f"Using cached running cluster: {cached_cluster_id}")
-                    return cached_cluster_id, False
-                elif state == "TERMINATED":
-                    print(f"Cached cluster {cached_cluster_id} is terminated, creating new one")
-                    # Clear the cache since this cluster is terminated
-                    self.cache_manager.clear_cluster_cache()
-                else:
-                    print(f"Cached cluster {cached_cluster_id} is in state {state}, creating new one")
-                    # Clear the cache since this cluster is in an unexpected state
-                    self.cache_manager.clear_cluster_cache()
-            except Exception as e:
-                print(f"Error with cached cluster {cached_cluster_id}: {e}. Creating new cluster.")
-                # Clear the cache since this cluster is problematic
-                self.cache_manager.clear_cluster_cache()
+            cached_cluster_id, created_by_us = self.try_existing_or_cached_cluster(cached_cluster_id, use_cache=True)
+            if not created_by_us:
+                return cached_cluster_id, False
         
         # If cluster_id is provided in config, try to use it
         if cluster_id:
-            try:
-                cluster_info = self.client.cluster.get_cluster(cluster_id)
-                state = cluster_info["state"]
-                
-                if state == "RUNNING":
-                    print(f"Using existing running cluster: {cluster_id}")
-                    # Cache this cluster for future use
-                    self.cache_manager.cache_new_cluster(cluster_id)
-                    return cluster_id, False  # False = not created by us
-                elif state == "TERMINATED":
-                    print(f"Existing cluster {cluster_id} is terminated, creating new cluster")
-                else:
-                    print(f"Cluster {cluster_id} is in state {state}, creating new cluster")
-                    
-            except Exception as e:
-                print(f"Error with cluster {cluster_id}: {e}. Creating new cluster.")
+            cluster_id, created_by_us = self.try_existing_or_cached_cluster(cluster_id, use_cache=False)
+            if not created_by_us:
+                return cluster_id, False
         
         # Create a new cluster and cache it
         print("Creating new test cluster")
         new_cluster_id = self.create_test_cluster()
         self.cache_manager.cache_new_cluster(new_cluster_id)
         return new_cluster_id, True  # True = created by us
+    
+    def try_existing_or_cached_cluster(self, cluster_id: str, use_cache: bool = True) -> Tuple[str, bool]:
+        """
+        Try to use an existing cluster or a cached cluster
+
+        :param str cluster_id: Cluster ID to try to use.
+        :param bool use_cache: Whether to use the cache, defaults to True.
+        :return: Tuple containing cluster ID and boolean indicating if the cluster was created by us.
+        :rtype: Tuple[str, bool]
+        """
+        try:
+            cluster_info = self.client.cluster.get_cluster(cluster_id)
+            state = cluster_info["state"]
+            image_type = 'Cached' if use_cache else 'Existing'
+            
+            if state == "RUNNING":
+                print(f"Using {image_type} running cluster: {cluster_id}")
+                return cluster_id, False
+            elif state == "TERMINATED":
+                print(f"{image_type} cluster {cluster_id} is terminated, creating new one")
+            else:
+                print(f"{image_type} cluster {cluster_id} is in state {state}, creating new one")
+        except Exception as e:
+            print(f"Error with {image_type} cluster {cluster_id}: {e}. Creating new cluster.")
+            # Clear the cache since this cluster is problematic
+            self.cache_manager.clear_cluster_cache()
+        return cluster_id, True
 
     def cleanup_databricks_environment(self, config: dict[str, Any]) -> None:
         """Clean up the Databricks environment after testing"""
