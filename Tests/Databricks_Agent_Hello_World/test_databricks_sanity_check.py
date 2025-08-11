@@ -17,10 +17,6 @@ import pytest
 import importlib
 from databricks_api import DatabricksAPI
 
-from Environment.Databricks import (
-    setup_databricks_environment,
-    cleanup_databricks_environment,
-)
 from Fixtures.Databricks.databricks_resources import databricks_resource
 
 # Import test configurations
@@ -230,6 +226,7 @@ def test_databricks_sanity_check(request, databricks_resource):
     config = create_sanity_check_config()
     
     # Get cluster info from the databricks_resource fixture
+    databricks_manager = databricks_resource["databricks_manager"]
     cluster_id = databricks_resource["cluster_id"]
     cluster_created_by_us = databricks_resource["cluster_created_by_us"]
     databricks_client = databricks_resource["client"]
@@ -274,7 +271,7 @@ def test_databricks_sanity_check(request, databricks_resource):
     
     try:
         # Step 1: Set up Databricks environment
-        setup_databricks_environment(databricks_client, config, cluster_id)
+        databricks_manager.setup_databricks_environment(cluster_id, config)
         update_test_step(test_steps, "Environment Setup", "passed", 
                         f"Environment setup completed for sanity check ID: {config['test_id']}")
         
@@ -367,9 +364,9 @@ def test_databricks_sanity_check(request, databricks_resource):
             print(f"⚠️ Could not delete script: {e}")
         
         # Clean up Databricks environment
-        cleanup_databricks_environment(databricks_client, config, cluster_created_by_us)
+        databricks_manager.cleanup_databricks_environment(config)
         
         # Store execution time
         request.node.user_properties.append(
             ("execution_time", time.time() - start_time)
-        ) 
+        )
