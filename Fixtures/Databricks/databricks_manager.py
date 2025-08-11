@@ -772,11 +772,11 @@ class DatabricksManager:
         :return: Tuple containing cluster ID and boolean indicating if the cluster was created by us.
         :rtype: Tuple[str, bool]
         """
+        image_type = 'Cached' if use_cache else 'Existing'
         try:
             cluster_info = self.client.cluster.get_cluster(cluster_id)
             state = cluster_info["state"]
-            image_type = 'Cached' if use_cache else 'Existing'
-            
+
             if state == "RUNNING":
                 print(f"Using {image_type} running cluster: {cluster_id}")
                 return cluster_id, False
