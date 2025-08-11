@@ -34,7 +34,7 @@ class CacheManager:
         cache_dir = os.path.join(cwd, "Environment", "Databricks")
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
-        return os.path.join(cache_dir, "new_ephemeral.json")
+        return os.path.join(cache_dir, "ephemeral.json")
 
     def load_cluster_cache(self) -> dict[str, Any]:
         """
