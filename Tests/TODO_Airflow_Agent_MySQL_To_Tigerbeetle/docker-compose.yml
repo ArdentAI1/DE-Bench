@@ -1,0 +1,27 @@
+version: "3.7"
+
+services:
+  setup:
+    image: ghcr.io/tigerbeetle/tigerbeetle
+    command: format --cluster=0 --replica=0 --replica-count=1 /data/0_0.tigerbeetle
+    volumes:
+      - tigerbeetle_data:/data
+
+  tigerbeetle:
+    image: ghcr.io/tigerbeetle/tigerbeetle
+    container_name: tigerbeetle
+    command: start --addresses=0.0.0.0:3000 /data/0_0.tigerbeetle
+    ports:
+      - "3001:3000"
+    volumes:
+      - tigerbeetle_data:/data
+    security_opt:
+      - "seccomp=unconfined"
+    cap_add:
+      - IPC_LOCK
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+volumes:
+  tigerbeetle_data: 

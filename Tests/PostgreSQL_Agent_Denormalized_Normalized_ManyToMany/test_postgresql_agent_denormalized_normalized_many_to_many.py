@@ -165,91 +165,145 @@ def test_postgresql_agent_denormalized_normalized_many_to_many(request, postgres
         db_cursor = db_connection.cursor()
         
         try:
-            # Layer 1: Basic existence checks - Did agent create normalized tables?
-            db_cursor.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name != 'books_bad'
+            # Strict schema validation: Require exact target tables
+            db_cursor.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema='public' AND table_name IN ('books','authors','book_authors')
                 ORDER BY table_name
-            """)
-            
-            new_tables = [row[0] for row in db_cursor.fetchall()]
-            
-            if len(new_tables) >= 2:  # Expecting normalized structure (e.g., authors, books, junction)
-                test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"Normalized structure created with tables: {new_tables}"
-            else:
-                test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = f"Insufficient normalization. New tables: {new_tables}"
-                raise AssertionError("Agent did not create properly normalized structure")
-            
-            # Layer 2: Content validation - Is original data preserved in normalized form?
-            books_found = False
-            authors_found = False
-            
-            for table in new_tables:
-                try:
-                    db_cursor.execute(f"SELECT * FROM {table} LIMIT 10")
-                    sample_data = db_cursor.fetchall()
-                    
-                    # Check for book titles
-                    if any('Design Patterns' in str(row) or 'Clean Code' in str(row) for row in sample_data):
-                        books_found = True
-                    
-                    # Check for author names  
-                    if any('Gamma' in str(row) or 'Robert Martin' in str(row) or 'Others' in str(row) for row in sample_data):
-                        authors_found = True
-                        
-                except Exception as e:
-                    pass  # Table query failed, likely expected
-                    continue
-            
-            if books_found and authors_found:
-                test_steps[3]["status"] = "passed"
-                test_steps[3]["Result_Message"] = "Data preservation verified: Books and authors found in normalized structure"
-            else:
-                test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"Data preservation failed during normalization: books={books_found}, authors={authors_found}"
-                raise AssertionError("Original data not preserved during denormalized → normalized transformation")
-            
-            # Layer 3: Functional validation - THE CRITICAL TEST
-            # Are co-authors properly separated (denormalization resolved)?
-            co_authors_separated = False
-            separation_evidence = ""
-            
-            for table in new_tables:
-                try:
-                    db_cursor.execute(f"SELECT * FROM {table}")
-                    all_data = db_cursor.fetchall()
-                    
-                    # Look for evidence that "Gamma" and "Others" exist as separate entities
-                    gamma_rows = [row for row in all_data if 'Gamma' in str(row)]
-                    others_rows = [row for row in all_data if 'Others' in str(row)]
-                    
-                    # Critical check: Are Gamma and Others in separate rows (not bundled)?
-                    gamma_separate = any('Gamma' in str(row) and 'Others' not in str(row) for row in gamma_rows)
-                    others_separate = any('Others' in str(row) and 'Gamma' not in str(row) for row in others_rows)
-                    
-                    if gamma_separate and others_separate:
-                        co_authors_separated = True
-                        separation_evidence = f"Table '{table}': Gamma and Others found as separate normalized entities"
-                        break
-                        
-                except Exception as e:
-                    continue
-            
-            if co_authors_separated:
-                test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"SUCCESS: Denormalized → Normalized transformation complete! {separation_evidence}"
-            else:
-                test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = "Co-authors still appear bundled - denormalized → normalized transformation incomplete"
-                raise AssertionError("Core denormalization issue not resolved - many-to-many relationships still bundled")
-            
-            # Final success
-                    # Test completed successfully - denormalized co-authorship issue resolved
-            assert True, "Denormalized → Normalized many-to-many transformation successful - co-authors properly separated"
+                """
+            )
+            required_tables = [r[0] for r in db_cursor.fetchall()]
+            assert required_tables == ['authors', 'book_authors', 'books'], f"Expected normalized tables not found. Got: {required_tables}"
+            test_steps[2]["status"] = "passed"
+            test_steps[2]["Result_Message"] = f"Found expected normalized tables: {required_tables}"
+
+            # Columns in junction table (at minimum must include these two integer columns)
+            db_cursor.execute(
+                """
+                SELECT column_name, data_type FROM information_schema.columns
+                WHERE table_name='book_authors' ORDER BY column_name
+                """
+            )
+            ba_columns = [tuple(r) for r in db_cursor.fetchall()]
+            assert ('author_id', 'integer') in ba_columns and ('book_id', 'integer') in ba_columns, f"book_authors must include integer author_id and book_id. Got: {ba_columns}"
+
+            # Foreign keys on junction table
+            db_cursor.execute(
+                """
+                SELECT tc.table_name, kcu.column_name, ccu.table_name AS ref_table, ccu.column_name AS ref_column
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name
+                JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name=tc.constraint_name
+                WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_name='book_authors'
+                ORDER BY kcu.column_name
+                """
+            )
+            fks = [tuple(r) for r in db_cursor.fetchall()]
+            assert ('book_authors','author_id','authors','author_id') in fks, f"Missing FK book_authors.author_id -> authors.author_id. FKs: {fks}"
+            assert ('book_authors','book_id','books','book_id') in fks, f"Missing FK book_authors.book_id -> books.book_id. FKs: {fks}"
+
+            # Unique constraint on authors.name
+            db_cursor.execute(
+                """
+                SELECT tc.constraint_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name
+                WHERE tc.table_name='authors' AND tc.constraint_type='UNIQUE' AND kcu.column_name='name'
+                """
+            )
+            unique_on_name = db_cursor.fetchall()
+            assert len(unique_on_name) >= 1, "authors.name must be UNIQUE"
+
+            # Data checks: exact counts and sets
+            db_cursor.execute("SELECT COUNT(*) FROM books")
+            assert db_cursor.fetchone()[0] == 2, "books count must be 2"
+
+            db_cursor.execute("SELECT name FROM authors ORDER BY name")
+            assert [r[0] for r in db_cursor.fetchall()] == ['Gamma','Others','Robert Martin'], "authors set mismatch"
+
+            # Junction correctness for specific titles
+            db_cursor.execute(
+                """
+                SELECT a.name FROM book_authors ba
+                JOIN books b ON b.book_id=ba.book_id
+                JOIN authors a ON a.author_id=ba.author_id
+                WHERE b.title='Design Patterns' ORDER BY a.name
+                """
+            )
+            assert [r[0] for r in db_cursor.fetchall()] == ['Gamma','Others'], "Design Patterns authors mismatch"
+
+            db_cursor.execute(
+                """
+                SELECT a.name FROM book_authors ba
+                JOIN books b ON b.book_id=ba.book_id
+                JOIN authors a ON a.author_id=ba.author_id
+                WHERE b.title='Clean Code' ORDER BY a.name
+                """
+            )
+            assert [r[0] for r in db_cursor.fetchall()] == ['Robert Martin'], "Clean Code authors mismatch"
+
+            # No commas in any author names
+            db_cursor.execute("SELECT COUNT(*) FROM authors WHERE name LIKE '%,%'")
+            assert db_cursor.fetchone()[0] == 0, "authors names should not contain commas"
+
+            test_steps[3]["status"] = "passed"
+            test_steps[3]["Result_Message"] = "Schema and data validation passed (tables, FKs, uniques, exact rows)"
+
+            # Idempotency: capture counts, run agent again, ensure stability
+            db_cursor.execute("SELECT COUNT(*) FROM authors")
+            authors_count_1 = db_cursor.fetchone()[0]
+            db_cursor.execute("SELECT COUNT(*) FROM book_authors")
+            book_authors_count_1 = db_cursor.fetchone()[0]
+
+            # Ensure original denormalized table remains intact
+            db_cursor.execute("SELECT COUNT(*) FROM books_bad")
+            books_bad_count_1 = db_cursor.fetchone()[0]
+
+            db_cursor.close()
+            db_connection.close()
+
+            # Run model again
+            run_model(
+                container=None,
+                task=Test_Configs.User_Input,
+                configs=test_configs,
+                extra_information={
+                    "useArdent": True,
+                    "publicKey": supabase_account_resource["publicKey"],
+                    "secretKey": supabase_account_resource["secretKey"],
+                },
+            )
+
+            # Reconnect and re-check counts
+            db_connection = psycopg2.connect(
+                host=os.getenv("POSTGRES_HOSTNAME"),
+                port=os.getenv("POSTGRES_PORT"),
+                user=os.getenv("POSTGRES_USERNAME"),
+                password=os.getenv("POSTGRES_PASSWORD"),
+                database=created_db_name,
+                sslmode="require",
+            )
+            db_cursor = db_connection.cursor()
+
+            db_cursor.execute("SELECT COUNT(*) FROM authors")
+            authors_count_2 = db_cursor.fetchone()[0]
+            db_cursor.execute("SELECT COUNT(*) FROM book_authors")
+            book_authors_count_2 = db_cursor.fetchone()[0]
+            db_cursor.execute("SELECT COUNT(*) FROM books_bad")
+            books_bad_count_2 = db_cursor.fetchone()[0]
+
+            assert authors_count_1 == authors_count_2, "authors count changed after second run"
+            assert book_authors_count_1 == book_authors_count_2, "book_authors count changed after second run"
+            assert books_bad_count_1 == books_bad_count_2 == 2, "books_bad should remain intact with 2 rows"
+
+            # Mark final step as passed
+            # Ensure the last test step reflects successful co-author separation and idempotency
+            test_steps[4]["status"] = "passed"
+            test_steps[4]["Result_Message"] = "Many-to-many mapping correct and idempotent; source table preserved"
+
+            # Final assertion to make test outcome explicit
+            assert True, "Denormalized → Normalized many-to-many transformation validated rigorously"
         
         finally:
             db_cursor.close()

@@ -71,7 +71,7 @@ class DatabricksManager:
             if key not in config or not config[key]:
                 config[key] = env_value
         if missing_keys := [key for key in backup_config.keys() if key not in config or config[key] == ""]:
-            raise ValueError(f"Missing required keys in config: {", ".join(missing_keys)}")
+            raise ValueError(f"Missing required keys in config: {', '.join(missing_keys)}")
         return config
 
     def get_cluster_config_hash(self) -> str:
