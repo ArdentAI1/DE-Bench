@@ -88,6 +88,7 @@ class DatabricksManager:
         for key, env_value in backup_config.items():
             if key not in config or not config[key]:
                 config[key] = env_value
+
         if missing_keys := [
             key
             for key in backup_config.keys()
