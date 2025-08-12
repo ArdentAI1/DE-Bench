@@ -145,9 +145,9 @@ def update_test_step(test_steps, step_name, status, message):
 @pytest.mark.parametrize("databricks_resource", [
     {
         "resource_id": "hello_world_test",
-        "use_shared_cluster": True,
+        "use_shared_cluster": False,
         "cluster_fallback": True,
-        "shared_cluster_timeout": 1200
+        # "shared_cluster_timeout": 1200
     }
 ], indirect=True)
 @pytest.mark.databricks
