@@ -47,7 +47,7 @@ class DatabricksManager:
         self.cluster_id: Optional[str] = self.config.get(
             "cluster_id", os.getenv("DATABRICKS_CLUSTER_ID")
         )
-        self.client = None  # Will be set by create_databricks_client
+        self.client: Optional[DatabricksAPI] = None  # Will be set by create_databricks_client
         self.creation_time = time.time()
         self.worker_pid = os.getpid()
         self.is_shared = False
@@ -683,7 +683,7 @@ class DatabricksManager:
             "spark_version": "13.3.x-scala2.12",  # Latest LTS version
             "node_type_id": "m5.large",  # Small, supported instance type
             "num_workers": 0,  # Single node cluster to minimize cost
-            "autotermination_minutes": 120,  # Auto-terminate after 2 hours (longer than our cache)
+            "autotermination_minutes": self.cache_manager.default_expiry_hours * 65,  # added buffer
             "spark_conf": {
                 "spark.databricks.cluster.profile": "singleNode",
                 "spark.master": "local[*]"
