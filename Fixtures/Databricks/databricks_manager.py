@@ -715,8 +715,9 @@ class DatabricksManager:
             state = cluster_info["state"]
 
             print(f"Cluster {cluster_id} is in state: {state}")
-            
+
             if state == "RUNNING":
+                self.created_by_us = True
                 print(f"Cluster {cluster_id} is now running")
                 return cluster_id
             elif state in ["ERROR", "TERMINATED"]:
@@ -824,6 +825,15 @@ class DatabricksManager:
             print(f"✓ Removed Delta table directory: {config['delta_table_path']}")
         except Exception as e:
             print(f"Warning: Could not delete output directory: {e}")
+
+        # 3. Check if the cluster is not shared and created by us, if so delete it
+        if not self.is_shared and self.created_by_us:
+            try:
+                print(f"Terminating test cluster: {self.cluster_id}")
+                self.client.cluster.delete_cluster(self.cluster_id)
+                print(f"✓ Terminated cluster: {self.cluster_id}")
+            except Exception as e:
+                print(f"Warning: Could not terminate cluster: {e}")
 
         # # 3. DO NOT terminate cached clusters - let them expire naturally
         # # Only terminate if explicitly created by us and not cached
