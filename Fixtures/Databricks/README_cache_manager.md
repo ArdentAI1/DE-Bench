@@ -31,6 +31,13 @@ The SQLite-based cache manager provides improved data integrity, atomic operatio
 - **Cross-thread Support**: Proper multi-threaded access support
 - **Lock Resolution**: Database lock errors are automatically handled
 
+### 5. **Shared Cluster Coordination** ✅ **NEW**
+- **SQLite-based Registry**: Persistent shared cluster coordination across processes
+- **Atomic Operations**: Transaction-based coordination prevents race conditions
+- **Usage Tracking**: Automatic usage count management for shared clusters
+- **Status Management**: Real-time status updates (creating, ready, failed)
+- **Cross-process Safety**: Coordination works across multiple processes and threads
+
 ## Database Schema
 
 The cache manager creates a SQLite database with the following structure:
@@ -41,10 +48,7 @@ CREATE TABLE clusters (
     cluster_id TEXT UNIQUE NOT NULL,
     cluster_name TEXT,
     host TEXT,
-    node_type_id TEXT,
-    spark_version TEXT,
     num_workers INTEGER,
-    autotermination_minutes INTEGER,
     status TEXT DEFAULT 'RUNNING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expiry_time TIMESTAMP NOT NULL,
@@ -54,10 +58,25 @@ CREATE TABLE clusters (
     is_shared BOOLEAN DEFAULT 0
 );
 
+CREATE TABLE shared_cluster_registry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    config_hash TEXT UNIQUE NOT NULL,
+    cluster_id TEXT,
+    status TEXT DEFAULT 'creating',
+    worker_pid INTEGER,
+    creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    usage_count INTEGER DEFAULT 0,
+    error_message TEXT,
+    FOREIGN KEY (cluster_id) REFERENCES clusters(cluster_id)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_cluster_id ON clusters(cluster_id);
 CREATE INDEX idx_expiry_time ON clusters(expiry_time);
 CREATE INDEX idx_is_active ON clusters(is_active);
+CREATE INDEX idx_config_hash ON shared_cluster_registry(config_hash);
+CREATE INDEX idx_registry_status ON shared_cluster_registry(status);
+CREATE INDEX idx_registry_usage_count ON shared_cluster_registry(usage_count);
 ```
 
 ## Usage
@@ -117,6 +136,32 @@ print(f"Removed {removed_count} expired clusters")
 cache_manager.clear_cluster_cache()
 ```
 
+### Shared Cluster Coordination
+
+```python
+# Register shared cluster creation
+success = cache_manager.register_shared_cluster_creation("config_hash_123", os.getpid())
+
+# Check if we can join existing creation
+can_join = cache_manager.can_join_shared_cluster_creation("config_hash_123")
+
+# Update cluster status
+cache_manager.update_shared_cluster_status("config_hash_123", "ready", cluster_id="cluster-456")
+
+# Get shared cluster information
+info = cache_manager.get_shared_cluster_info("config_hash_123")
+
+# Manage usage counts
+new_count = cache_manager.increment_shared_cluster_usage("config_hash_123")
+remaining_count = cache_manager.decrement_shared_cluster_usage("config_hash_123")
+
+# Cleanup shared cluster registry
+success = cache_manager.cleanup_shared_cluster_registry("config_hash_123")
+
+# Get all shared clusters
+all_shared = cache_manager.get_all_shared_clusters()
+```
+
 ## CLI Commands
 
 The Databricks CLI provides commands for managing the cache:
@@ -139,6 +184,12 @@ python Environment/Databricks/cli.py optimize
 
 # Show database file information
 python Environment/Databricks/cli.py dbinfo
+
+# Show shared cluster registry
+python Environment/Databricks/cli.py shared
+
+# Clean up shared cluster registry
+python Environment/Databricks/cli.py cleanup-shared
 ```
 
 ### Example CLI Output
