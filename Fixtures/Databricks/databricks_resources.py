@@ -1,17 +1,12 @@
 import os
 import time
 import uuid
-from threading import Lock
 
 import pytest
 
 from Fixtures.Databricks.databricks_manager import DatabricksManager
 
-# Global registry for shared cluster coordination
-SHARED_CLUSTERS = {}
-CLUSTER_LOCKS = {}
-CLUSTER_USAGE_COUNT = {}
-REGISTRY_LOCK = Lock()  # Protects the global registries themselves
+# SQLite-based coordination replaces global registry
 
 
 @pytest.fixture(scope="function")
