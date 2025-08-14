@@ -66,7 +66,7 @@ class CacheManager:
                         is_shared BOOLEAN DEFAULT 0
                     )
                 """)
-                
+
                 # Create index for faster lookups
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_cluster_id ON clusters(cluster_id)
@@ -76,6 +76,32 @@ class CacheManager:
                 """)
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_is_active ON clusters(is_active)
+                """)
+                
+                # Create shared cluster coordination table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS shared_cluster_registry (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        config_hash TEXT UNIQUE NOT NULL,
+                        cluster_id TEXT,
+                        status TEXT DEFAULT 'creating',
+                        worker_pid INTEGER,
+                        creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        usage_count INTEGER DEFAULT 0,
+                        error_message TEXT,
+                        FOREIGN KEY (cluster_id) REFERENCES clusters(cluster_id)
+                    )
+                """)
+                
+                # Create indexes for shared cluster registry
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_config_hash ON shared_cluster_registry(config_hash)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_registry_status ON shared_cluster_registry(status)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_registry_usage_count ON shared_cluster_registry(usage_count)
                 """)
                 
                 conn.commit()
@@ -476,3 +502,240 @@ class CacheManager:
                 info["shm_size"] = os.path.getsize(shm_path)
         
         return info
+
+    # Shared Cluster Coordination Methods
+    def register_shared_cluster_creation(self, config_hash: str, worker_pid: int) -> bool:
+        """
+        Register that a worker is creating a shared cluster.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :param int worker_pid: Process ID of the worker creating the cluster.
+        :return: True if registration was successful, False if already being created.
+        :rtype: bool
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Try to insert a new registry entry
+                cursor.execute("""
+                    INSERT INTO shared_cluster_registry (config_hash, worker_pid, status, usage_count)
+                    VALUES (?, ?, 'creating', 1)
+                """, (config_hash, worker_pid))
+                
+                conn.commit()
+                return True
+                
+        except sqlite3.IntegrityError:
+            # Entry already exists, check if we can join
+            return self.can_join_shared_cluster_creation(config_hash)
+        except sqlite3.Error as e:
+            print(f"Warning: Could not register shared cluster creation: {e}")
+            return False
+
+    def can_join_shared_cluster_creation(self, config_hash: str) -> bool:
+        """
+        Check if we can join an existing shared cluster creation.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :return: True if we can join, False otherwise.
+        :rtype: bool
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT status FROM shared_cluster_registry 
+                    WHERE config_hash = ?
+                """, (config_hash,))
+                
+                if row := cursor.fetchone():
+                    status = row[0]
+                    return status in ['creating', 'ready']
+                return False
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not check shared cluster creation status: {e}")
+            return False
+
+    def update_shared_cluster_status(self, config_hash: str, status: str, cluster_id: Optional[str] = None, error_message: Optional[str] = None) -> None:
+        """
+        Update the status of a shared cluster creation.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :param str status: New status ('creating', 'ready', 'failed').
+        :param Optional[str] cluster_id: Cluster ID if creation was successful.
+        :param Optional[str] error_message: Error message if creation failed.
+        :rtype: None
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                if cluster_id:
+                    cursor.execute("""
+                        UPDATE shared_cluster_registry 
+                        SET status = ?, cluster_id = ?, error_message = ?
+                        WHERE config_hash = ?
+                    """, (status, cluster_id, error_message, config_hash))
+                else:
+                    cursor.execute("""
+                        UPDATE shared_cluster_registry 
+                        SET status = ?, error_message = ?
+                        WHERE config_hash = ?
+                    """, (status, error_message, config_hash))
+                
+                conn.commit()
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not update shared cluster status: {e}")
+
+    def get_shared_cluster_info(self, config_hash: str) -> Optional[dict[str, Any]]:
+        """
+        Get information about a shared cluster.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :return: Dictionary containing shared cluster information.
+        :rtype: Optional[dict[str, Any]]
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM shared_cluster_registry 
+                    WHERE config_hash = ?
+                """, (config_hash,))
+                
+                if row := cursor.fetchone():
+                    return dict(row)
+                return None
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not get shared cluster info: {e}")
+            return None
+
+    def increment_shared_cluster_usage(self, config_hash: str) -> int:
+        """
+        Increment the usage count for a shared cluster.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :return: New usage count.
+        :rtype: int
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Use a transaction to ensure atomicity
+                cursor.execute("BEGIN TRANSACTION")
+                
+                try:
+                    cursor.execute("""
+                        UPDATE shared_cluster_registry 
+                        SET usage_count = usage_count + 1
+                        WHERE config_hash = ?
+                    """, (config_hash,))
+                    
+                    cursor.execute("""
+                        SELECT usage_count FROM shared_cluster_registry 
+                        WHERE config_hash = ?
+                    """, (config_hash,))
+                    
+                    row = cursor.fetchone()
+                    new_count = row[0] if row else 0
+                    
+                    cursor.execute("COMMIT")
+                    return new_count
+                    
+                except Exception as e:
+                    cursor.execute("ROLLBACK")
+                    raise e
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not increment shared cluster usage: {e}")
+            return 0
+
+    def decrement_shared_cluster_usage(self, config_hash: str) -> int:
+        """
+        Decrement the usage count for a shared cluster.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :return: New usage count.
+        :rtype: int
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Use a transaction to ensure atomicity
+                cursor.execute("BEGIN TRANSACTION")
+                
+                try:
+                    cursor.execute("""
+                        UPDATE shared_cluster_registry 
+                        SET usage_count = usage_count - 1
+                        WHERE usage_count > 0 AND config_hash = ?
+                    """, (config_hash,))
+                    
+                    cursor.execute("""
+                        SELECT usage_count FROM shared_cluster_registry 
+                        WHERE config_hash = ?
+                    """, (config_hash,))
+                    
+                    row = cursor.fetchone()
+                    new_count = row[0] if row else 0
+                    
+                    cursor.execute("COMMIT")
+                    return new_count
+                    
+                except Exception as e:
+                    cursor.execute("ROLLBACK")
+                    raise e
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not decrement shared cluster usage: {e}")
+            return 0
+
+    def cleanup_shared_cluster_registry(self, config_hash: str) -> bool:
+        """
+        Clean up a shared cluster registry entry.
+
+        :param str config_hash: Configuration hash for the cluster.
+        :return: True if cleanup was successful.
+        :rtype: bool
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM shared_cluster_registry 
+                    WHERE config_hash = ?
+                """, (config_hash,))
+                
+                conn.commit()
+                return True
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not cleanup shared cluster registry: {e}")
+            return False
+
+    def get_all_shared_clusters(self) -> list[dict[str, Any]]:
+        """
+        Get all shared cluster registry entries.
+
+        :return: List of dictionaries containing shared cluster information.
+        :rtype: list[dict[str, Any]]
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM shared_cluster_registry 
+                    ORDER BY creation_time DESC
+                """)
+                
+                return [dict(row) for row in cursor.fetchall()]
+                
+        except sqlite3.Error as e:
+            print(f"Warning: Could not get all shared clusters: {e}")
+            return []
