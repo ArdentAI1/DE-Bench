@@ -826,15 +826,6 @@ class DatabricksManager:
         except Exception as e:
             print(f"Warning: Could not delete output directory: {e}")
 
-        # 3. Check if the cluster is not shared and created by us, if so delete it
-        if not self.is_shared and self.created_by_us:
-            try:
-                print(f"Terminating test cluster: {self.cluster_id}")
-                self.client.cluster.delete_cluster(self.cluster_id)
-                print(f"✓ Terminated cluster: {self.cluster_id}")
-            except Exception as e:
-                print(f"Warning: Could not terminate cluster: {e}")
-
         # # 3. DO NOT terminate cached clusters - let them expire naturally
         # # Only terminate if explicitly created by us and not cached
         # cluster_from_env = os.getenv("DATABRICKS_CLUSTER_ID") is not None
