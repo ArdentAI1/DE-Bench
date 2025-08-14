@@ -147,26 +147,35 @@ class CacheManager:
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
                     
-                    # Deactivate all existing clusters first
-                    cursor.execute("UPDATE clusters SET is_active = 0")
+                    # Use a transaction to make this atomic
+                    cursor.execute("BEGIN TRANSACTION")
                     
-                    # Insert new cluster data
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO clusters (
-                            cluster_id, cluster_name, host, num_workers, status, created_at, expiry_time, is_shared
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        cache_data.get("cluster_id"),
-                        cache_data.get("cluster_name"),
-                        cache_data.get("host"),
-                        cache_data.get("num_workers", 1),
-                        cache_data.get("status", "RUNNING"),
-                        cache_data.get("created_at", datetime.now().isoformat()),
-                        cache_data.get("expiry_time", self.expiry_time),
-                        cache_data.get("is_shared", 0)
-                    ))
-                    conn.commit()
-                    return  # Success, exit retry loop
+                    try:
+                        # Deactivate all existing clusters first
+                        cursor.execute("UPDATE clusters SET is_active = 0")
+                        
+                        # Insert new cluster data with explicit is_active = 1
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO clusters (
+                                cluster_id, cluster_name, host, num_workers, status, created_at, expiry_time, is_shared, is_active
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+                        """, (
+                            cache_data.get("cluster_id"),
+                            cache_data.get("cluster_name"),
+                            cache_data.get("host"),
+                            cache_data.get("num_workers", 1),
+                            cache_data.get("status", "RUNNING"),
+                            cache_data.get("created_at", datetime.now().isoformat()),
+                            cache_data.get("expiry_time", self.expiry_time),
+                            cache_data.get("is_shared", 0)
+                        ))
+                        
+                        cursor.execute("COMMIT")
+                        return  # Success, exit retry loop
+                        
+                    except Exception as e:
+                        cursor.execute("ROLLBACK")
+                        raise e
                     
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e).lower() and attempt < max_retries - 1:
@@ -328,13 +337,16 @@ class CacheManager:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                if where_clause:
-                    cursor.execute(f"SELECT * FROM clusters WHERE {where_clause}")
-                else:
-                    cursor.execute("SELECT * FROM clusters")
-                cursor.execute("ORDER BY created_at DESC")
                 
-                return [dict(row) for row in cursor.fetchall()]
+                if where_clause:
+                    query = f"SELECT * FROM clusters WHERE {where_clause} ORDER BY created_at DESC"
+                else:
+                    query = "SELECT * FROM clusters ORDER BY created_at DESC"
+                
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                return [dict(row) for row in rows]
                 
         except sqlite3.Error as e:
             print(f"Warning: Could not get all clusters: {e}")
