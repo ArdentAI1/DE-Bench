@@ -38,24 +38,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"sales_db_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "transactions",
-                    "columns": [
-                        {"name": "transaction_id", "type": "SERIAL", "primary_key": True},
-                        {"name": "user_id", "type": "INTEGER", "not_null": True},
-                        {"name": "product_id", "type": "INTEGER", "not_null": True},
-                        {"name": "sale_amount", "type": "DECIMAL(10,2)", "not_null": True},
-                        {"name": "cost_amount", "type": "DECIMAL(10,2)", "not_null": True},
-                        {"name": "transaction_date", "type": "DATE", "not_null": True}
-                    ],
-                    "data": [
-                        {"user_id": 1, "product_id": 101, "sale_amount": 100.00, "cost_amount": 60.00, "transaction_date": "2024-01-01"},
-                        {"user_id": 1, "product_id": 102, "sale_amount": 150.00, "cost_amount": 90.00, "transaction_date": "2024-01-01"},
-                        {"user_id": 2, "product_id": 101, "sale_amount": 200.00, "cost_amount": 120.00, "transaction_date": "2024-01-01"}
-                    ]
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)
