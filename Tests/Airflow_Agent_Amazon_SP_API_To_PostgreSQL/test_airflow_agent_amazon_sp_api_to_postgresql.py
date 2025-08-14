@@ -33,50 +33,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"amazon_sales_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "orders",
-                    "columns": [
-                        {"name": "order_id", "type": "VARCHAR(50)", "primary_key": True},
-                        {"name": "order_date", "type": "DATE"},
-                        {"name": "buyer_email", "type": "VARCHAR(255)"},
-                        {"name": "order_status", "type": "VARCHAR(50)"},
-                        {"name": "order_total", "type": "DECIMAL(10,2)"}
-                    ],
-                    "data": []  # Will be populated by the DAG
-                },
-                {
-                    "name": "order_items",
-                    "columns": [
-                        {"name": "item_id", "type": "VARCHAR(50)", "primary_key": True},
-                        {"name": "order_id", "type": "VARCHAR(50)", "not_null": True},
-                        {"name": "product_id", "type": "VARCHAR(50)", "not_null": True},
-                        {"name": "quantity", "type": "INTEGER"},
-                        {"name": "item_price", "type": "DECIMAL(10,2)"}
-                    ],
-                    "data": []  # Will be populated by the DAG
-                },
-                {
-                    "name": "products",
-                    "columns": [
-                        {"name": "product_id", "type": "VARCHAR(50)", "primary_key": True},
-                        {"name": "product_name", "type": "VARCHAR(255)"},
-                        {"name": "category", "type": "VARCHAR(100)"},
-                        {"name": "price", "type": "DECIMAL(10,2)"}
-                    ],
-                    "data": []  # Will be populated by the DAG
-                },
-                {
-                    "name": "inventory",
-                    "columns": [
-                        {"name": "inventory_id", "type": "VARCHAR(50)", "primary_key": True},
-                        {"name": "product_id", "type": "VARCHAR(50)", "not_null": True},
-                        {"name": "quantity_available", "type": "INTEGER"},
-                        {"name": "warehouse_location", "type": "VARCHAR(100)"}
-                    ],
-                    "data": []  # Will be populated by the DAG
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)

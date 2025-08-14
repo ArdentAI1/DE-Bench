@@ -29,23 +29,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"add_record_test_db_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "users",
-                    "columns": [
-                        {"name": "id", "type": "SERIAL", "primary_key": True},
-                        {"name": "name", "type": "VARCHAR(100)", "not_null": True},
-                        {"name": "email", "type": "VARCHAR(255)", "unique": True, "not_null": True},
-                        {"name": "age", "type": "INTEGER"},
-                        {"name": "created_at", "type": "TIMESTAMP", "default": "CURRENT_TIMESTAMP"}
-                    ],
-                    "data": [
-                        {"name": "John Doe", "email": "john@example.com", "age": 30},
-                        {"name": "Jane Smith", "email": "jane@example.com", "age": 25},
-                        {"name": "Bob Johnson", "email": "bob@example.com", "age": 35}
-                    ]
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)

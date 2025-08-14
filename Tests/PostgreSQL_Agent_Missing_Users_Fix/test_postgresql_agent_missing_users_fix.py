@@ -28,32 +28,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"users_subs_test_db_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "users",
-                    "columns": [
-                        {"name": "user_id", "type": "INT", "primary_key": True},
-                        {"name": "name", "type": "TEXT", "not_null": True}
-                    ],
-                    "data": [
-                        {"user_id": 1, "name": "Alice"},
-                        {"user_id": 2, "name": "Bob"},
-                        {"user_id": 3, "name": "Carol"}  # Carol has no subscription!
-                    ]
-                },
-                {
-                    "name": "subscriptions_bad", 
-                    "columns": [
-                        {"name": "user_id", "type": "INT"},  # No PK, no FK constraints
-                        {"name": "plan", "type": "TEXT"}     # Free text, not normalized
-                    ],
-                    "data": [
-                        {"user_id": 1, "plan": "Pro"},
-                        {"user_id": 2, "plan": "Basic"}
-                        # Carol (user_id 3) has no subscription row at all
-                    ]
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)
