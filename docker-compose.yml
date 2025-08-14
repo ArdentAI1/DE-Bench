@@ -1,0 +1,15 @@
+services:
+  de-bench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    volumes:
+      - .:/app                      # Mount entire DE-Bench repo to /app
+      - /app/venv                   # Exclude venv directory (use container's Python env)
+    working_dir: /app
+    stdin_open: true
+    tty: true
