@@ -29,13 +29,24 @@ class DatabricksManager:
 
     def __init__(
         self,
+        cluster_name: str,
         config: Optional[dict] = None,
         request: Optional[pytest.FixtureRequest] = None,
         default_expiry_hours: Optional[int] = 1,
+        cluster_id: Optional[str] = None,
+        cluster_created_by_us: Optional[bool] = False,
+        shared_cluster: Optional[bool] = False,
     ):
+        self.cluster_name: str = cluster_name
+        config = config or {}
+        self.cluster_id: Optional[str] = config.get("cluster_id", cluster_id) or os.getenv("DATABRICKS_CLUSTER_ID")
+        self.cluster_id: Optional[str] = config.get("cluster_id") or self.cluster_id
+        self.cluster_created_by_us = cluster_created_by_us
+        self.is_shared: bool = shared_cluster
+        self.cache_manager: CacheManager = CacheManager(default_expiry_hours=default_expiry_hours)
+        self.expiry_time: str = self.cache_manager.expiry_time
         self.config: dict = self.verify_config_and_envars(config)
         self.test_name: str = parse_test_name(getattr(request.node, "name", "direct_call"))
-        self.cache_manager: CacheManager = CacheManager(default_expiry_hours=default_expiry_hours)
         self.status: str = "creating"  # Initial status
         self.error: str = ""  # Error message if any
         self.token: str = self.config["token"]
@@ -44,13 +55,9 @@ class DatabricksManager:
             if self.config["host"].startswith("https://")
             else f"https://{self.config['host']}"
         )
-        self.cluster_id: Optional[str] = self.config.get(
-            "cluster_id", os.getenv("DATABRICKS_CLUSTER_ID")
-        )
         self.client: Optional[DatabricksAPI] = None  # Will be set by create_databricks_client
         self.creation_time = time.time()
         self.worker_pid = os.getpid()
-        self.is_shared = False
         self.created_by_us = False
         self.create_databricks_client(request)
         self.cluster_config_hash = self.get_cluster_config_hash()
@@ -63,6 +70,7 @@ class DatabricksManager:
         self.cluster_locks = {}
         self.cluster_usage_count: dict[str, int] = {}
         self.registry_lock = Lock()  # Protects the global registries themselves
+        self.remove_terminated_clusters()
 
     @staticmethod
     def verify_config_and_envars(config: Optional[dict] = None) -> dict[str, Any]:
@@ -82,6 +90,7 @@ class DatabricksManager:
             "host": os.getenv("DATABRICKS_HOST", ""),
             "token": os.getenv("DATABRICKS_TOKEN", ""),
             "cluster_id": os.getenv("DATABRICKS_CLUSTER_ID", ""),
+            "is_shared": os.getenv("DATABRICKS_IS_SHARED", "false").lower() == "true"
         }
         if config is None:
             config = {}
@@ -98,6 +107,38 @@ class DatabricksManager:
                 f"Missing required keys in config: {', '.join(missing_keys)}"
             )
         return config
+
+    def update_config_with_attributes(self) -> None:
+        """
+        Update the cluster configuration using the class' attributes and save to cache.
+        """
+        attributes = ["is_shared", "cluster_id", "cluster_name", "created_by_us", "status", "expiry_time"]
+        for attr in attributes:
+            if val := getattr(self, attr):
+                self.config[attr] = val
+        self.cache_manager.save_cluster_cache(self.config)
+
+    def remove_terminated_clusters(self) -> None:
+        """
+        Remove terminated clusters from the cache.
+
+        :rtype: None
+        """
+        removed_count = 0
+        print("Removing terminated clusters from cache...")
+        clusters = self.client.cluster.list_clusters()
+        if not clusters:
+            print("No clusters found.")
+            return
+        for cluster in clusters.get("clusters", []):
+            try:
+                if cluster["state"] == "TERMINATED":
+                    self.client.cluster.permanent_delete_cluster(cluster["cluster_id"])
+                    self.cache_manager.remove_terminated_cluster(cluster["cluster_id"])
+                    removed_count += 1
+            except Exception as e:
+                print(f"Error removing terminated clusters: {e}")
+        print(f"Removed {removed_count} terminated clusters.")
 
     def setup_databricks_environment(self, cluster_id: str, config: dict[str, Any]) -> None:
         """
@@ -210,8 +251,8 @@ class DatabricksManager:
         self.cluster_id = cluster_id
         self.created_by_us = cluster_created_by_us
         self.creation_time = time.time()
-        self.is_shared = False
         self.status = "ready"
+        self.update_config_with_attributes()
         return self
 
     def create_new_shared_cluster(self) -> "DatabricksManager":
@@ -243,8 +284,9 @@ class DatabricksManager:
             self.created_by_us = cluster_created_by_us
             self.worker_pid = os.getpid()
             self.creation_time = time.time()
-            self.is_shared = True
             self.status = "ready"
+            ["is_shared", "cluster_id", "cluster_name", "created_by_us"]
+            self.update_config_with_attributes()
             return self
 
         except Exception as e:
@@ -293,6 +335,7 @@ class DatabricksManager:
             self.creation_time = time.time()
             self.is_shared = False
             self.status = "ready"
+            self.update_config_with_attributes()
             return self
 
         except Exception as e:
@@ -350,6 +393,7 @@ class DatabricksManager:
                     self.is_shared = True
                     self.config_hash = self.cluster_config_hash
                     self.client = cluster_info.client
+                    self.update_config_with_attributes()
                 elif cluster_info.status == "failed":
                     # Previous creation failed, clean up and try again
                     print(
@@ -625,7 +669,7 @@ class DatabricksManager:
             # Handle non-shared cluster cleanup (fallback clusters, etc.)
             if cluster_created_by_us:
                 try:
-                    self.client.clusters.delete_cluster(cluster_id)
+                    self.client.cluster.delete_cluster(cluster_id)
                     print(
                         f"Worker {os.getpid()}: Deleted non-shared cluster {cluster_id}"
                     )
@@ -679,7 +723,7 @@ class DatabricksManager:
     def create_test_cluster(self) -> str:
         """Create a test cluster for the Hello World test"""
         cluster_config = {
-            "cluster_name": self.test_name,
+            "cluster_name": self.cluster_name,
             "spark_version": "13.3.x-scala2.12",  # Latest LTS version
             "node_type_id": "m5.large",  # Small, supported instance type
             "num_workers": 0,  # Single node cluster to minimize cost
@@ -696,7 +740,9 @@ class DatabricksManager:
             "custom_tags": {
                 "purpose": "de-bench-hello-world-testing",
                 "auto-created": "true",
-                "cached": "true"
+                "cached": "true",
+                "shared": str(self.is_shared).lower(),
+                "test_name": self.test_name,
             }
         }
         
@@ -718,6 +764,8 @@ class DatabricksManager:
 
             if state == "RUNNING":
                 self.created_by_us = True
+                self.status = state
+                self.update_config_with_attributes()
                 print(f"Cluster {cluster_id} is now running")
                 return cluster_id
             elif state in ["ERROR", "TERMINATED"]:
@@ -743,7 +791,6 @@ class DatabricksManager:
         cache_data = self.cache_manager.load_cluster_cache()
         if cache_data and not self.cache_manager.is_cluster_cache_valid(cache_data):
             print(f"Found expired cached cluster {cache_data.get('cluster_id', 'unknown')}, clearing cache")
-            self.cache_manager.clear_cluster_cache()
             cache_data = {}
         
         if self.cache_manager.is_cluster_cache_valid(cache_data):
@@ -758,11 +805,24 @@ class DatabricksManager:
             cluster_id, created_by_us = self.try_existing_or_cached_cluster(cluster_id, use_cache=False)
             if not created_by_us:
                 return cluster_id, False
-        
+
+        print("Checking all clusters in databricks for a shared one...")
+        all_clusters = self.client.cluster.list_clusters()
+        # check all running clusters to see if there is a shared one we can use
+        for cluster in all_clusters.get("clusters", []):
+            if cluster.get("custom_tags", {}).get("is_shared", "true").lower() == "true" and cluster["state"] == "RUNNING":
+                self.status = cluster["state"]
+                self.cluster_id = cluster["cluster_id"]
+                self.created_by_us = False
+                self.is_shared = True
+                self.update_config_with_attributes()
+                print(f"Found and using existing shared cluster: {cluster['cluster_id']}")
+                return cluster["cluster_id"], False
         # Create a new cluster and cache it
         print("Creating new test cluster")
         new_cluster_id = self.create_test_cluster()
-        self.cache_manager.cache_new_cluster(new_cluster_id)
+        # Cache the cluster with its configuration details
+        self.cache_manager.cache_new_cluster(new_cluster_id, self.config)  # type: ignore
         return new_cluster_id, True  # True = created by us
     
     def try_existing_or_cached_cluster(self, cluster_id: str, use_cache: bool = True) -> Tuple[str, bool]:
@@ -781,16 +841,32 @@ class DatabricksManager:
 
             if state == "RUNNING":
                 print(f"Using {image_type} running cluster: {cluster_id}")
+                # Update access tracking for cached clusters
+                if use_cache:
+                    self.cache_manager.update_cluster_access(cluster_id)
                 return cluster_id, False
             elif state == "TERMINATED":
                 print(f"{image_type} cluster {cluster_id} is terminated, creating new one")
-            else:
-                print(f"{image_type} cluster {cluster_id} is in state {state}, creating new one")
         except Exception as e:
             print(f"Error with {image_type} cluster {cluster_id}: {e}. Creating new cluster.")
-            # Clear the cache since this cluster is problematic
-            self.cache_manager.clear_cluster_cache()
+        print("Checking cache for a cluster...")
+        if self.can_use_any_shared_cached_cluster(cluster_id):
+            print(f"Using cached cluster: {cluster_id}")
+            return cluster_id, False
         return cluster_id, True
+    
+    def can_use_any_shared_cached_cluster(self, cluster_id: str) -> Optional[str]:
+        """
+        Check if there are any cached clusters that can be used, if so, return the cluster ID
+
+        :param str cluster_id: Cluster ID to exclude from the cache check.
+        :return: Cluster ID if there are any cached clusters that can be used, None otherwise.
+        :rtype: str
+        """
+        clusters = self.cache_manager.get_all_clusters(where_clause=f"cluster_id != {cluster_id} and is_shared = 1")
+        if clusters:
+            return clusters[0]["cluster_id"]
+        return None
 
     def cleanup_databricks_environment(self, config: dict[str, Any]) -> None:
         """Clean up the Databricks environment after testing"""
