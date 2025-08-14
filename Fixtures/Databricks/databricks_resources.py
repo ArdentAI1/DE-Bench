@@ -35,26 +35,35 @@ def databricks_resource(request):
     
     # Get databricks config from template or auto-detect
     template_config = build_template.get("databricks_config")
-    databricks_manager = DatabricksManager(config=template_config, request=request)
-    
+    # Handle cluster creation/selection
+    cluster_id = build_template.get("cluster_id") or request.param.get("cluster_id")
+    cluster_created_by_us = False
+    cluster_name = build_template.get("resource_id") or request.param.get("resource_id")
+    is_shared_cluster = build_template.get("use_shared_cluster") or request.param.get("use_shared_cluster") or False
+    default_expiry_hours = build_template.get("shared_cluster_timeout", 1) or request.param.get("shared_cluster_timeout", 1)
+    databricks_manager = DatabricksManager(
+        config=template_config,
+        request=request,
+        default_expiry_hours=default_expiry_hours,
+        cluster_id=cluster_id,
+        cluster_created_by_us=cluster_created_by_us,
+        cluster_name=cluster_name,
+        shared_cluster=is_shared_cluster,
+    )
+
     # Merge any template-specific config with base config
     config = databricks_manager.config.copy()
     if "databricks_config" in build_template:
         config.update(build_template["databricks_config"])
-    
+
     print(f"Worker {os.getpid()}: Creating Databricks resource for {test_name}")
     creation_start = time.time()
-    
+
     created_resources = []
-    
-    # Handle cluster creation/selection
-    cluster_id = None
-    cluster_created_by_us = False
-    
+
     cluster_config_hash = None
-    is_shared_cluster = False
-    
-    if build_template.get("use_shared_cluster", False):
+
+    if is_shared_cluster:
         # Use shared cluster approach with mutex coordination
         timeout = build_template.get("shared_cluster_timeout", 300)
         fallback = build_template.get("cluster_fallback", True)
