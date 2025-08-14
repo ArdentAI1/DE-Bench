@@ -7,8 +7,13 @@ including cluster cache management.
 """
 
 import argparse
+import os
 import sys
 from datetime import datetime
+
+# Add the project root to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from Fixtures.Databricks.cache_manager import CacheManager
 
 
@@ -109,6 +114,45 @@ def show_database_info():
     print(f"  Shared Memory File Size: {info['shm_size']} bytes")
 
 
+def show_shared_clusters():
+    """Show all shared cluster registry entries"""
+    cache_manager = CacheManager()
+    shared_clusters = cache_manager.get_all_shared_clusters()
+    
+    if not shared_clusters:
+        print("No shared clusters found in registry")
+        return
+    
+    print("=== Shared Cluster Registry ===")
+    for i, cluster in enumerate(shared_clusters, 1):
+        print(f"\nShared Cluster {i}:")
+        print(f"  Config Hash: {cluster['config_hash'][:16]}...")
+        print(f"  Cluster ID: {cluster.get('cluster_id', 'N/A')}")
+        print(f"  Status: {cluster['status']}")
+        print(f"  Worker PID: {cluster['worker_pid']}")
+        print(f"  Usage Count: {cluster['usage_count']}")
+        print(f"  Created: {cluster['creation_time']}")
+        if cluster.get('error_message'):
+            print(f"  Error: {cluster['error_message']}")
+
+
+def cleanup_shared_registry():
+    """Clean up all shared cluster registry entries"""
+    cache_manager = CacheManager()
+    shared_clusters = cache_manager.get_all_shared_clusters()
+    
+    if not shared_clusters:
+        print("No shared clusters to clean up")
+        return
+    
+    cleaned_count = 0
+    for cluster in shared_clusters:
+        if cache_manager.cleanup_shared_cluster_registry(cluster['config_hash']):
+            cleaned_count += 1
+    
+    print(f"Cleaned up {cleaned_count} shared cluster registry entries")
+
+
 def main():
     """
     Main function to parse command-line arguments and execute commands.
@@ -120,6 +164,8 @@ def main():
         python cli.py list      # Show all cached clusters
         python cli.py optimize  # Optimize database performance
         python cli.py dbinfo    # Show database file information
+        python cli.py shared    # Show shared cluster registry
+        python cli.py cleanup-shared  # Clean up shared cluster registry
     """
     parser = argparse.ArgumentParser(
         description="Databricks Environment Management CLI",
@@ -146,6 +192,12 @@ def main():
     # Database info command
     dbinfo_parser = subparsers.add_parser("dbinfo", help="Show database file information")
 
+    # Shared clusters command
+    shared_parser = subparsers.add_parser("shared", help="Show shared cluster registry")
+
+    # Cleanup shared registry command
+    cleanup_shared_parser = subparsers.add_parser("cleanup-shared", help="Clean up shared cluster registry")
+
     if len(sys.argv) == 1:
         parser.print_help()
         return
@@ -164,6 +216,10 @@ def main():
         optimize_database()
     elif args.command == "dbinfo":
         show_database_info()
+    elif args.command == "shared":
+        show_shared_clusters()
+    elif args.command == "cleanup-shared":
+        cleanup_shared_registry()
     else:
         parser.print_help()
 
