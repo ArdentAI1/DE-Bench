@@ -28,21 +28,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"purchases_test_db_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "purchases_bad",
-                    "columns": [
-                        {"name": "user_id", "type": "INT", "primary_key": True},
-                        {"name": "total_items", "type": "INT", "not_null": True},
-                        {"name": "total_orders", "type": "INT", "not_null": True}
-                    ],
-                    "data": [
-                        {"user_id": 1, "total_items": 5, "total_orders": 10},   # Should be 0.5
-                        {"user_id": 2, "total_items": 3, "total_orders": 7},    # Should be ~0.4286
-                        {"user_id": 4, "total_items": 3, "total_orders": 4},    # Should be 0.75 (but INT/INT = 0)
-                    ]
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)

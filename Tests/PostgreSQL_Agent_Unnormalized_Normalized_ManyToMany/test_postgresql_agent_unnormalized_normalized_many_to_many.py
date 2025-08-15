@@ -29,20 +29,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"authors_schema_test_db_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "books_bad",
-                    "columns": [
-                        {"name": "book_id", "type": "INT", "primary_key": True},
-                        {"name": "title", "type": "TEXT", "not_null": True},
-                        {"name": "authors", "type": "TEXT", "not_null": True}
-                    ],
-                    "data": [
-                        {"book_id": 1, "title": "Design Patterns", "authors": "Gamma,Others"},
-                        {"book_id": 2, "title": "Clean Code", "authors": "Robert Martin"}
-                    ]
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)

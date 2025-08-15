@@ -30,20 +30,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"stock_data_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "tesla_stock",
-                    "columns": [
-                        {"name": "date", "type": "DATE", "primary_key": True},
-                        {"name": "open", "type": "DECIMAL(10,2)"},
-                        {"name": "high", "type": "DECIMAL(10,2)"},
-                        {"name": "low", "type": "DECIMAL(10,2)"},
-                        {"name": "close", "type": "DECIMAL(10,2)"},
-                        {"name": "volume", "type": "BIGINT"}
-                    ],
-                    "data": []  # Empty initial data, will be populated by the DAG
-                }
-            ]
+            "sql_file": "schema.sql"
         }
     ]
 }], indirect=True)

@@ -8,7 +8,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
 @pytest.fixture(scope="function")
-def postgres_resource(request):
+def legacy_postgres_resource(request):
     """
     A function-scoped fixture that creates PostgreSQL resources based on template.
     Template structure: {
