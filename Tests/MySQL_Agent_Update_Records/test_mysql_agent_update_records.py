@@ -29,24 +29,7 @@ test_uuid = uuid.uuid4().hex[:8]
     "databases": [
         {
             "name": f"update_records_test_db_{test_timestamp}_{test_uuid}",
-            "tables": [
-                {
-                    "name": "users",
-                    "columns": [
-                        {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
-                        {"name": "name", "type": "VARCHAR(100)", "not_null": True},
-                        {"name": "email", "type": "VARCHAR(255)", "unique": True, "not_null": True},
-                        {"name": "age", "type": "INT"},
-                        {"name": "created_at", "type": "TIMESTAMP", "default": "CURRENT_TIMESTAMP"}
-                    ],
-                    "data": [
-                        {"name": "John Doe", "email": "john@example.com", "age": 32},
-                        {"name": "Jane Smith", "email": "jane@example.com", "age": 25},
-                        {"name": "Bob Johnson", "email": "bob@example.com", "age": 38},
-                        {"name": "Carol White", "email": "carol@example.com", "age": 29}
-                    ]
-                }
-            ]
+            "sql_file": "mysql_schema.sql"
         }
     ]
 }], indirect=True)
@@ -81,6 +64,7 @@ def test_mysql_agent_update_records(request, mysql_resource, supabase_account_re
     # SECTION 1: SETUP THE TEST
     config_results = None
     created_db_name = mysql_resource["created_resources"][0]["name"]
+    print(f"OLD FORMAT mysql_resource: {mysql_resource}")  # Add this line
     # Database: {created_db_name}
     
     try:

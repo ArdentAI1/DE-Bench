@@ -3,6 +3,7 @@ import json
 import time
 import os
 import mysql.connector
+import subprocess
 
 
 @pytest.fixture(scope="function")
@@ -106,6 +107,42 @@ def mysql_resource(request):
                                 
                                 connection.commit()
                                 print(f"Worker {os.getpid()}: Inserted {len(table_config['data'])} records into {table_name}")
+                
+                # Process SQL file if provided (alternative to tables)
+                elif "sql_file" in db_config:
+                    sql_file = db_config["sql_file"]
+                    
+                    # Resolve relative path
+                    if not os.path.isabs(sql_file):
+                        test_file = request.fspath.strpath
+                        test_dir = os.path.dirname(test_file)
+                        sql_file = os.path.join(test_dir, sql_file)
+                    
+                    if not os.path.exists(sql_file):
+                        raise FileNotFoundError(f"MySQL SQL file not found: {sql_file}")
+                    
+                    print(f"Worker {os.getpid()}: Loading SQL file {sql_file} into database {db_name}")
+                    
+                    # Use mysql command to load the SQL file
+                    mysql_cmd = [
+                        "mysql",
+                        f"--host={os.getenv('MYSQL_HOST', 'localhost')}",
+                        f"--port={os.getenv('MYSQL_PORT', '3306')}",
+                        f"--user={os.getenv('MYSQL_USERNAME', 'root')}",
+                        f"--password={os.getenv('MYSQL_PASSWORD', 'password')}",
+                        db_name
+                    ]
+                    
+                    with open(sql_file, 'r') as f:
+                        result = subprocess.run(
+                            mysql_cmd,
+                            stdin=f,
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+                    
+                    print(f"Worker {os.getpid()}: Successfully loaded SQL file into {db_name}")
         
     finally:
         cursor.close()
