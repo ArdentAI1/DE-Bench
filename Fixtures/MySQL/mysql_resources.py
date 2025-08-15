@@ -110,6 +110,9 @@ def mysql_resource(request):
                 
                 # Process SQL file if provided (alternative to tables)
                 elif "sql_file" in db_config:
+
+                    #TODO:FIx this. It does not load properly
+
                     sql_file = db_config["sql_file"]
                     
                     # Resolve relative path
