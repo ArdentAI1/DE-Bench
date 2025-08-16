@@ -17,6 +17,7 @@ requirements-dev.txt
 
 # Databricks ephemeral cache
 Environment/Databricks/ephemeral.json
+Environment/Databricks/cluster_cache*
 
 .DS_Store
 */.DS_Store
