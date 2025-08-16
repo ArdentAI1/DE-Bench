@@ -1,18 +1,12 @@
 import os
 import time
 import uuid
-from threading import Lock
 
 import pytest
 
-from Environment.Databricks import get_or_create_cluster
 from Fixtures.Databricks.databricks_manager import DatabricksManager
 
-# Global registry for shared cluster coordination
-SHARED_CLUSTERS = {}
-CLUSTER_LOCKS = {}
-CLUSTER_USAGE_COUNT = {}
-REGISTRY_LOCK = Lock()  # Protects the global registries themselves
+# SQLite-based coordination replaces global registry
 
 
 @pytest.fixture(scope="function")
@@ -36,26 +30,35 @@ def databricks_resource(request):
     
     # Get databricks config from template or auto-detect
     template_config = build_template.get("databricks_config")
-    databricks_manager = DatabricksManager(config=template_config, request=request)
-    
+    # Handle cluster creation/selection
+    cluster_id = build_template.get("cluster_id") or request.param.get("cluster_id")
+    cluster_created_by_us = False
+    cluster_name = build_template.get("resource_id") or request.param.get("resource_id")
+    is_shared_cluster = build_template.get("use_shared_cluster") or request.param.get("use_shared_cluster") or False
+    default_expiry_hours = build_template.get("shared_cluster_timeout", 1) or request.param.get("shared_cluster_timeout", 1)
+    databricks_manager = DatabricksManager(
+        config=template_config,
+        request=request,
+        default_expiry_hours=default_expiry_hours,
+        cluster_id=cluster_id,
+        cluster_created_by_us=cluster_created_by_us,
+        cluster_name=cluster_name,
+        shared_cluster=is_shared_cluster,
+    )
+
     # Merge any template-specific config with base config
     config = databricks_manager.config.copy()
     if "databricks_config" in build_template:
         config.update(build_template["databricks_config"])
-    
+
     print(f"Worker {os.getpid()}: Creating Databricks resource for {test_name}")
     creation_start = time.time()
-    
+
     created_resources = []
-    
-    # Handle cluster creation/selection
-    cluster_id = None
-    cluster_created_by_us = False
-    
+
     cluster_config_hash = None
-    is_shared_cluster = False
-    
-    if build_template.get("use_shared_cluster", False):
+
+    if is_shared_cluster:
         # Use shared cluster approach with mutex coordination
         timeout = build_template.get("shared_cluster_timeout", 300)
         fallback = build_template.get("cluster_fallback", True)
@@ -66,10 +69,13 @@ def databricks_resource(request):
         cluster_config_hash = databricks_manager.cluster_config_hash
         is_shared_cluster = databricks_manager.is_shared
         # Don't add to created_resources since this is a shared cluster managed globally
-    elif "cluster_config" in build_template:
+    else:
+        if "cluster_config" in build_template:
+            cluster_config = {**config, **build_template["cluster_config"]}
+        else:
+            cluster_config = config
         # Create a specific cluster for this resource
-        cluster_config = {**config, **build_template["cluster_config"]}
-        cluster_id, cluster_created_by_us = get_or_create_cluster(databricks_manager.client, cluster_config)
+        cluster_id, cluster_created_by_us = databricks_manager.get_or_create_cluster(cluster_config)
         created_resources.append({"type": "cluster", "cluster_id": cluster_id, "created_by_us": cluster_created_by_us})
         is_shared_cluster = False
     
@@ -168,12 +174,12 @@ def databricks_resource(request):
         "description": f"A Databricks resource for {test_name}",
         "status": "active",
         "created_resources": created_resources,
-        "client": databricks_manager.client,
         "config": config,
         "cluster_id": cluster_id,
         "cluster_created_by_us": cluster_created_by_us,
         "is_shared_cluster": is_shared_cluster,
-        "cluster_config_hash": cluster_config_hash
+        "cluster_config_hash": cluster_config_hash,
+        "databricks_manager": databricks_manager
     }
     
     print(f"Worker {os.getpid()}: Created Databricks resource {resource_id}")

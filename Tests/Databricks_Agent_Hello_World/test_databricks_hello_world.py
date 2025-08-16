@@ -4,12 +4,7 @@ import time
 
 import pytest
 
-from Environment.Databricks import (
-    setup_databricks_environment,
-    cleanup_databricks_environment,
-    extract_warehouse_id_from_http_path,
-    execute_sql_query
-)
+from Fixtures.Databricks.databricks_manager import DatabricksManager
 from model.Configure_Model import set_up_model_configs, remove_model_configs
 from model.Run_Model import run_model
 
@@ -20,15 +15,16 @@ module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
 
-def validate_hello_world_results(client, config, timeout=60):
+def validate_hello_world_results(config, databricks_manager: DatabricksManager, timeout=60):
     """Validate that the simple Spark job ran successfully and produced our unique string"""
     validation_results = {}
     start_time = time.time()
+    client = databricks_manager.client
     
     unique_message = config["unique_message"]
     test_id = config["test_id"]
     
-    print(f"🔍 Validating Hello World test with unique message: {unique_message}")
+    print(f"🔍 Validating Hello World test id: {test_id} with unique message: {unique_message}")
     
     # 1. Check if Delta table files exist in DBFS
     try:
@@ -39,7 +35,7 @@ def validate_hello_world_results(client, config, timeout=60):
         dbfs_info = client.dbfs.get_status(dbfs_path)
         validation_results["delta_table_exists"] = True
         validation_results["delta_table_path"] = dbfs_path
-        print(f"✓ Delta table exists at {dbfs_path}")
+        print(f"✓ Delta table exists at {dbfs_path} with status: {dbfs_info}")
     except Exception as e:
         validation_results["delta_table_exists"] = False
         validation_results["delta_table_error"] = str(e)
@@ -68,14 +64,12 @@ def validate_hello_world_results(client, config, timeout=60):
         print(f"⚠ Delta table structure validation failed: {e}")
     
     # 3. Try SQL validation if warehouse is available
-    warehouse_id = extract_warehouse_id_from_http_path(config.get("http_path", ""))
+    warehouse_id = databricks_manager.extract_warehouse_id_from_http_path(config.get("http_path", ""))
     if warehouse_id:
         try:
             if time.time() - start_time > timeout:
                 raise TimeoutError("Validation timeout reached")
-            
-            host = config["host"]
-            token = config["token"]
+
             catalog = config["catalog"]
             schema = config["schema"]
             table = config["table"]
@@ -89,7 +83,7 @@ def validate_hello_world_results(client, config, timeout=60):
             OR CAST(message AS STRING) = '{unique_message}'
             """
             
-            result = execute_sql_query(host, token, warehouse_id, content_query, catalog, schema, timeout=30)
+            result = databricks_manager.execute_sql_query(warehouse_id, content_query, catalog, schema, timeout=30)
             
             if result["success"]:
                 validation_results["sql_validation"] = True
@@ -103,7 +97,7 @@ def validate_hello_world_results(client, config, timeout=60):
                     print(f"⚠ Unique message '{unique_message}' not found in table data")
                     # Try a broader search
                     all_data_query = f"SELECT * FROM {catalog}.{schema}.{table} LIMIT 5"
-                    all_result = execute_sql_query(host, token, warehouse_id, all_data_query, catalog, schema, timeout=30)
+                    all_result = databricks_manager.execute_sql_query(warehouse_id, all_data_query, catalog, schema, timeout=30)
                     if all_result["success"]:
                         validation_results["sample_table_data"] = all_result["data"]
                         print(f"Sample table data: {all_result['data']}")
@@ -153,7 +147,6 @@ def update_test_step(test_steps, step_name, status, message):
         "resource_id": "hello_world_test",
         "use_shared_cluster": True,
         "cluster_fallback": True,
-        "shared_cluster_timeout": 1200
     }
 ], indirect=True)
 @pytest.mark.databricks
@@ -169,11 +162,12 @@ def test_databricks_hello_world(request, databricks_resource, supabase_account_r
     - Clean up the environment
     """
     config = Test_Configs.Configs["services"]["databricks"]
+    databricks_manager: DatabricksManager = databricks_resource["databricks_manager"]
     
     # Get cluster info from the databricks_resource fixture
-    cluster_id = databricks_resource["cluster_id"]
+    cluster_id = databricks_manager.cluster_id
     cluster_created_by_us = databricks_resource.get("cluster_created_by_us", False)
-    databricks_client = databricks_resource["client"]
+    databricks_client = databricks_manager.client
     
     start_time = time.time()
     
@@ -221,7 +215,7 @@ def test_databricks_hello_world(request, databricks_resource, supabase_account_r
         update_test_step(test_steps, "Cluster Setup", "passed", f"Using shared cluster: {cluster_id}")
         
         # Step 2: Set up Databricks environment
-        setup_databricks_environment(databricks_client, config, cluster_id)
+        databricks_manager.setup_databricks_environment(cluster_id, config)
         update_test_step(test_steps, "Environment Setup", "passed", f"Environment setup completed for test ID: {config['test_id']}")
         
         # Step 3: Set up model configuration
@@ -253,7 +247,7 @@ def test_databricks_hello_world(request, databricks_resource, supabase_account_r
         # Step 5: Validate Results
         print(f"Starting validation for unique message: {config['unique_message']}")
         try:
-            validation_results = validate_hello_world_results(databricks_client, config)
+            validation_results = validate_hello_world_results(config, databricks_manager)
             print(f"Validation Results: {validation_results}")
             
             # Check if validation passed
@@ -306,7 +300,7 @@ def test_databricks_hello_world(request, databricks_resource, supabase_account_r
     finally:
         
         # Clean up Databricks environment
-        cleanup_databricks_environment(databricks_client, config, cluster_created_by_us)
+        databricks_manager.cleanup_databricks_environment(config)
         
         # Clean up model configs
         remove_model_configs(Configs=Test_Configs.Configs)

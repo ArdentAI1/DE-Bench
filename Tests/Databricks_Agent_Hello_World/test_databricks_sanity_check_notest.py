@@ -10,18 +10,10 @@ It serves as a control test to validate that:
 This test should be run before the main AI test to ensure the infrastructure is working.
 """
 
-import os
-import time
-import uuid
 import pytest
-import importlib
-from databricks_api import DatabricksAPI
 
-from Environment.Databricks import (
-    setup_databricks_environment,
-    cleanup_databricks_environment,
-)
 from Fixtures.Databricks.databricks_resources import databricks_resource
+
 
 @pytest.mark.parametrize("databricks_resource", [
     {
