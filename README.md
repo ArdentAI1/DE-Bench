@@ -138,6 +138,16 @@ pytest                                # Run all tests without parallelization (n
 
 Pytest supports `and` & `or` operators too. Something like `pytest -m "one and two"` will work.
 
+**⚠️ Important: Graceful Test Interruption**
+
+The test suite now handles **Ctrl+C** gracefully! When you interrupt tests with Ctrl+C:
+- ✅ **All resources are cleaned up** (databases, containers, cloud resources)
+- ✅ **No orphaned resources** are left behind
+- ✅ **Fixture teardown runs** automatically
+- ✅ **Temp files are removed**
+
+You can safely interrupt long-running tests without worrying about cleanup! DO NOT SPAM CONTROL C though
+
 6. Configure your tools and permissions:
 
 MongoDB:
