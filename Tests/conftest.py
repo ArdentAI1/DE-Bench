@@ -3,6 +3,8 @@ import sys
 import os
 import pytest
 import json
+import signal
+import atexit
 from datetime import datetime
 from multiprocessing import Manager
 from dotenv import load_dotenv
@@ -24,8 +26,52 @@ from Fixtures.base_resources import *
 manager = Manager()
 test_results = manager.list()
 
+# Flag to prevent double cleanup
+cleanup_already_run = False
+
+
+def cleanup_handler():
+    """Cleanup function that runs on exit or interrupt"""
+    global cleanup_already_run
+    
+    if cleanup_already_run:
+        print("🔄 Cleanup already completed, skipping...")
+        return
+    
+    cleanup_already_run = True
+    print("\n🛑 Interrupt received! Running cleanup...")
+    
+    try:
+        from Fixtures.session_spindown import session_spindown
+        session_spindown()
+        print("✅ Session spindown completed")
+    except Exception as e:
+        print(f"❌ Error during session spindown: {e}")
+    
+    # Clean up temp directory
+    import shutil
+    if os.path.exists(".tmp"):
+        try:
+            shutil.rmtree(".tmp/")
+            print("✅ Temp directory cleaned up")
+        except Exception as e:
+            print(f"❌ Error cleaning temp directory: {e}")
+
+
+def signal_handler(signum, frame):
+    """Handle Ctrl+C (SIGINT) gracefully"""
+    cleanup_handler()
+    print("🔄 Cleanup completed. Exiting...")
+    sys.exit(0)
+
 
 def pytest_configure(config):
+    # Register signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # Also register cleanup for normal exit
+    atexit.register(cleanup_handler)
+    
     print("Configuring pytest...")
 
     # Load environment variables from the .env file
