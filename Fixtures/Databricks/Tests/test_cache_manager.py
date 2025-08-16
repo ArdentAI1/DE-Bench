@@ -9,7 +9,7 @@ import tempfile
 import time
 
 # Add the project root to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from Fixtures.Databricks.cache_manager import CacheManager
 
