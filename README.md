@@ -19,40 +19,95 @@ To Run this testing yourself:
 Below is a template of all environment variables needed for the tests. Copy this to your `.env` file and replace the placeholder values with your own credentials. If there is an actual value there already do not change it:
 
 <pre><code>
+# AWS Credentials
+ACCESS_KEY_ID_AWS="YOUR_AWS_ACCESS_KEY_ID"
+SECRET_ACCESS_KEY_AWS="YOUR_AWS_SECRET_ACCESS_KEY"
 
 # MongoDB
-MONGODB_URI="YOUR_MONGODB_CONNECTION_STRING"         # MongoDB connection string
+MONGODB_URI="YOUR_MONGODB_CONNECTION_STRING"
 
 # MySQL
-MYSQL_HOST="YOUR_MYSQL_HOST"                         # MySQL host address
-MYSQL_PORT="YOUR MYSQL PORT"                         # MySQL port (typically 3306)
-MYSQL_USERNAME="YOUR_MYSQL_USERNAME"                 # MySQL username
-MYSQL_PASSWORD="YOUR_MYSQL_PASSWORD"                 # MySQL password
+MYSQL_HOST="YOUR_MYSQL_HOST"
+MYSQL_PORT=3306
+MYSQL_USERNAME="YOUR_MYSQL_USERNAME"
+MYSQL_PASSWORD="YOUR_MYSQL_PASSWORD"
 
-# Postgres
-POSTGRES_HOSTNAME="YOUR_POSTGRES_HOSTNAME"           # Postgres hostname
-POSTGRES_PORT="YOUR POSTGRES PORT"                   # Postgres port (typically 5432)
-POSTGRES_USERNAME="YOUR_POSTGRES_USERNAME"           # Postgres username
-POSTGRES_PASSWORD="YOUR_POSTGRES_PASSWORD"           # Postgres password
+# Supabase
+SUPABASE_PROJECT_URL="YOUR_SUPABASE_PROJECT_URL"
+SUPABASE_API_KEY="YOUR_SUPABASE_API_KEY"
+SUPABASE_URL="YOUR_SUPABASE_URL"
+SUPABASE_SERVICE_ROLE_KEY="YOUR_SUPABASE_SERVICE_ROLE_KEY"
+SUPABASE_JWT_SECRET="YOUR_SUPABASE_JWT_SECRET"
 
-# Airflow
-AIRFLOW_GITHUB_TOKEN="YOUR_GITHUB_TOKEN"             # GitHub token with full repo access
-AIRFLOW_REPO="YOUR_AIRFLOW_REPO_URL"                 # Repo URL (e.g., https://github.com/YOUR_ORG/YOUR_REPO)
-AIRFLOW_DAG_PATH="dags/"                             # Path to the DAG folder
-AIRFLOW_HOST="http://localhost:8888"                 # Airflow host URL
-AIRFLOW_USERNAME="airflow"                           # Airflow username
-AIRFLOW_PASSWORD="airflow"                           # Airflow password
-AIRFLOW_UID=501                                      # User ID for Airflow
-AIRFLOW_GID=0                                        # Group ID for Airflow
-AIRFLOW_IMAGE_NAME="apache/airflow:2.10.5"           # Docker image for Airflow
-_AIRFLOW_WWW_USER_USERNAME="airflow"                 # Airflow web UI username
-_AIRFLOW_WWW_USER_PASSWORD="airflow"                 # Airflow web UI password
-AIRFLOW__CORE__LOAD_EXAMPLES=false                   # Whether to load example DAGs
+# PostgreSQL
+POSTGRES_HOSTNAME="YOUR_POSTGRES_HOSTNAME"
+POSTGRES_PORT=5432
+POSTGRES_USERNAME="YOUR_POSTGRES_USERNAME"
+POSTGRES_PASSWORD="YOUR_POSTGRES_PASSWORD"
 
-# Benchmark
-BENCHMARK_ROOT="FULL_PATH_TO_BENCHMARK_FOLDER"       # Full path of the folder you clone the repo into
-MODEL_PATH="PATH_TO_YOUR_MODEL"                      # Path to your model
+# Snowflake
+SNOWFLAKE_ACCOUNT="YOUR_SNOWFLAKE_ACCOUNT"
+SNOWFLAKE_USER="YOUR_SNOWFLAKE_USER"
+SNOWFLAKE_PASSWORD="YOUR_SNOWFLAKE_PASSWORD"
+SNOWFLAKE_WAREHOUSE="YOUR_SNOWFLAKE_WAREHOUSE"
+
+# Azure SQL
+AZURE_SQL_SERVER="YOUR_AZURE_SQL_SERVER"
+AZURE_SQL_USERNAME="YOUR_AZURE_SQL_USERNAME"
+AZURE_SQL_PASSWORD="YOUR_AZURE_SQL_PASSWORD"
+AZURE_SQL_VERSION=18
+
+# Airflow Configuration
+AIRFLOW_GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
+AIRFLOW_REPO="YOUR_AIRFLOW_REPO_URL"
+AIRFLOW_DAG_PATH="dags/"
+AIRFLOW_REQUIREMENTS_PATH="Requirements/"
+AIRFLOW_HOST="http://localhost:8888"
+AIRFLOW_USERNAME="airflow"
+AIRFLOW_PASSWORD="airflow"
+AIRFLOW_UID=501
+AIRFLOW_GID=0
+AIRFLOW_IMAGE_NAME="apache/airflow:2.10.5"
+_AIRFLOW_WWW_USER_USERNAME="airflow"
+_AIRFLOW_WWW_USER_PASSWORD="airflow"
+AIRFLOW__CORE__LOAD_EXAMPLES=false
+
+# Databricks Configuration
+DATABRICKS_HOST="YOUR_DATABRICKS_HOST"
+DATABRICKS_TOKEN="YOUR_DATABRICKS_TOKEN"
+DATABRICKS_CLUSTER_ID="YOUR_DATABRICKS_CLUSTER_ID"
+DATABRICKS_HTTP_PATH="YOUR_DATABRICKS_HTTP_PATH"
+DATABRICKS_JOBS_WORKSPACE_URL="YOUR_DATABRICKS_WORKSPACE_URL"
+DATABRICKS_JOBS_ACCESS_TOKEN="YOUR_DATABRICKS_ACCESS_TOKEN"
+DATABRICKS_JOBS_GITHUB_TOKEN="YOUR_DATABRICKS_GITHUB_TOKEN"
+DATABRICKS_JOBS_REPO="YOUR_DATABRICKS_REPO_URL"
+DATABRICKS_JOBS_REPO_PATH="YOUR_DATABRICKS_REPO_PATH"
+
+# Finch API
+FINCH_ACCESS_TOKEN="YOUR_FINCH_ACCESS_TOKEN"
+
+# Astronomer Cloud Configuration
+ASTRO_WORKSPACE_ID="YOUR_ASTRO_WORKSPACE_ID"
+ASTRO_ACCESS_TOKEN="YOUR_ASTRO_ACCESS_TOKEN"
+ASTRO_CLOUD_PROVIDER="aws"
+ASTRO_REGION="us-east-1"
+
+
+
+### Custom Variables for Your Setup
+
+### Below are custom variables for your specific setup. We set up the Ardent configs as an example:
+
+
+
+# Ardent AI Configuration (Example Custom Setup)
+ARDENT_PUBLIC_KEY="YOUR_ARDENT_PUBLIC_KEY"
+ARDENT_SECRET_KEY="YOUR_ARDENT_SECRET_KEY"
+ARDENT_BASE_URL="http://localhost:8000"
+
+
 </code></pre>
+
 
 3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
 

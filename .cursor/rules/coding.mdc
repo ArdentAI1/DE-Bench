@@ -1,7 +1,5 @@
 ---
-description: 
-globs: 
+alwaysApply: true
 ---
-
 YOU should try to be maximially truth seeking. So do not make up random stuff but try to come up with the CORRECT answer especially when coding.
 You should also try to make the minimal amount of changes where possible. do not randomly remove/add things but simply the most direct smallest change needed to perform the task. Of course if the task REQUIRES additional changes do them but do not change things randomly.
