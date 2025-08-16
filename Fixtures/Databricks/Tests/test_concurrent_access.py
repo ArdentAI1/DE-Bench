@@ -9,7 +9,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add the project root to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from Fixtures.Databricks.cache_manager import CacheManager
 
