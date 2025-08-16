@@ -5,17 +5,13 @@ load_dotenv()
 
 User_Input = """
 Create an Airflow DAG that:
-1. Reads data from three PostgreSQL tables: users_source_1, users_source_2, and users_source_3
-2. Deduplicates the data based on email address (which is the unique identifier)
-3. Creates a new table called 'users_deduplicated' with the deduplicated data
-4. The deduplicated table should include all columns from the source tables: id, email, first_name, last_name, company, department, role, source
-5. For duplicate email addresses, merge the data from all sources, keeping non-null values
-6. Runs daily at midnight
-7. Has a single task named 'deduplicate_users'
-8. Name the DAG 'user_deduplication_dag'
-9. Create it in a branch called 'feature/user-deduplication'
-10. Name the PR 'Add User Data Deduplication Pipeline'
-11. Use pandas for data processing and psycopg2 for database connections
+1. Deduplicates the data from these three PostgreSQL tables: users_source_1, users_source_2, and users_source_3 by email address (which is the unique identifier)
+2. Creates a table called 'users_deduplicated' with the deduplicated data
+3. Runs daily at midnight
+4. Has a single task named 'deduplicate_users' that deduplicates the data
+5. Name the DAG 'user_deduplication_dag'
+6. Create it in a branch called 'feature/user-deduplication'
+7. Name the PR 'Add User Data Deduplication Pipeline'
 """
 
 Configs = {

@@ -4,63 +4,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 User_Input = """
-Create an Airflow DAG that implements a comprehensive data engineering pipeline with the following requirements:
-
-1. DATA CLEANSING AND VALIDATION:
-   - Read data from raw_orders table and perform data quality checks
-   - Validate email addresses using regex patterns
-   - Convert order_date from string to proper DATE format, handling invalid dates
-   - Remove records with negative quantities or zero prices
-   - Standardize customer names (remove extra spaces, proper case)
-   - Flag records with missing or invalid product_sku references
-
-2. DATA TRANSFORMATION:
-   - Create a cleaned_orders table with validated and standardized data
-   - Join with product_catalog to enrich order data with product details
-   - Calculate order totals and profit margins
-   - Add data quality flags and validation status
-   - Create customer dimension table with deduplicated customer information
-
-3. INVENTORY ANALYSIS:
-   - Process raw_inventory data to calculate current stock levels
-   - Create inventory_facts table with daily stock positions
-   - Calculate inventory turnover rates and days of inventory
-   - Identify slow-moving and fast-moving products
-   - Track inventory value and cost of goods sold
-
-4. CUSTOMER ANALYTICS:
-   - Process raw_customer_feedback to create customer_sentiment table
-   - Calculate average ratings and sentiment scores by product/category
-   - Create customer_lifetime_value calculations
-   - Generate customer segmentation based on purchase behavior
-   - Track customer satisfaction trends over time
-
-5. BUSINESS INTELLIGENCE TABLES:
-   - Create sales_facts table with comprehensive sales metrics
-   - Build product_performance table with sales, inventory, and feedback metrics
-   - Generate daily_sales_summary with aggregated KPIs
-   - Create customer_behavior_analysis table
-   - Build data_quality_metrics table to track data quality over time
-
-6. DATA QUALITY MONITORING:
-   - Implement data quality checks and alerting
-   - Track data completeness, accuracy, and consistency metrics
-   - Create data lineage tracking
-   - Generate data quality reports
-
-7. PIPELINE REQUIREMENTS:
-   - Use multiple tasks with proper dependencies
-   - Implement error handling and retry logic
-   - Add data validation checkpoints
-   - Create audit logging for all transformations
-   - Ensure idempotency for all operations
-   - Run daily at 2 AM
-   - Name the DAG 'advanced_data_pipeline_dag'
-   - Create it in a branch called 'feature/advanced-data-pipeline'
-   - Name the PR 'Add Advanced Data Engineering Pipeline'
-   - Use pandas for data processing and psycopg2 for database connections
-   - Implement proper logging and monitoring
-   - Add data quality alerts for critical issues
+Create an Airflow DAG that:
+1. Creates a new table called cleaned_orders from the raw_orders table by validating the data and data types
+2. Joins the cleaned_orders table with the product_catalog table to get the product details and sales KPIs
+3. Builds a customer_dim with deduplicated customer records from the cleaned_orders table.
+4. Process raw_inventory into daily inventory_facts with stock positions and inventory KPIs like inventory turnover, days of inventory, slow/fast movers, and COGS.
+5. Transforms raw_customer_feedback into customer_sentiment with ratings and sentiment by product/category.
+6. Compute CLV and segment customers by purchase behavior.
+7. Creates sales_facts, product_performance, daily_sales_summary, customer_behavior_analysis, and data_quality_metrics tables.
+8. Implement DQ checks, completeness/accuracy/consistency metrics, lineage capture, reports, and critical alerts.
+9. Add audit logging, idempotency, retries, and validation checkpoints across tasks.
+10. Define multiple tasks with explicit dependencies.
+11. Enable operational logging and monitoring.
+12. Run daily at midnight.
+13. Name the DAG 'advanced_data_pipeline_dag'.
+14. Create it in branch 'feature/advanced-data-pipeline'.
+15. Name the PR 'Add Advanced Data Engineering Pipeline'.
 """
 
 Configs = {

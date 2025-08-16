@@ -4,121 +4,30 @@ from dotenv import load_dotenv
 load_dotenv()
 
 User_Input = """
-Create an enterprise-grade Airflow DAG that implements a comprehensive data platform for a multi-billion dollar company with the following complex requirements:
 
-1. CUSTOMER 360 DATA INTEGRATION:
-   - Integrate customer data from 3 different systems (CRM, E-commerce, Marketing Automation)
-   - Create a unified customer profile with deduplication and data quality scoring
-   - Implement customer journey mapping across all touchpoints
-   - Build customer lifetime value (CLV) models with predictive analytics
-   - Create customer segmentation using machine learning clustering algorithms
-   - Implement real-time customer data updates with change data capture (CDC)
+Create an Airflow DAG that:
+1. Integrates CRM, E-commerce, and Marketing data into unified customer profiles with deduplication and real-time CDC.
+2. Maps customer journeys, segments with ML, and models customer lifetime value using predictive analytics.
+3. Harmonizes ERP and E-commerce transactions with validation, unified views, currency/tax handling, reconciliation, fraud monitoring, and GAAP reporting.
+4. Integrates warehouse and 3PL inventory with real-time tracking, demand forecasting, multi-location optimization, automated reorder points, and KPI dashboards.
+5. Tracks multichannel campaigns like email, social, and digital ads with multi-touch attribution, CAC/LTV, ROI cohorts, A/B testing, and predictive performance models.
+6. Builds product analytics for performance scoring, recommendations, lifecycle analysis, competitive pricing, quality monitoring, and demand forecasting.
+7. Delivers operational intelligence with real-time dashboards, supply-chain and fulfillment optimization, support analytics, quality control, and efficiency metrics.
+8. Implements advanced ML for customer churn, sales forecasting, cross-sell recommendations, anomaly detection, sentiment analysis, and predictive maintenance.
+9. Enforces governance with lineage, automated data-quality monitoring, GDPR anonymization, audit logging, retention policies, and access controls.
+10. Provides real-time streaming ingestion, streaming analytics, event-driven processing, critical alerts, sub-second dashboards, and streaming ETL.
+11. Establishes enterprise architecture from lake to warehouse with data marts, virtualization, cataloging, APIs, and a domain-oriented data mesh.
+12. Achieves performance and scale via parallelism, incremental processing, partitioning, caching, performance tuning, and auto-scaling.
+13. Ensures observability with comprehensive logging, quality and failure alerts, SLA dashboards, distributed tracing, health checks, and automated recovery.
+14. Uses multiple DAGs with complex orchestration and clear dependencies.
+15. Implements error handling, retries, circuit breakers, idempotency, validation checkpoints, data versioning, and rollbacks.
+16. Automates testing and deployments with CI/CD and runs on schedules with real-time triggers.
+17. Implements robust logging, monitoring, alerting, and security with encryption and best practices.
+18. Provides comprehensive documentation, runbooks, disaster recovery, and backups.
+19. Name the main DAG 'enterprise_data_platform_dag'.
+21. Create it in branch 'feature/enterprise-data-platform'.
+22. Name the PR 'Add Enterprise Data Platform with Advanced Analytics'.
 
-2. MULTI-SOURCE TRANSACTION PROCESSING:
-   - Process transactions from ERP and E-commerce systems with different schemas
-   - Implement data validation and business rule enforcement
-   - Create unified transaction views with currency conversion and tax calculations
-   - Build real-time transaction monitoring and fraud detection
-   - Implement transaction reconciliation across systems
-   - Create financial reporting with GAAP compliance
-
-3. INVENTORY OPTIMIZATION PLATFORM:
-   - Integrate inventory data from internal warehouses and 3PL systems
-   - Implement real-time inventory tracking with IoT sensor data simulation
-   - Create demand forecasting models using time series analysis
-   - Build inventory optimization algorithms for multi-location fulfillment
-   - Implement automated reorder point calculations
-   - Create inventory performance dashboards with KPIs
-
-4. MARKETING ATTRIBUTION AND ROI:
-   - Track marketing campaigns across multiple channels (Email, Social, Digital Ads)
-   - Implement multi-touch attribution modeling
-   - Calculate customer acquisition cost (CAC) and lifetime value (LTV)
-   - Create marketing ROI dashboards with cohort analysis
-   - Implement A/B testing framework for campaign optimization
-   - Build predictive models for campaign performance
-
-5. PRODUCT ANALYTICS AND PERFORMANCE:
-   - Create product performance scoring using multiple metrics
-   - Implement product recommendation engines
-   - Build product lifecycle analytics
-   - Create competitive pricing analysis
-   - Implement product quality monitoring with customer feedback
-   - Build product demand forecasting models
-
-6. OPERATIONAL INTELLIGENCE:
-   - Create real-time operational dashboards
-   - Implement supply chain optimization algorithms
-   - Build shipping and fulfillment optimization
-   - Create customer support analytics and ticket routing
-   - Implement quality control monitoring
-   - Build operational efficiency metrics
-
-7. ADVANCED ANALYTICS AND MACHINE LEARNING:
-   - Implement customer churn prediction models
-   - Create sales forecasting using ensemble methods
-   - Build recommendation systems for cross-selling
-   - Implement anomaly detection for fraud and quality issues
-   - Create sentiment analysis for customer feedback
-   - Build predictive maintenance models for inventory
-
-8. DATA GOVERNANCE AND COMPLIANCE:
-   - Implement data lineage tracking across all transformations
-   - Create data quality monitoring with automated alerts
-   - Build GDPR compliance framework with data anonymization
-   - Implement audit logging for all data access and changes
-   - Create data retention policies and automated cleanup
-   - Build data security monitoring and access controls
-
-9. REAL-TIME STREAMING PROCESSING:
-   - Implement real-time data ingestion from multiple sources
-   - Create streaming analytics for immediate business insights
-   - Build real-time alerting for critical business events
-   - Implement event-driven architecture for data processing
-   - Create real-time dashboards with sub-second latency
-   - Build streaming ETL pipelines for operational data
-
-10. ENTERPRISE DATA ARCHITECTURE:
-    - Implement data lake to data warehouse architecture
-    - Create data marts for different business units
-    - Build data virtualization layer for real-time access
-    - Implement data catalog and metadata management
-    - Create data API layer for application integration
-    - Build data mesh architecture for domain-driven design
-
-11. PERFORMANCE AND SCALABILITY:
-    - Implement parallel processing for large datasets
-    - Create incremental processing for efficiency
-    - Build data partitioning and optimization strategies
-    - Implement caching layers for frequently accessed data
-    - Create performance monitoring and optimization
-    - Build auto-scaling capabilities for variable workloads
-
-12. MONITORING AND OBSERVABILITY:
-    - Implement comprehensive logging and monitoring
-    - Create alerting for data quality and pipeline failures
-    - Build performance dashboards and SLA monitoring
-    - Implement distributed tracing for data lineage
-    - Create health checks and automated recovery
-    - Build capacity planning and resource optimization
-
-PIPELINE REQUIREMENTS:
-- Use multiple DAGs with complex dependencies and orchestration
-- Implement error handling, retry logic, and circuit breakers
-- Create data validation checkpoints and quality gates
-- Build idempotent operations for data consistency
-- Implement data versioning and rollback capabilities
-- Create automated testing and deployment pipelines
-- Run on a schedule with real-time triggers
-- Name the main DAG 'enterprise_data_platform_dag'
-- Create it in a branch called 'feature/enterprise-data-platform'
-- Name the PR 'Add Enterprise Data Platform with Advanced Analytics'
-- Use modern data engineering tools (pandas, numpy, scikit-learn, etc.)
-- Implement proper logging, monitoring, and alerting
-- Create comprehensive documentation and runbooks
-- Build disaster recovery and backup procedures
-- Implement security best practices and encryption
-- Create data governance and compliance frameworks
 """
 
 Configs = {

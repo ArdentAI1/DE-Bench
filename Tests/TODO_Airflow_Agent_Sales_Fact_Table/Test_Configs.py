@@ -15,15 +15,11 @@ Create an Airflow DAG that:
    - unit_price (DECIMAL)
    - total_amount (DECIMAL)
    - sale_date (DATE)
-3. The sales_fact table should contain sample sales data that links transactions, items, and customers
-4. Generate realistic sales records that demonstrate the relationships between the three source tables
-5. Runs daily at midnight
-6. Has a single task named 'create_sales_fact_table'
-7. Name the DAG 'sales_fact_creation_dag'
-8. Create it in a branch called 'feature/sales-fact-table'
-9. Name the PR 'Add Sales Fact Table Creation Pipeline'
-10. Use pandas for data processing and psycopg2 for database connections
-11. Ensure proper foreign key constraints are created in the sales_fact table
+3. Runs daily at midnight
+4. Has a single task named 'create_sales_fact_table'
+5. Name the DAG 'sales_fact_creation_dag'
+6. Create it in a branch called 'feature/sales-fact-table'
+7. Name the PR 'Add Sales Fact Table Creation Pipeline'
 """
 
 Configs = {
