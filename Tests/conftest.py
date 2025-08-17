@@ -70,7 +70,6 @@ def pytest_configure(config):
     signal.signal(signal.SIGINT, signal_handler)
     
     # Also register cleanup for normal exit
-    atexit.register(cleanup_handler)
     
     print("Configuring pytest...")
 

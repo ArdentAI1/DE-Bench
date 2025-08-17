@@ -91,8 +91,7 @@ ASTRO_WORKSPACE_ID="YOUR_ASTRO_WORKSPACE_ID"
 ASTRO_ACCESS_TOKEN="YOUR_ASTRO_ACCESS_TOKEN"
 ASTRO_CLOUD_PROVIDER="aws"
 ASTRO_REGION="us-east-1"
-
-
+</code></pre>
 
 ### Custom Variables for Your Setup
 
@@ -103,10 +102,7 @@ Below are custom variables for your specific setup. We set up the Ardent configs
 ARDENT_PUBLIC_KEY="YOUR_ARDENT_PUBLIC_KEY"
 ARDENT_SECRET_KEY="YOUR_ARDENT_SECRET_KEY"
 ARDENT_BASE_URL="http://localhost:8000"
-
-
 </code></pre>
-
 
 3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
 
@@ -168,3 +164,19 @@ Notes:
 -Airflow must be set up with git sync enabled to the repo you provide
 -make sure your mySQL password and username are up to date. AWS sets defaults to rotate once a week...
 -Postgres must have the postgres db in it to function (i mean u shouldn't have deleted this anyway)
+
+## Common Errors
+
+### **Astronomer Token Expired**
+```
+subprocess.CalledProcessError: Command '['astro', 'login', '--token-login', 'eyJhbGciOiJSUzI1NiIs...']' returned non-zero exit status 1.
+```
+**Solution:** Your `ASTRO_ACCESS_TOKEN` has expired. Generate a new token from your Astronomer account and update your `.env` file.
+
+
+### **Database Connection Errors**
+```
+psycopg2.OperationalError: could not connect to server
+mysql.connector.errors.DatabaseError: Can't connect to MySQL server
+```
+**Solution:** Check your database credentials in the `.env` file. For AWS RDS, credentials may rotate weekly - update them as needed.
