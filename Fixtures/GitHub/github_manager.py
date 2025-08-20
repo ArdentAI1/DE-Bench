@@ -3,7 +3,7 @@ This module provides a class for managing GitHub operations.
 """
 
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import github
 import time
@@ -245,23 +245,27 @@ class GitHubManager:
             print(f"✗ Failed to merge PR: {e}")
             return False, test_step
 
-    def _update_build_info(self, build_info: Dict[str, str], branch_name: str) -> None:
+    def _update_build_info(self, build_info: Dict[str, str], branch_name: str) -> dict[str, Any]:
         """
         Update the build_info.txt file with the provided build info dictionary.
+        Verifies the change was committed before returning.
         
         :param Dict[str, str] build_info: Build info dictionary
         :param str branch_name: Name of the branch to update the file on
-        :rtype: None
+        :return: The result of the update or create operation
+        :rtype: dict[str, Any]
         """
         # use github api to update the build_info.txt file
         build_info_txt = ""
         for key, value in build_info.items():
             build_info_txt += f"{key.replace(' ', '_')}={value}\n"
         build_info_txt = build_info_txt.strip()
+        
+        result = None
         try:
             contents = self.repo.get_contents(self.build_info, ref=branch_name)
             # check if the file exists
-            self.repo.update_file(
+            result = self.repo.update_file(
                 path=self.build_info,
                 message=f"Updated {self.build_info}",
                 content=build_info_txt,
@@ -272,7 +276,7 @@ class GitHubManager:
         except Exception as e:
             if e.status == 404:
                 try:
-                    self.repo.create_file(
+                    result = self.repo.create_file(
                         path=self.build_info,
                         message=f"Created {self.build_info}",
                         content=build_info_txt,
@@ -283,6 +287,27 @@ class GitHubManager:
                     raise Exception(f"✗ Error creating build info for branch {branch_name}: {e}")
             else:
                 raise Exception(f"Error updating build info: {e}")
+        
+        # Verify the change was committed by checking the new commit exists
+        if result and 'commit' in result:
+            commit_sha = result['commit'].sha
+            try:
+                # Verify the commit exists and is accessible
+                _ = self.repo.get_commit(commit_sha)
+                print(f"✓ Build info commit verified: {commit_sha[:7]}")
+                
+                # Additional verification: check the file content matches what we wrote
+                updated_contents = self.repo.get_contents(self.build_info, ref=branch_name)
+                if updated_contents.decoded_content.decode('utf-8').strip() == build_info_txt:
+                    print(f"✓ Build info content verified on branch {branch_name}")
+                    return result
+                else:
+                    print(f"⚠ Build info content mismatch on branch {branch_name}")
+                    
+            except Exception as e:
+                print(f"⚠ Could not verify build info commit: {e}")
+        raise Exception(f"✗ Error updating/validating {self.build_info} on branch {branch_name}: {result}")
+        
 
     def check_and_update_gh_secrets(self, secrets: Dict[str, str]) -> None:
         """
