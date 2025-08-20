@@ -189,7 +189,7 @@ def test_airflow_agent_data_deduplication(request, airflow_resource, github_reso
         # Check if deduplicated table exists and has data
         cur.execute("""
             SELECT COUNT(*) 
-            FROM users_deduplicated
+            FROM deduplicated_users
         """)
         row_count = cur.fetchone()[0]
         
@@ -202,7 +202,7 @@ def test_airflow_agent_data_deduplication(request, airflow_resource, github_reso
         cur.execute("""
             SELECT column_name, data_type 
             FROM information_schema.columns 
-            WHERE table_name = 'users_deduplicated'
+            WHERE table_name = 'deduplicated_users'
             ORDER BY ordinal_position
         """)
         columns = cur.fetchall()
@@ -211,12 +211,12 @@ def test_airflow_agent_data_deduplication(request, airflow_resource, github_reso
         
         # Check that all expected columns exist
         for expected_col in expected_columns:
-            assert expected_col in actual_columns, f"Missing expected column '{expected_col}' in users_deduplicated table"
+            assert expected_col in actual_columns, f"Missing expected column '{expected_col}' in deduplicated_users table"
         
         # Verify that email addresses are unique (no duplicates)
         cur.execute("""
             SELECT email, COUNT(*) 
-            FROM users_deduplicated 
+            FROM deduplicated_users 
             GROUP BY email 
             HAVING COUNT(*) > 1
         """)
@@ -226,7 +226,7 @@ def test_airflow_agent_data_deduplication(request, airflow_resource, github_reso
         # Verify specific deduplication cases
         cur.execute("""
             SELECT email, first_name, last_name, company, department, role, source
-            FROM users_deduplicated 
+            FROM deduplicated_users 
             WHERE email IN ('john.doe@example.com', 'jane.smith@example.com', 'bob.wilson@example.com')
             ORDER BY email
         """)
