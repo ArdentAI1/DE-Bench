@@ -29,6 +29,7 @@ Configs = {
         },
         "postgreSQL": {
             "hostname": os.getenv("POSTGRES_HOSTNAME"),
+            "port": os.getenv("POSTGRES_PORT"),
             "username": os.getenv("POSTGRES_USERNAME"),
             "password": os.getenv("POSTGRES_PASSWORD"),
             "databases": [{"name": "advanced_pipeline"}],  # Will be updated with actual database name from fixture
