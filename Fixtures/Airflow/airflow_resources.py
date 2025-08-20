@@ -365,6 +365,65 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     return temp_dir
 
 
+def _find_hibernating_deployment(test_name: str) -> Union[tuple[str, str], str]:
+    """
+    Helper method to find the hibernating deployment in Astronomer.
+
+    :param str test_name: The name of the test, used to create a new deployment if none is found.
+    :return: The name and id of the hibernating deployment, or the name of the new deployment if none is found.
+    :rtype: Union[tuple[str, str], str]
+    """
+    # get all deployments
+    deployments = _run_and_validate_subprocess(
+        ["astro", "deployment", "list"],
+        "listing deployments in Astronomer",
+        return_output=True,
+    )
+    # parse the output to get the name and id of the hibernating deployment
+    deployments = deployments.split("\n")
+    deployments = [deployment.split() for deployment in deployments]
+    deployments = {deployment[0]: deployment[1] for deployment in deployments}
+    for deployment_name, deployment_id in deployments.items():
+        if deployment_name.lower() == "hibernating":
+            return deployment_name, deployment_id
+    return _create_deployment_in_astronomer(test_name)
+
+
+def _wake_up_deployment(deployment_name: str) -> None:
+    """
+    Helper method to wake up a deployment in Astronomer.
+
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :rtype: None
+    """
+    if wake_up_deployment := _run_and_validate_subprocess(
+        ["astro", "deployment", "wake-up", "--deployment-name", deployment_name],
+        "waking up deployment",
+    ):
+        print(f"Worker {os.getpid()}: Deployment {deployment_name} woke up successfully.")
+    else:
+        print(f"Unable to wake up deployment {deployment_name}: {wake_up_deployment}")
+        raise EnvironmentError(f"Unable to wake up deployment {deployment_name}")
+
+
+def _hibernate_deployment(deployment_name: str) -> None:
+    """
+    Helper method to hibernate a deployment in Astronomer.
+
+    :raises EnvironmentError: If the deployment cannot be hibernated.
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :rtype: None
+    """
+    if hibernating_deployment := _run_and_validate_subprocess(
+        ["astro", "deployment", "hibernate", "--deployment-name", deployment_name],
+        "hibernating deployment",
+    ):
+        print(f"Worker {os.getpid()}: Deployment {deployment_name} hibernated successfully.")
+    else:
+        print(f"Unable to hibernate deployment {deployment_name}: {hibernating_deployment}")
+        raise EnvironmentError(f"Unable to hibernate deployment {deployment_name}")
+
+
 def _create_user_in_airflow_deployment(deployment_name: str) -> None:
     """
     Helper method to create a user in the Airflow deployment using Astronomer CLI and environment variables in Airflow.
