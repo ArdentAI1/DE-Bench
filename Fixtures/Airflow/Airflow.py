@@ -24,11 +24,11 @@ class Airflow_Local:
         self.API_HEADERS = {"Authorization": f"Bearer {self.API_TOKEN}", "Cache-Control": "no-cache"}
         self.max_retries = max_retries
 
-    def wait_for_airflow_to_be_ready(self, wait_time_in_minutes: Optional[int] = 3) -> bool:
+    def wait_for_airflow_to_be_ready(self, wait_time_in_minutes: Optional[int] = 0) -> bool:
         """
         Wait for a total of 10 minutes for the Airflow webserver to be ready.
 
-        :param wait_time_in_minutes: The time to wait for the Airflow webserver to be ready, defaults to 3 minutes
+        :param wait_time_in_minutes: The time to wait for the Airflow webserver to be ready, defaults to 0 minutes
         :return: True if the Airflow webserver is ready, False otherwise.
         :rtype: bool
         """

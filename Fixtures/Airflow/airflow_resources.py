@@ -52,7 +52,7 @@ def airflow_resource(request):
     # Create Airflow resource
     print(f"Worker {os.getpid()}: Creating Airflow resource for {test_name}")
     creation_start = time.time()
-    created_resources = []
+    test_resources = []
 
     # run terminal commands to create the airflow resource in astronomer
     # login to astronomer
@@ -62,24 +62,27 @@ def airflow_resource(request):
     )
 
     test_dir = _create_dir_and_astro_project(unique_id)
-    astro_deployment_id = _create_deployment_in_astronomer(unique_id)
+    # astro_deployment_id = _create_deployment_in_astronomer(unique_id)
+    result = _find_hibernating_deployment(unique_id)
+    astro_deployment_id = result["deployment_id"]
+    astro_deployment_name = result["deployment_name"]
 
     try:
          # check and update the github secrets
         _check_and_update_gh_secrets(
             deployment_id=astro_deployment_id,
-            deployment_name=unique_id,
+            deployment_name=astro_deployment_name,
             astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
         )
 
-        created_resources.append(astro_deployment_id)
+        test_resources.append(astro_deployment_id if result["created"] else astro_deployment_name)
         api_url = "https://" + _run_and_validate_subprocess(
             [
                 "astro",
                 "deployment",
                 "inspect",
                 "--deployment-name",
-                unique_id,
+                astro_deployment_name,
                 "--key",
                 "metadata.airflow_api_url",
             ],
@@ -98,9 +101,9 @@ def airflow_resource(request):
                 "token",
                 "create",
                 "--description",
-                f"{test_name} API access for deployment {unique_id}",
+                f"{test_name} API access for deployment {astro_deployment_name}",
                 "--name",
-                f"{unique_id} API access",
+                f"{astro_deployment_name} API access",
                 "--role",
                 "DEPLOYMENT_ADMIN",
                 "--expiration",
@@ -117,7 +120,13 @@ def airflow_resource(request):
             api_token = api_token[api_token.find('\n') + 1:-1].strip()
 
         # create a user in the airflow deployment (ardent needs username and password for the Airflowconfig)
-        _create_user_in_airflow_deployment(unique_id)
+        _create_user_in_airflow_deployment(astro_deployment_name)
+
+        # validate the api server is running
+        airflow_instance = Airflow_Local(
+             airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url,
+        )
+        airflow_instance.wait_for_airflow_to_be_ready()
 
         creation_end = time.time()
         print(
@@ -137,16 +146,14 @@ def airflow_resource(request):
             "project_name": test_dir.stem,
             "base_url": base_url,
             "deployment_id": astro_deployment_id,
-            "deployment_name": unique_id,
+            "deployment_name": astro_deployment_name,
             "api_url": api_url,
             "api_token": api_token,
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
             "username": os.getenv("AIRFLOW_USERNAME", "airflow"),
             "password": os.getenv("AIRFLOW_PASSWORD", "airflow"),
-            "airflow_instance": Airflow_Local(
-                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url
-            ),
-            "created_resources": created_resources,
+            "airflow_instance": airflow_instance,
+            "created_resources": test_resources,
         }
 
         print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
@@ -162,7 +169,7 @@ def airflow_resource(request):
     finally:
         # clean up the airflow resource after the test completes
         print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
-        cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir)
+        cleanup_airflow_resource(test_name, resource_id, test_resources, test_dir, result["created"])
 
 
 def _parse_astro_version() -> None:
@@ -365,6 +372,137 @@ def _create_dir_and_astro_project(unique_id: str) -> Path:
     return temp_dir
 
 
+def _find_hibernating_deployment(test_name: str) -> dict:
+    """
+    Helper method to find the hibernating deployment in Astronomer.
+
+    :param str test_name: The name of the test, used to create a new deployment if none is found.
+    :return: The name and id of the hibernating deployment, or the name of the new deployment if none is found.
+    :rtype: Union[tuple[str, str], str]
+    """
+    result = {
+        "created": False,
+        "deployment_name": test_name,
+        "deployment_id": "",
+    }
+    # get all deployments
+    deployment_command_output = _run_and_validate_subprocess(
+        ["astro", "deployment", "list"],
+        "listing deployments in Astronomer",
+        return_output=True,
+    )
+    # parse the output to get the name and id of the hibernating deployment
+    deployments = deployment_command_output.split("\n")
+    # remove the headers to get only the deployments by finding name in the list
+    if index := next((i for i, line in enumerate(deployments) if "NAME" in line), None):
+        deployments = deployments[index + 1:]
+    deployments = [deployment.split() for deployment in deployments]
+    deployments = {deployment[0]: deployment[5] for deployment in deployments}
+    for deployment_name, deployment_id in deployments.items():
+        status = _check_deployment_status(deployment_name)
+        if status.lower() == "hibernating":
+            # found a hibernating deployment, wake it up and return its name and id
+            print(f"Worker {os.getpid()}: Found hibernating deployment, waking it up: {deployment_name}")
+            _wake_up_deployment(deployment_name)
+
+            result["deployment_id"] = deployment_id
+            result["deployment_name"] = deployment_name
+            return result
+    # no hibernating deployment found, create a new one
+    print(f"Worker {os.getpid()}: No hibernating deployment found, creating a new one: {test_name}")
+    deployment_id = _create_deployment_in_astronomer(test_name)
+    result["created"] = True
+    result["deployment_id"] = deployment_id
+    return result
+
+
+def _check_deployment_status(deployment_name: str) -> str:
+    """
+    Helper method to check the status of a deployment in Astronomer.
+
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :return: The status of the deployment.
+    :rtype: str
+    """
+    status = _run_and_validate_subprocess(
+        [
+            "astro",
+            "deployment",
+            "inspect",
+            "--deployment-name",
+            deployment_name,
+            "--key",
+            "metadata.status",
+        ],
+        "getting Astro deployment status",
+        return_output=True,
+    )
+    print(f"Worker {os.getpid()}: Deployment {deployment_name} status: {status}")
+    return status
+
+
+def _wake_up_deployment(deployment_name: str) -> None:
+    """
+    Helper method to wake up a deployment in Astronomer.
+
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :raises TimeoutError: If the deployment does not become healthy in time.
+    :raises EnvironmentError: If the deployment cannot be woken up.
+    :rtype: None
+    """
+    if wake_up_deployment := _run_and_validate_subprocess(
+        ["astro", "deployment", "wake-up", "--deployment-name", deployment_name, "-f"],
+        "waking up deployment",
+    ):
+        _validate_deployment_status(deployment_name=deployment_name, expected_status="healthy")
+    else:
+        print(f"Unable to wake up deployment {deployment_name}: {wake_up_deployment}")
+        raise EnvironmentError(f"Unable to wake up deployment {deployment_name}")
+
+
+def _validate_deployment_status(deployment_name: str, expected_status: str) -> None:
+    """
+    Validates the status of a deployment in Astronomer.
+
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :param str expected_status: The expected status of the deployment.
+    :raises TimeoutError: If the deployment status does not match the expected status within the timeout period.
+    :rtype: None
+    """
+    start_time = time.time()
+    print(f"Worker {os.getpid()}: Waiting for deployment {deployment_name} to have a hibernation status...")
+    for _ in range(30):
+        status = _check_deployment_status(deployment_name)
+        if status.lower() == expected_status.lower():
+            end_time = time.time()
+            print(
+                f"Worker {os.getpid()}: Deployment {deployment_name} is {expected_status} after {end_time - start_time:.2f}s"
+            )
+            print(f"Worker {os.getpid()}: Deployment {deployment_name} {expected_status} successfully.")
+            return
+        time.sleep(10)
+    raise TimeoutError(f"Deployment {deployment_name} did not become {expected_status} in time.")
+
+
+def _hibernate_deployment(deployment_name: str) -> None:
+    """
+    Helper method to hibernate a deployment in Astronomer.
+
+    :raises EnvironmentError: If the deployment cannot be hibernated.
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :rtype: None
+    """
+    print(f"Worker {os.getpid()}: Hibernating deployment {deployment_name}...")
+    if hibernating_deployment := _run_and_validate_subprocess(
+        ["astro", "deployment", "hibernate", "--deployment-name", deployment_name, "-f"],
+        "hibernating deployment",
+    ):
+        print(f"Worker {os.getpid()}: Deployment {deployment_name} hibernated successfully.")
+    else:
+        print(f"Unable to hibernate deployment {deployment_name}: {hibernating_deployment}")
+        raise EnvironmentError(f"Unable to hibernate deployment {deployment_name}")
+
+
 def _create_user_in_airflow_deployment(deployment_name: str) -> None:
     """
     Helper method to create a user in the Airflow deployment using Astronomer CLI and environment variables in Airflow.
@@ -403,16 +541,19 @@ def _create_user_in_airflow_deployment(deployment_name: str) -> None:
 def cleanup_airflow_resource(
     test_name: str,
     resource_id: str,
-    created_resources: list[str],
+    test_resources: list[str],
     test_dir: Optional[Path] = None,
+    created: bool = False,
 ):
     """
     Cleans up an Airflow resource, including the temp directory and the created resources in Astronomer.
 
     :param test_name: The name of the test.
     :param resource_id: The ID of the resource.
-    :param created_resources: The list of created resources.
+    :param test_resources: The list of resources used in the test.
     :param test_dir: The path to the test directory.
+    :param created: Whether the deployment was created by this test or was hibernating.
+    :rtype: None
     """
     if test_dir and test_dir.exists():
         try:
@@ -426,13 +567,17 @@ def cleanup_airflow_resource(
     # Cleanup after test completes
     print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
     try:
-        # Clean up created resources in reverse order
-        for resource in reversed(created_resources):
-            _ = _run_and_validate_subprocess(
-                ["astro", "deployment", "delete", resource, "-f"],
-                "delete Astronomer deployment",
-                check=True,
-            )
+            # Clean up created resources in reverse order
+        for resource in reversed(test_resources):
+            if created:
+                _ = _run_and_validate_subprocess(
+                    ["astro", "deployment", "delete", resource, "-f"],
+                    "delete Astronomer deployment",
+                    check=True,
+                )
+            else:
+                # deployment was hibernating, just hibernate it again
+                _hibernate_deployment(resource)
         print(
             f"Worker {os.getpid()}: Airflow resource {resource_id} cleaned up successfully"
         )
