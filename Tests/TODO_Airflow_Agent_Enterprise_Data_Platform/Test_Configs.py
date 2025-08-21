@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 User_Input = """
-
 Create an Airflow DAG that:
 1. Integrates CRM, E-commerce, and Marketing data into unified customer profiles with deduplication and real-time CDC.
 2. Maps customer journeys, segments with ML, and models customer lifetime value using predictive analytics.
@@ -15,19 +14,10 @@ Create an Airflow DAG that:
 7. Delivers operational intelligence with real-time dashboards, supply-chain and fulfillment optimization, support analytics, quality control, and efficiency metrics.
 8. Implements advanced ML for customer churn, sales forecasting, cross-sell recommendations, anomaly detection, sentiment analysis, and predictive maintenance.
 9. Enforces governance with lineage, automated data-quality monitoring, GDPR anonymization, audit logging, retention policies, and access controls.
-10. Provides real-time streaming ingestion, streaming analytics, event-driven processing, critical alerts, sub-second dashboards, and streaming ETL.
-11. Establishes enterprise architecture from lake to warehouse with data marts, virtualization, cataloging, APIs, and a domain-oriented data mesh.
-12. Achieves performance and scale via parallelism, incremental processing, partitioning, caching, performance tuning, and auto-scaling.
-13. Ensures observability with comprehensive logging, quality and failure alerts, SLA dashboards, distributed tracing, health checks, and automated recovery.
-14. Uses multiple DAGs with complex orchestration and clear dependencies.
-15. Implements error handling, retries, circuit breakers, idempotency, validation checkpoints, data versioning, and rollbacks.
-16. Automates testing and deployments with CI/CD and runs on schedules with real-time triggers.
-17. Implements robust logging, monitoring, alerting, and security with encryption and best practices.
-18. Provides comprehensive documentation, runbooks, disaster recovery, and backups.
-19. Name the main DAG 'enterprise_data_platform_dag'.
-21. Create it in branch 'feature/enterprise-data-platform'.
-22. Name the PR 'Add Enterprise Data Platform with Advanced Analytics'.
-
+10. Ensures observability with comprehensive logging, quality and failure alerts, SLA dashboards, distributed tracing, health checks, and automated recovery.
+11. Name the main DAG 'enterprise_data_platform_dag'.
+12. Create it in branch 'feature/enterprise-data-platform'.
+13. Name the PR 'Add Enterprise Data Platform with Advanced Analytics'.
 """
 
 Configs = {
