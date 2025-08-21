@@ -77,6 +77,11 @@ def test_postgresql_agent_add_record(request, postgres_resource, supabase_accoun
             }
         )
 
+
+        print(test_configs)
+
+        input("Press Enter to continue...")
+
         # SECTION 2: RUN THE MODEL
         start_time = time.time()
         model_result = run_model(

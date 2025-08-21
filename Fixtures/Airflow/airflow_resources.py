@@ -396,7 +396,9 @@ def _find_hibernating_deployment(test_name: str) -> dict:
     # remove the headers to get only the deployments by finding name in the list
     if index := next((i for i, line in enumerate(deployments) if "NAME" in line), None):
         deployments = deployments[index + 1:]
-    deployments = [deployment.split() for deployment in deployments]
+    deployments = [deployment.split() for deployment in deployments if deployment.strip()]
+    # Filter out header row and empty rows, only keep actual deployment rows
+    deployments = [deployment for deployment in deployments if len(deployment) > 5 and deployment[0] != 'NAME']
     deployments = {deployment[0]: deployment[5] for deployment in deployments}
     for deployment_name, deployment_id in deployments.items():
         status = _check_deployment_status(deployment_name)
