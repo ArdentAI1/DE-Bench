@@ -52,7 +52,7 @@ def airflow_resource(request):
     # Create Airflow resource
     print(f"Worker {os.getpid()}: Creating Airflow resource for {test_name}")
     creation_start = time.time()
-    created_resources = []
+    test_resources = []
 
     # run terminal commands to create the airflow resource in astronomer
     # login to astronomer
@@ -75,7 +75,7 @@ def airflow_resource(request):
             astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
         )
 
-        created_resources.append(astro_deployment_id)
+        test_resources.append(astro_deployment_id if result["created"] else astro_deployment_name)
         api_url = "https://" + _run_and_validate_subprocess(
             [
                 "astro",
@@ -122,6 +122,12 @@ def airflow_resource(request):
         # create a user in the airflow deployment (ardent needs username and password for the Airflowconfig)
         _create_user_in_airflow_deployment(astro_deployment_name)
 
+        # validate the api server is running
+        airflow_instance = Airflow_Local(
+             airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url,
+        )
+        airflow_instance.wait_for_airflow_to_be_ready(0)
+
         creation_end = time.time()
         print(
             f"Worker {os.getpid()}: Airflow resource creation took {creation_end - creation_start:.2f}s"
@@ -146,10 +152,8 @@ def airflow_resource(request):
             "api_headers": {"Authorization": f"Bearer {api_token}", "Cache-Control": "no-cache"},
             "username": os.getenv("AIRFLOW_USERNAME", "airflow"),
             "password": os.getenv("AIRFLOW_PASSWORD", "airflow"),
-            "airflow_instance": Airflow_Local(
-                airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url
-            ),
-            "created_resources": created_resources,
+            "airflow_instance": airflow_instance,
+            "created_resources": test_resources,
         }
 
         print(f"Worker {os.getpid()}: Created Airflow resource {resource_id}")
@@ -165,7 +169,7 @@ def airflow_resource(request):
     finally:
         # clean up the airflow resource after the test completes
         print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
-        cleanup_airflow_resource(test_name, resource_id, created_resources, test_dir, result["created"])
+        cleanup_airflow_resource(test_name, resource_id, test_resources, test_dir, result["created"])
 
 
 def _parse_astro_version() -> None:
@@ -450,23 +454,34 @@ def _wake_up_deployment(deployment_name: str) -> None:
         ["astro", "deployment", "wake-up", "--deployment-name", deployment_name, "-f"],
         "waking up deployment",
     ):
-        start_time = time.time()
-        # wait for the deployment have a healthy status
-        print(f"Worker {os.getpid()}: Waiting for deployment {deployment_name} to become healthy...")
-        for _ in range(30):
-            status = _check_deployment_status(deployment_name)
-            if status.lower() == "healthy":
-                end_time = time.time()
-                print(
-                    f"Worker {os.getpid()}: Deployment {deployment_name} is healthy after {end_time - start_time:.2f}s"
-                )
-                print(f"Worker {os.getpid()}: Deployment {deployment_name} woke up successfully.")
-                return
-            time.sleep(10)
-        raise TimeoutError(f"Deployment {deployment_name} did not become healthy in time.")
+        _validate_deployment_status(deployment_name=deployment_name, expected_status="healthy")
     else:
         print(f"Unable to wake up deployment {deployment_name}: {wake_up_deployment}")
         raise EnvironmentError(f"Unable to wake up deployment {deployment_name}")
+
+
+def _validate_deployment_status(deployment_name: str, expected_status: str) -> None:
+    """
+    Validates the status of a deployment in Astronomer.
+
+    :param str deployment_name: The name of the Airflow deployment in Astronomer.
+    :param str expected_status: The expected status of the deployment.
+    :raises TimeoutError: If the deployment status does not match the expected status within the timeout period.
+    :rtype: None
+    """
+    start_time = time.time()
+    print(f"Worker {os.getpid()}: Waiting for deployment {deployment_name} to have a hibernation status...")
+    for _ in range(30):
+        status = _check_deployment_status(deployment_name)
+        if status.lower() == expected_status.lower():
+            end_time = time.time()
+            print(
+                f"Worker {os.getpid()}: Deployment {deployment_name} is {expected_status} after {end_time - start_time:.2f}s"
+            )
+            print(f"Worker {os.getpid()}: Deployment {deployment_name} {expected_status} successfully.")
+            return
+        time.sleep(10)
+    raise TimeoutError(f"Deployment {deployment_name} did not become {expected_status} in time.")
 
 
 def _hibernate_deployment(deployment_name: str) -> None:
@@ -526,7 +541,7 @@ def _create_user_in_airflow_deployment(deployment_name: str) -> None:
 def cleanup_airflow_resource(
     test_name: str,
     resource_id: str,
-    created_resources: list[str],
+    test_resources: list[str],
     test_dir: Optional[Path] = None,
     created: bool = False,
 ):
@@ -535,7 +550,7 @@ def cleanup_airflow_resource(
 
     :param test_name: The name of the test.
     :param resource_id: The ID of the resource.
-    :param created_resources: The list of created resources.
+    :param test_resources: The list of resources used in the test.
     :param test_dir: The path to the test directory.
     :param created: Whether the deployment was created by this test or was hibernating.
     :rtype: None
@@ -553,7 +568,7 @@ def cleanup_airflow_resource(
     print(f"Worker {os.getpid()}: Cleaning up Airflow resource {resource_id}")
     try:
             # Clean up created resources in reverse order
-        for resource in reversed(created_resources):
+        for resource in reversed(test_resources):
             if created:
                 _ = _run_and_validate_subprocess(
                     ["astro", "deployment", "delete", resource, "-f"],
