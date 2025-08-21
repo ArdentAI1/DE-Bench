@@ -10,9 +10,9 @@ RUN curl -sSL https://install.astronomer.io | bash -s -- v1.34.1
 
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Copy project files and install Python dependencies with UV
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync --frozen
 
 # Copy the rest of the application
 COPY . .

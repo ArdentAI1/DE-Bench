@@ -106,10 +106,11 @@ ARDENT_BASE_URL="http://localhost:8000"
 
 3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
 
+4. Install Dependencies:
+   - **UV (Recommended)**: `uv sync` (or `pip install uv && uv sync` if UV is not installed)
+   - **Legacy pip**: `pip install -r requirements.txt` (still supported for backward compatibility)
 
-
-
-4. Set up and run the Docker Compose environment:
+5. Set up and run the Docker Compose environment:
 
 ```bash
 # Build and start the containers
@@ -119,13 +120,18 @@ docker-compose up --build
 docker-compose up -d --build
 ```
 
-5. Run tests from inside the container:
+6. Run tests from inside the container:
 
 ```bash
 # Enter the container
 docker-compose exec de-bench bash
 
-# Run tests with various options
+# Run tests with UV (recommended)
+uv run pytest -n auto -sv             # Run with default settings (parallel)
+uv run pytest -sv -k "keyword"        # Run tests by keyword
+uv run pytest -m "postgres"           # Run tests by marker
+
+# Legacy pytest (fallback)
 pytest -n auto -sv                    # Run with default settings (parallel)
 pytest -sv -k "keyword"               # Run tests by keyword
 pytest -m "postgres"                  # Run tests by marker
@@ -144,7 +150,7 @@ The test suite now handles **Ctrl+C** gracefully! When you interrupt tests with 
 
 You can safely interrupt long-running tests without worrying about cleanup! DO NOT SPAM CONTROL C though
 
-6. Configure your tools and permissions:
+7. Configure your tools and permissions:
 
 MongoDB:
 - Required Role: dbAdmin
@@ -153,7 +159,7 @@ MongoDB:
   - Create/Delete Databases
   - Read/Write to Collections
 
-7. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the necessary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind.
+8. A lot of the tests run on tools or frameworks. We've set up a clean .env file with all the necessary variables needed. We've tried to optimize the setup of all the tests but it will likely charge some credits through the tools. Keep that in mind.
 
 
 
@@ -180,3 +186,12 @@ psycopg2.OperationalError: could not connect to server
 mysql.connector.errors.DatabaseError: Can't connect to MySQL server
 ```
 **Solution:** Check your database credentials in the `.env` file. For AWS RDS, credentials may rotate weekly - update them as needed.
+
+## Dependency Management Migration
+
+This project has been migrated from pip + requirements.txt to UV for faster and more reliable dependency management:
+
+- **UV Benefits**: 10-100x faster installation, universal lockfile, better dependency resolution
+- **New Files**: `pyproject.toml` (project config), `uv.lock` (lockfile), `.venv/` (virtual environment)
+- **Backward Compatibility**: The `requirements.txt` file is maintained for legacy systems and fixture compatibility
+- **Docker**: Updated to use UV for container builds
