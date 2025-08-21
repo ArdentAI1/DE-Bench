@@ -126,7 +126,7 @@ def airflow_resource(request):
         airflow_instance = Airflow_Local(
              airflow_dir=test_dir, host=base_url, api_token=api_token, api_url=api_url,
         )
-        airflow_instance.wait_for_airflow_to_be_ready(0)
+        airflow_instance.wait_for_airflow_to_be_ready()
 
         creation_end = time.time()
         print(
