@@ -40,7 +40,7 @@ def test_airflow_agent_and_postgresql_agent_database_deduplication(request, airf
     github_manager = github_resource["github_manager"]
     Test_Configs.User_Input = github_manager.add_merge_step_to_user_input(Test_Configs.User_Input)
     request.node.user_properties.append(("user_query", Test_Configs.User_Input))
-    dag_name = "database_deduplication_dag"
+    dag_name = "user_deduplication_dag"
     pr_title = "Add Database-Side User Deduplication Pipeline"
     github_manager.check_and_update_gh_secrets(
         secrets={
