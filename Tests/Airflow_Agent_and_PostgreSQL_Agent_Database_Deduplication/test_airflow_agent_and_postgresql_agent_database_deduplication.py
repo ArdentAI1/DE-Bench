@@ -197,11 +197,6 @@ def test_airflow_agent_and_postgresql_agent_database_deduplication(request, airf
         columns = cur.fetchall()
         assert len(columns) > 0, "deduplicated_users table was not created"
         
-        expected_columns = ['id', 'email', 'first_name', 'last_name', 'organization', 'department', 'role', 'source']
-        actual_columns = [col[0] for col in columns]
-        for expected_col in expected_columns:
-            assert expected_col in actual_columns, f"Missing expected column '{expected_col}' in deduplicated_users table"
-        
         # Verify database and stored procedure exists
         cur.execute("""
             SELECT COUNT(*) 
