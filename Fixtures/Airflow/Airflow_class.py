@@ -995,13 +995,14 @@ class AirflowManager:
     ) -> bool:
         """
         Verify if a DAG exists using the dag_id in Airflow via API call.
+        Also checks for import errors and returns False immediately if the DAG has import errors.
 
         Args:
             dag_id: The ID of the DAG to check for
             max_wait_minutes: Maximum time to wait in minutes
 
         Returns:
-            True if the DAG exists, False otherwise
+            True if the DAG exists and has no import errors, False otherwise
         """
         wait_time_seconds = 20
         max_wait_seconds = max_wait_minutes * 60
@@ -1011,6 +1012,18 @@ class AirflowManager:
             print(
                 f"Attempt {attempt + 1}/{max_retries}: Checking for DAG '{dag_id}'..."
             )
+
+            # Check for import errors first
+            try:
+                import_errors = self.get_dag_import_errors()
+                for error in import_errors:
+                    error_filename = error.get("filename", "")
+                    # Check if the import error is related to our DAG
+                    if dag_id in error_filename or dag_id in error.get("stack_trace", ""):
+                        print(f"❌ DAG '{dag_id}' has import error: {error.get('stack_trace', 'Unknown error')}")
+                        return False
+            except Exception as e:
+                print(f"⚠️ Warning: Could not check import errors: {e}")
 
             dag_response = requests.get(
                 f"{self.host.rstrip('/')}/api/v1/dags/{dag_id}",
