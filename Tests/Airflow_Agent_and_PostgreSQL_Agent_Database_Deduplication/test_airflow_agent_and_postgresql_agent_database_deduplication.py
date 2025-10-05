@@ -89,7 +89,7 @@ def create_model_inputs(
 
     # Generate dynamic branch and PR names with special database deduplication suffixes
     pr_title = f"Add Database Deduplication with Stored Procedures {test_timestamp}_{test_uuid}"
-    branch_name = f"feature/database-deduplication-{test_timestamp}_{test_uuid}"
+    branch_name = github_resource_data.get("resource_id")
 
     # Start with the original user input from Test_Configs
     task_description = Test_Configs.User_Input

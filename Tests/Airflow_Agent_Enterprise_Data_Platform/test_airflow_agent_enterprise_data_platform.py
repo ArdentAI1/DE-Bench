@@ -90,7 +90,7 @@ def create_model_inputs(
 
     # Generate dynamic branch and PR names
     pr_title = f"Add Enterprise Data Platform with Advanced Analytics {test_timestamp}_{test_uuid}"
-    branch_name = f"feature/enterprise-data-platform-{test_timestamp}_{test_uuid}"
+    branch_name = github_resource_data.get("resource_id")
 
     # Start with the original user input from Test_Configs
     task_description = Test_Configs.User_Input

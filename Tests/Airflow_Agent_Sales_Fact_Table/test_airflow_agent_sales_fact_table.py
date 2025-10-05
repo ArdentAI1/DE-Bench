@@ -91,7 +91,7 @@ def create_model_inputs(
 
     # Generate dynamic branch and PR names (same pattern as old pytest version)
     pr_title = f"Add Sales Fact Table Creation Pipeline {test_timestamp}_{test_uuid}"
-    branch_name = f"feature/sales-fact-table-{test_timestamp}_{test_uuid}"
+    branch_name = github_resource_data.get("resource_id")
 
     # Start with the original user input from Test_Configs
     task_description = Test_Configs.User_Input
@@ -480,6 +480,13 @@ def validate_test(model_result, fixtures=None):
                 "Result_Message"
             ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
+        except Exception as e:
+            test_steps[6]["status"] = "failed"
+            test_steps[6][
+                "Result_Message"
+            ] = f"❌ Error triggering/monitoring DAG: {str(e)}"
+            return {"score": 0.0, "metadata": {"test_steps": test_steps}}
+
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...")
         try:
@@ -552,13 +559,6 @@ def validate_test(model_result, fixtures=None):
                     "Result_Message": f"❌ Failed to capture DAG information: {str(e)}",
                 }
             )
-
-        except Exception as e:
-            test_steps[6]["status"] = "failed"
-            test_steps[6][
-                "Result_Message"
-            ] = f"❌ Error triggering/monitoring DAG: {str(e)}"
-            return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 8-12: PostgreSQL Database Validation
         try:
