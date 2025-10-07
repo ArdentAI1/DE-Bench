@@ -63,7 +63,6 @@ class AirflowManager:
         host: Optional[str] = None,
         api_token: Optional[str] = None,
         api_url: Optional[str] = None,
-        max_retries: Optional[int] = 5,
         cache_manager: Optional[CacheManager] = None,
         resource_id: Optional[str] = None,
     ):
@@ -84,7 +83,6 @@ class AirflowManager:
         self.host = host
         self.api_token = api_token
         self.api_url = api_url
-        self.max_retries = max_retries
         self.cache_manager = cache_manager
         self.resource_id = resource_id
 
@@ -1091,17 +1089,17 @@ class AirflowManager:
         except Exception as e:
             print(f"❌ Error listing DAGs: {e}")
 
-    def unpause_and_trigger_airflow_dag(self, dag_id: str) -> Optional[str]:
+    def unpause_and_trigger_airflow_dag(self, dag_id: str, max_retries: Optional[int] = 5) -> Optional[str]:
         """
         Unpause a DAG using the dag_id in Airflow via API call.
 
         Args:
             dag_id: The ID of the DAG to unpause
+            max_retries: Maximum number of retries, defaults to 5
 
         Returns:
             The dag_run_id if triggered successfully, else None
         """
-        max_retries = copy.deepcopy(self.max_retries)
         for attempt in range(max_retries):
             print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
 
@@ -1148,11 +1146,11 @@ class AirflowManager:
         Args:
             dag_id: The ID of the DAG to check for
             dag_run_id: The ID of the DAG run to check for
+            max_retries: Maximum number of retries, defaults to 10
 
         Returns:
             True if the DAG has been executed, False otherwise
         """
-        max_retries = copy.deepcopy(self.max_retries)
         print(f"Monitoring DAG run {dag_run_id} for completion...")
 
         for attempt in range(max_retries):
@@ -1377,19 +1375,19 @@ class AirflowManager:
 
         return comprehensive_info
 
-    def get_dag_tasks(self, dag_id: str) -> list:
+    def get_dag_tasks(self, dag_id: str, max_retries: Optional[int] = 5) -> list:
         """
         Get all tasks for a specific DAG.
 
         Args:
             dag_id: The ID of the DAG to get tasks for
+            max_retries: Maximum number of retries, defaults to 5
 
         Returns:
             List of task dictionaries containing task information
         """
         print(f"🔍 Retrieving tasks for DAG: {dag_id}")
 
-        max_retries = copy.deepcopy(self.max_retries)
         for attempt in range(max_retries):
             print(f"Attempt {attempt + 1}/{max_retries}: Getting DAG tasks...")
 
@@ -1422,18 +1420,18 @@ class AirflowManager:
 
         return []
 
-    def check_dag_task_instances(self, dag_id: str, dag_run_id: str) -> bool:
+    def check_dag_task_instances(self, dag_id: str, dag_run_id: str, max_retries: Optional[int] = 5) -> bool:
         """
         Check if all tasks in a DAG have been executed.
 
         Args:
             dag_id: The ID of the DAG
             dag_run_id: The ID of the DAG run
+            max_retries: Maximum number of retries, defaults to 5
 
         Returns:
             True if tasks have been executed, False otherwise
         """
-        max_retries = copy.deepcopy(self.max_retries)
         for attempt in range(max_retries):
             print(
                 f"Attempt {attempt + 1}/{max_retries}: Checking for DAG task instances..."
@@ -1646,7 +1644,7 @@ class AirflowManager:
 
         # Create manager instance
         manager = cls(
-            cache_manager=shared_cache_manager, resource_id=resource_id, max_retries=5
+            cache_manager=shared_cache_manager, resource_id=resource_id
         )
 
         # Ensure Astro login
