@@ -86,100 +86,91 @@ def full_model_run(
     config_results = None
     custom_info = {"mode": mode}
 
-    try:
-        if mode == "Ardent" and "supabase_account_resource" in test_resources:
-            print(f"🔧 Setting up model configs for {test_name}...")
+    if mode == "Ardent" and "supabase_account_resource" in test_resources:
+        print(f"🔧 Setting up model configs for {test_name}...")
 
-            custom_info.update(
-                {
-                    "publicKey": test_resources["supabase_account_resource"]["publicKey"],
-                    "secretKey": test_resources["supabase_account_resource"]["secretKey"],
-                }
-            )
+        custom_info.update(
+            {
+                "publicKey": test_resources["supabase_account_resource"]["publicKey"],
+                "secretKey": test_resources["supabase_account_resource"]["secretKey"],
+            }
+        )
 
-            config_results = set_up_model_configs(
-                Configs=model_configs,
-                custom_info=custom_info,
-            )
-            print(f"✅ Model configs set up for {test_name}")
+        config_results = set_up_model_configs(
+            Configs=model_configs,
+            custom_info=custom_info,
+        )
+        print(f"✅ Model configs set up for {test_name}")
 
-        elif mode == "Claude_Code":
-            print(f"🔧 Setting up Kubernetes for Claude Code for {test_name}...")
+    elif mode == "Claude_Code":
+        print(f"🔧 Setting up Kubernetes for Claude Code for {test_name}...")
 
-            # Set up Kubernetes infrastructure for Claude Code
-            config_results = set_up_model_configs(
-                Configs=model_configs,
-                custom_info=custom_info,
-            )
+        # Set up Kubernetes infrastructure for Claude Code
+        config_results = set_up_model_configs(
+            Configs=model_configs,
+            custom_info=custom_info,
+        )
 
-            # Add the Kubernetes objects to custom_info for the model
-            if config_results:
-                custom_info.update(config_results)
+        # Add the Kubernetes objects to custom_info for the model
+        if config_results:
+            custom_info.update(config_results)
 
-            print(f"✅ Kubernetes setup completed for {test_name}")
+        print(f"✅ Kubernetes setup completed for {test_name}")
 
-        elif mode == "OpenAI_Codex":
-            print(f"🔧 Setting up Kubernetes for OpenAI Codex for {test_name}...")
+    elif mode == "OpenAI_Codex":
+        print(f"🔧 Setting up Kubernetes for OpenAI Codex for {test_name}...")
 
-            # Set up Kubernetes infrastructure for OpenAI Codex
-            config_results = set_up_model_configs(
-                Configs=model_configs,
-                custom_info=custom_info,
-            )
+        # Set up Kubernetes infrastructure for OpenAI Codex
+        config_results = set_up_model_configs(
+            Configs=model_configs,
+            custom_info=custom_info,
+        )
 
-            # Add the Kubernetes objects to custom_info for the model
-            if config_results:
-                custom_info.update(config_results)
+        # Add the Kubernetes objects to custom_info for the model
+        if config_results:
+            custom_info.update(config_results)
 
-            print(f"✅ Kubernetes setup completed for {test_name}")
+        print(f"✅ Kubernetes setup completed for {test_name}")
 
-        # 4. Execute the model
-        if kwargs.get("skip_model_run"):
-            print(
-                f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True"
-            )
-            model_result = None
-        else:
-            print(f"🤖 Running model for {test_name}...")
-            model_result = run_model(
-                container=None,
-                task=task_description,
-                configs=model_configs,
-                extra_information=custom_info,
-            )
-            print(f"✅ Model execution completed for {test_name}")
-
-    except Exception as e:
-        print(f"❌ Error in full_model_run for {test_name}: {e}")
-        print(f"❌ Full traceback: {traceback.format_exc()}")
-        model_result = {"status": "failed", "error": str(e)}
+    # 4. Execute the model
+    if kwargs.get("skip_model_run"):
+        print(
+            f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True"
+        )
+        model_result = None
+    else:
+        print(f"🤖 Running model for {test_name}...")
+        model_result = run_model(
+            container=None,
+            task=task_description,
+            configs=model_configs,
+            extra_information=custom_info,
+        )
+        print(f"✅ Model execution completed for {test_name}")
 
     # Clean up model artifacts first (but keep test resources for validation)
-    try:
-        if config_results:
-            if mode == "Ardent" and "supabase_account_resource" in test_resources:
-                print(f"🧹 Cleaning up model artifacts for {test_name}...")
-                cleanup_model_artifacts(
-                    Configs=model_configs,
-                    custom_info=custom_info,
-                )
-                print(f"✅ Model artifacts cleaned up for {test_name}")
-            elif mode == "Claude_Code":
-                print(f"🧹 Cleaning up Kubernetes resources for {test_name}...")
-                cleanup_model_artifacts(
-                    Configs=model_configs,
-                    custom_info=custom_info,
-                )
-                print(f"✅ Kubernetes resources cleaned up for {test_name}")
-            elif mode == "OpenAI_Codex":
-                print(f"🧹 Cleaning up Kubernetes resources for {test_name}...")
-                cleanup_model_artifacts(
-                    Configs=model_configs,
-                    custom_info=custom_info,
-                )
-                print(f"✅ Kubernetes resources cleaned up for {test_name}")
-    except Exception as e:
-        print(f"⚠️ Error cleaning up model artifacts for {test_name}: {e}")
+    if config_results:
+        if mode == "Ardent" and "supabase_account_resource" in test_resources:
+            print(f"🧹 Cleaning up model artifacts for {test_name}...")
+            cleanup_model_artifacts(
+                Configs=model_configs,
+                custom_info=custom_info,
+            )
+            print(f"✅ Model artifacts cleaned up for {test_name}")
+        elif mode == "Claude_Code":
+            print(f"🧹 Cleaning up Kubernetes resources for {test_name}...")
+            cleanup_model_artifacts(
+                Configs=model_configs,
+                custom_info=custom_info,
+            )
+            print(f"✅ Kubernetes resources cleaned up for {test_name}")
+        elif mode == "OpenAI_Codex":
+            print(f"🧹 Cleaning up Kubernetes resources for {test_name}...")
+            cleanup_model_artifacts(
+                Configs=model_configs,
+                custom_info=custom_info,
+            )
+            print(f"✅ Kubernetes resources cleaned up for {test_name}")
 
     return {
         "result": model_result,
@@ -196,17 +187,17 @@ def run_de_bench_task(test_input):
     Convert DE-Bench test to Braintrust task function with per-test resource management.
     Each task execution is now self-contained with its own setup/teardown.
     """
-    test_name = test_input.get("test_name", "Unknown")
-    test_resources = {}
-    fixture_instances = []
-    
     try:
         # Extract test configuration from input
         task_description = test_input["task"]
         mode = test_input.get("mode", "Ardent")
+        test_name = test_input.get("test_name", "Unknown")
         session_data = test_input.get("session_data", {})
 
         print(f"🚀 Starting self-contained test execution: {test_name}")
+
+        test_resources = {}
+        fixture_instances = []
 
         # 1. Extract test configuration and set up per-test resources
         print(f"📋 Setting up resources for {test_name}...")
@@ -240,40 +231,19 @@ def run_de_bench_task(test_input):
                 model_inputs_base, fixture_instances
             )
         else:
-            error_msg = f"❌ Test {test_name} is missing create_model_inputs_func function"
-            print(error_msg)
-            return {
-                "result": {"status": "failed", "error": error_msg},
-                "fixtures": fixture_instances,
-                "test_name": test_name,
-                "test_resources": test_resources,
-                "model_configs": {},
-                "custom_info": {"mode": mode},
-            }
+            raise ValueError(
+                f"❌ Test {test_name} is missing create_model_inputs_func function"
+            )
 
         # Validate that model_configs and task_description are in the final_full_model_run_args
         if "model_configs" not in final_full_model_run_args:
-            error_msg = f"❌ Test {test_name} did not return model_configs from create_model_inputs_func"
-            print(error_msg)
-            return {
-                "result": {"status": "failed", "error": error_msg},
-                "fixtures": fixture_instances,
-                "test_name": test_name,
-                "test_resources": test_resources,
-                "model_configs": {},
-                "custom_info": {"mode": mode},
-            }
+            raise ValueError(
+                f"❌ Test {test_name} did not return model_configs from create_model_inputs_func"
+            )
         if "task_description" not in final_full_model_run_args:
-            error_msg = f"❌ Test {test_name} did not return task_description from create_model_inputs_func"
-            print(error_msg)
-            return {
-                "result": {"status": "failed", "error": error_msg},
-                "fixtures": fixture_instances,
-                "test_name": test_name,
-                "test_resources": test_resources,
-                "model_configs": {},
-                "custom_info": {"mode": mode},
-            }
+            raise ValueError(
+                f"❌ Test {test_name} did not return task_description from create_model_inputs_func"
+            )
 
         # 3 & 4. Set up model configs and run model
         result = full_model_run(**final_full_model_run_args)
@@ -282,22 +252,22 @@ def run_de_bench_task(test_input):
         return result
 
     except Exception as e:
-        error_msg = f"❌ Error in test execution for {test_name}: {e}"
-        print(error_msg)
-        print(f"❌ Full traceback: {traceback.format_exc()}")
+        print(f"❌ Error in test execution for {test_name}: {e}")
+        print(f"   Traceback: {traceback.format_exc()}")
         
         # Tear down test fixtures on error
         if fixture_instances:
             _teardown_test_fixtures(test_name, fixture_instances, test_resources)
 
-        # Return error result instead of raising to allow other tests to continue
+        # Return a failure result instead of raising to prevent terminating other tests
         return {
-            "result": {"status": "failed", "error": str(e)},
-            "fixtures": fixture_instances,
+            "result": {"status": "failed", "error": str(e), "traceback": traceback.format_exc()},
+            "fixtures": fixture_instances if 'fixture_instances' in locals() else [],
             "test_name": test_name,
-            "test_resources": test_resources,
+            "test_resources": test_resources if 'test_resources' in locals() else {},
             "model_configs": {},
-            "custom_info": {"mode": test_input.get("mode", "Ardent")},
+            "custom_info": {"mode": mode},
+            "execution_error": True,
         }
 
 
@@ -782,57 +752,82 @@ def run_multi_test_evaluation(
 
                 # Create unified validator that can handle all test types
                 def unified_validator(input, output, expected=None):
-                    # Braintrust passes the full sample as 'input', so get test_name from there
-                    test_name = input.get("test_name", "Unknown")
-                    if test_name == "Unknown":
-                        # Fallback: check in metadata if it exists
-                        test_name = input.get("metadata", {}).get("test_name", "Unknown")
-
-                    print(f"🔍 Validating test: {test_name}")
-
-                    # Extract model result and fixtures from the task output
-                    model_result = (
-                        output.get("result") if isinstance(output, dict) else output
-                    )
-                    fixtures_data = (
-                        output.get("fixtures", {}) if isinstance(output, dict) else {}
-                    )
-                    fixtures = fixtures_data if isinstance(fixtures_data, list) else []
-
+                    test_name = "Unknown"
+                    fixtures = []
+                    test_resources = {}
+                    
                     try:
-                        validator = get_test_validator(test_name)
-                        result = validator(model_result, expected, fixtures=fixtures)
+                        # Braintrust passes the full sample as 'input', so get test_name from there
+                        test_name = input.get("test_name", "Unknown")
+                        if test_name == "Unknown":
+                            # Fallback: check in metadata if it exists
+                            test_name = input.get("metadata", {}).get("test_name", "Unknown")
 
-                        print(f"✅ Score for {test_name}: {result['score']}")
-                        print(f"✅ Metadata for {test_name}: {result['metadata']}")
-                        return result
+                        print(f"🔍 Validating test: {test_name}")
 
-                    except Exception as e:
-                        print(
-                            f"❌ Validation error for {test_name}: {e}\n {traceback.format_exc()}"
-                        )
-                        # Return a failed result instead of False to ensure proper scoring
-                        return {
-                            "score": 0.0,
-                            "metadata": {
-                                "validation_error": str(e),
-                                "test_steps": [
-                                    {
-                                        "name": "Validation",
-                                        "status": "failed", 
-                                        "Result_Message": f"❌ Validation failed: {str(e)}"
-                                    }
-                                ]
+                        # Handle case where output is None or task execution failed
+                        if output is None:
+                            print(f"❌ Task output is None for {test_name}")
+                            return {
+                                "score": 0.0,
+                                "metadata": {"error": "Task output is None", "test_steps": []}
                             }
-                        }
-                    finally:
+
+                        # Handle case where task had execution error
+                        if isinstance(output, dict) and output.get("execution_error"):
+                            print(f"❌ Task execution error for {test_name}: {output.get('result', {}).get('error', 'Unknown error')}")
+                            return {
+                                "score": 0.0,
+                                "metadata": {
+                                    "error": f"Task execution failed: {output.get('result', {}).get('error', 'Unknown error')}",
+                                    "test_steps": [{"name": "Task Execution", "status": "failed", "Result_Message": f"❌ Task failed: {output.get('result', {}).get('error', 'Unknown error')}"}]
+                                }
+                            }
+
+                        # Extract model result and fixtures from the task output
+                        model_result = (
+                            output.get("result") if isinstance(output, dict) else output
+                        )
+                        fixtures_data = (
+                            output.get("fixtures", {}) if isinstance(output, dict) else {}
+                        )
+                        fixtures = fixtures_data if isinstance(fixtures_data, list) else []
+
                         # Extract test_resources from output if available for cleanup
                         test_resources = (
                             output.get("test_resources", {})
                             if isinstance(output, dict)
                             else {}
                         )
-                        _teardown_test_fixtures(test_name, fixtures, test_resources)
+
+                        # Get and run the validator
+                        validator = get_test_validator(test_name)
+                        result = validator(model_result, expected, fixtures=fixtures)
+
+                        print(f"✅ Score for {test_name}: {result.get('score', 'N/A')}")
+                        print(f"✅ Metadata for {test_name}: {result.get('metadata', {})}")
+                        return result
+
+                    except Exception as e:
+                        print(
+                            f"❌ Validation error for {test_name}: {e}\n {traceback.format_exc()}"
+                        )
+                        # Return a proper failure result instead of False to maintain consistency
+                        return {
+                            "score": 0.0,
+                            "metadata": {
+                                "error": f"Validation failed: {str(e)}",
+                                "traceback": traceback.format_exc(),
+                                "test_steps": [{"name": "Validation", "status": "failed", "Result_Message": f"❌ Validation error: {str(e)}"}]
+                            }
+                        }
+                    finally:
+                        # Always attempt cleanup, even if validation failed
+                        try:
+                            _teardown_test_fixtures(test_name, fixtures, test_resources)
+                        except Exception as cleanup_error:
+                            print(f"⚠️ Cleanup error for {test_name}: {cleanup_error}")
+                            # Don't re-raise cleanup errors - they shouldn't stop other tests
 
                 print(
                     f"🔍 Running Braintrust.Eval for {mode} mode with {len(mode_samples)} samples"
@@ -871,8 +866,13 @@ def run_multi_test_evaluation(
                 
             except Exception as e:
                 print(f"❌ Error running experiment for {mode} mode: {e}")
-                print(f"❌ Full traceback: {traceback.format_exc()}")
-                results[mode] = None  # Mark this mode as failed, but continue with others
+                print(f"   Traceback: {traceback.format_exc()}")
+                # Create a dummy failed result to maintain consistency
+                results[mode] = type('MockResult', (), {
+                    'summary': f"Failed to run experiment for {mode}: {str(e)}",
+                    'scores': []
+                })()
+                print(f"⚠️ Skipping {mode} mode due to error, continuing with other modes...")
 
         # Run mode experiments in parallel
         map_func(run_experiment_in_mode, modes)
@@ -921,21 +921,12 @@ if __name__ == "__main__":
         )
 
         if results:
-            successful_results = {k: v for k, v in results.items() if v is not None}
-            failed_results = {k: v for k, v in results.items() if v is None}
-            
-            print(f"\n🎉 Completed {len(successful_results)} multi-test experiments!")
-            if failed_results:
-                print(f"⚠️  {len(failed_results)} experiments failed: {list(failed_results.keys())}")
+            print(f"\n🎉 Completed {len(results)} multi-test experiments!")
 
-            # Print summary for each successful mode
-            for mode, result in successful_results.items():
+            # Print summary for each mode
+            for mode, result in results.items():
                 print(f"\n📊 {mode} Mode Results:")
                 print(f"   Summary: {result.summary}")
-                
-            # Print summary for failed modes
-            for mode in failed_results.keys():
-                print(f"\n❌ {mode} Mode: Failed to complete evaluation")
         else:
             print("📝 No experiments were run")
 
