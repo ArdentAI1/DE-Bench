@@ -99,10 +99,10 @@ def create_model_inputs(
 
     # Replace placeholders with dynamic values (using the specific naming pattern)
     task_description = task_description.replace(
-        "BRANCH_NAME_AGENT_DATABASE_DEDUPLICATION", branch_name
+        "BRANCH_NAME", branch_name
     )
     task_description = task_description.replace(
-        "PR_NAME_AGENT_DATABASE_DEDUPLICATION", pr_title
+        "PR_NAME", pr_title
     )
 
     # Set up GitHub secrets for Astro access
@@ -342,6 +342,7 @@ def validate_test(model_result, fixtures=None):
             build_info={
                 "deploymentId": airflow_resource_data["deployment_id"],
                 "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             },
         )
 

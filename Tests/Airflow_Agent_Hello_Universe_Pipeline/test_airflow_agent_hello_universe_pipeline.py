@@ -212,7 +212,7 @@ def validate_test(model_result, fixtures=None):
 
         # Generate the same branch and PR names used in create_model_inputs
         pr_title = f"Add Hello Universe DAG {test_timestamp}_{test_uuid}"
-        branch_name = f"feature/hello_universe-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
         print(f"🔍 Checking for branch: {branch_name}")
@@ -277,6 +277,7 @@ def validate_test(model_result, fixtures=None):
             build_info={
                 "deploymentId": airflow_resource_data["deployment_id"],
                 "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             },
         )
 

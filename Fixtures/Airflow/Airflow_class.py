@@ -100,6 +100,7 @@ class AirflowManager:
         self.deployment_id = None
         self.deployment_name = None
         self.test_resources = []
+        self.secret_suffix = None  # Track the suffix used for GitHub secrets
 
         # Environment validation
         self._validate_environment()
@@ -618,25 +619,33 @@ class AirflowManager:
         deployment_name: str,
         astro_access_token: str,
         astro_workspace_id: str,
-    ) -> None:
+    ) -> str:
         """
         Checks if GitHub secrets exist, deletes them if they do, and creates new ones.
+        Creates test-specific secrets to avoid collision in parallel execution.
 
         Args:
             deployment_id: The ID of the deployment
             deployment_name: The name of the deployment
             astro_access_token: The Astro access token
             astro_workspace_id: The Astro workspace ID
+
+        Returns:
+            The secret suffix used for this test's secrets
         """
+        # Use resource_id as the secret suffix to make secrets unique per test
+        secret_suffix = self.resource_id if self.resource_id else deployment_name
+
+        # Create test-specific secret names by appending suffix
         gh_secrets = {
-            "ASTRO_DEPLOYMENT_ID": deployment_id,
-            "ASTRO_DEPLOYMENT_NAME": deployment_name,
-            "ASTRO_ACCESS_TOKEN": astro_access_token,
-            "ASTRO_WORKSPACE_ID": astro_workspace_id,
+            f"ASTRO_DEPLOYMENT_ID_{secret_suffix}": deployment_id,
+            f"ASTRO_DEPLOYMENT_NAME_{secret_suffix}": deployment_name,
+            f"ASTRO_ACCESS_TOKEN_{secret_suffix}": astro_access_token,
+            f"ASTRO_WORKSPACE_ID_{secret_suffix}": astro_workspace_id,
         }
 
         if os.getenv("ASTRO_API_TOKEN"):
-            gh_secrets.pop("ASTRO_ACCESS_TOKEN")
+            gh_secrets.pop(f"ASTRO_ACCESS_TOKEN_{secret_suffix}")
 
         airflow_github_repo = os.getenv("AIRFLOW_REPO")
         g = Github(os.getenv("AIRFLOW_GITHUB_TOKEN"))
@@ -671,6 +680,9 @@ class AirflowManager:
                 print(
                     f"Worker {os.getpid()}: GitHub secret {secret} created successfully."
                 )
+
+            print(f"Worker {os.getpid()}: Created {len(gh_secrets)} test-specific secrets with suffix '{secret_suffix}'")
+            return secret_suffix
         except Exception as e:
             print(
                 f"Worker {os.getpid()}: Error checking and updating GitHub secrets: {e}"
@@ -1684,13 +1696,15 @@ class AirflowManager:
             manager.deployment_name = astro_deployment_name
             manager.test_resources.append((astro_deployment_name, shared_cache_manager))
 
-            # Update GitHub secrets
-            manager._check_and_update_gh_secrets(
+            # Update GitHub secrets with test-specific naming
+            secret_suffix = manager._check_and_update_gh_secrets(
                 deployment_id=astro_deployment_id,
                 deployment_name=astro_deployment_name,
                 astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
                 astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
             )
+            # Store the secret suffix for later use in build info
+            manager.secret_suffix = secret_suffix
 
             # Get deployment info and set up API access
             fresh_deployment_id = manager._get_deployment_id_by_name(

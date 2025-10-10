@@ -366,6 +366,7 @@ def validate_test(model_result, fixtures=None):
             build_info={
                 "deploymentId": airflow_resource_data["deployment_id"],
                 "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             },
         )
 
