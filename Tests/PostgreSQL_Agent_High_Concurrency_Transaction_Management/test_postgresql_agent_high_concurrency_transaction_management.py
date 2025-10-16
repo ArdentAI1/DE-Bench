@@ -210,14 +210,18 @@ def validate_test(model_result, fixtures=None):
             
             # Check balance consistency with transaction history
             db_cursor.execute("""
-                SELECT a.account_id, a.balance,
-                       COALESCE(SUM(CASE WHEN t.to_account_id = a.account_id THEN t.amount ELSE 0 END), 0) as credits,
-                       COALESCE(SUM(CASE WHEN t.from_account_id = a.account_id THEN t.amount ELSE 0 END), 0) as debits
-                FROM accounts a
-                LEFT JOIN transactions t ON (t.to_account_id = a.account_id OR t.from_account_id = a.account_id)
-                    AND t.status = 'COMPLETED'
-                GROUP BY a.account_id, a.balance
-                HAVING ABS(a.balance - (credits - debits)) > 0.01
+                WITH account_totals AS (
+                    SELECT a.account_id, a.balance,
+                           COALESCE(SUM(CASE WHEN t.to_account_id = a.account_id THEN t.amount ELSE 0 END), 0) as credits,
+                           COALESCE(SUM(CASE WHEN t.from_account_id = a.account_id THEN t.amount ELSE 0 END), 0) as debits
+                    FROM accounts a
+                    LEFT JOIN transactions t ON (t.to_account_id = a.account_id OR t.from_account_id = a.account_id)
+                        AND t.status = 'COMPLETED'
+                    GROUP BY a.account_id, a.balance
+                )
+                SELECT account_id, balance, credits, debits
+                FROM account_totals
+                WHERE ABS(balance - (credits - debits)) > 0.01
             """)
             inconsistent_balances = db_cursor.fetchall()
             
