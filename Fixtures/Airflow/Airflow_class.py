@@ -633,8 +633,24 @@ class AirflowManager:
         Returns:
             The secret suffix used for this test's secrets
         """
-        # Use resource_id as the secret suffix to make secrets unique per test
-        secret_suffix = self.resource_id if self.resource_id else deployment_name
+        # Use only the UUID part of resource_id to keep secret names short
+        # GitHub has a ~50-64 character limit on secret names
+        # Extract the UUID (last part after splitting by underscore) to ensure uniqueness
+        # while keeping names under the limit
+        if self.resource_id:
+            # Extract just the UUID part: "..._timestamp_uuid" -> "uuid"
+            secret_suffix = self.resource_id.split('_')[-1]
+            print(
+                f"Worker {os.getpid()}: Using shortened secret suffix '{secret_suffix}' "
+                f"from resource_id '{self.resource_id}'"
+            )
+        else:
+            # Fallback: use last 8 chars of deployment name
+            secret_suffix = deployment_name.split('_')[-1] if '_' in deployment_name else deployment_name[-8:]
+            print(
+                f"Worker {os.getpid()}: Using deployment name suffix '{secret_suffix}' "
+                f"from deployment_name '{deployment_name}'"
+            )
 
         # Create test-specific secret names by appending suffix
         gh_secrets = {
@@ -643,6 +659,16 @@ class AirflowManager:
             f"ASTRO_ACCESS_TOKEN_{secret_suffix}": astro_access_token,
             f"ASTRO_WORKSPACE_ID_{secret_suffix}": astro_workspace_id,
         }
+
+        # Validate secret name lengths (GitHub limit is ~50-64 chars)
+        max_secret_length = 50
+        for secret_name in gh_secrets.keys():
+            if len(secret_name) > max_secret_length:
+                raise ValueError(
+                    f"GitHub secret name '{secret_name}' is {len(secret_name)} characters, "
+                    f"exceeds GitHub's {max_secret_length} character limit. "
+                    f"Secret suffix: '{secret_suffix}'"
+                )
 
         if os.getenv("ASTRO_API_TOKEN"):
             gh_secrets.pop(f"ASTRO_ACCESS_TOKEN_{secret_suffix}")
@@ -1696,15 +1722,18 @@ class AirflowManager:
             manager.deployment_name = astro_deployment_name
             manager.test_resources.append((astro_deployment_name, shared_cache_manager))
 
-            # Update GitHub secrets with test-specific naming
-            secret_suffix = manager._check_and_update_gh_secrets(
-                deployment_id=astro_deployment_id,
-                deployment_name=astro_deployment_name,
-                astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
-                astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
-            )
+            # # Update GitHub secrets with test-specific naming
+            # secret_suffix = manager._check_and_update_gh_secrets(
+            #     deployment_id=astro_deployment_id,
+            #     deployment_name=astro_deployment_name,
+            #     astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
+            #     astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
+            # )
             # Store the secret suffix for later use in build info
-            manager.secret_suffix = secret_suffix
+            # manager.secret_suffix = secret_suffix
+            import hashlib
+            hash_suffix = hashlib.sha256(astro_deployment_name.encode()).hexdigest()[:8]
+            manager.secret_suffix = hash_suffix
 
             # Get deployment info and set up API access
             fresh_deployment_id = manager._get_deployment_id_by_name(
