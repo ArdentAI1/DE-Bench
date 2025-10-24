@@ -12,10 +12,11 @@ Create a customer dimension table and an ETL pipeline that is crash-resistant, i
 5. Rerunning the same batch (should be idempotent - no duplicates)
 6. Handling conflicts gracefully when source systems disagree
 
-Test Data Scenarios:
-1. Update Alice's email and tier to Enterprise
-2. Rerun the same update (should be idempotent)
-3. Load new customer Dave (Free) in the same pipeline run
+YOU MUST EXECUTE THESE OPERATIONS TO DEMONSTRATE YOUR PIPELINE:
+1. Update Alice's record: set email to 'alice.johnson@newdomain.com' and subscription_tier to 'Enterprise'
+2. Rerun the same update for Alice (should be idempotent - no duplicates created)
+3. Load new customer Dave with details: customer_id='DAVE_001', first_name='Dave', last_name='Wilson', email='dave@example.com', subscription_tier='Free'
+4. Run the pipeline again to verify complete idempotency (no duplicate records should be created)
 """
 
 # Configuration will be generated dynamically by create_config function

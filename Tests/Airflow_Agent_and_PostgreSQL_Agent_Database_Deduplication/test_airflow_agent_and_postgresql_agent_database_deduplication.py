@@ -47,7 +47,7 @@ def get_fixtures() -> List[DEBenchFixture]:
 
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
-        "resource_id": f"test_airflow_db_deduplication_test_{test_timestamp}_{test_uuid}",
+        "resource_id": f"test_airflow_db_deduplication_{test_timestamp}_{test_uuid}",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -89,7 +89,7 @@ def create_model_inputs(
 
     # Generate dynamic branch and PR names with special database deduplication suffixes
     pr_title = f"Add Database Deduplication with Stored Procedures {test_timestamp}_{test_uuid}"
-    branch_name = f"feature/database-deduplication-{test_timestamp}_{test_uuid}"
+    branch_name = github_resource_data.get("resource_id")
 
     # Start with the original user input from Test_Configs
     task_description = Test_Configs.User_Input
@@ -99,10 +99,10 @@ def create_model_inputs(
 
     # Replace placeholders with dynamic values (using the specific naming pattern)
     task_description = task_description.replace(
-        "BRANCH_NAME_AGENT_DATABASE_DEDUPLICATION", branch_name
+        "BRANCH_NAME", branch_name
     )
     task_description = task_description.replace(
-        "PR_NAME_AGENT_DATABASE_DEDUPLICATION", pr_title
+        "PR_NAME", pr_title
     )
 
     # Set up GitHub secrets for Astro access
@@ -273,7 +273,7 @@ def validate_test(model_result, fixtures=None):
 
         # Generate the same branch and PR names used in create_model_inputs
         pr_title = f"Add Database Deduplication with Stored Procedures {test_timestamp}_{test_uuid}"
-        branch_name = f"feature/database-deduplication-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
         print(f"🔍 Checking for branch: {branch_name}")
@@ -342,6 +342,7 @@ def validate_test(model_result, fixtures=None):
             build_info={
                 "deploymentId": airflow_resource_data["deployment_id"],
                 "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             },
         )
 

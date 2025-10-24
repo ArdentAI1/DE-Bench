@@ -211,14 +211,80 @@ def validate_test(model_result, fixtures=None):
                         0
                     ]  # Use the first junction table found
 
+                    # Discover actual column names from schema
+                    db_cursor.execute("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'books'
+                        AND column_name LIKE '%id%'
+                        ORDER BY ordinal_position
+                        LIMIT 1
+                    """)
+                    books_pk = db_cursor.fetchone()
+                    books_pk_col = books_pk[0] if books_pk else 'id'
+
+                    # Discover book title column
+                    db_cursor.execute("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'books'
+                        AND column_name LIKE '%title%'
+                        ORDER BY ordinal_position
+                        LIMIT 1
+                    """)
+                    book_title_result = db_cursor.fetchone()
+                    book_title_col = book_title_result[0] if book_title_result else 'title'
+
+                    db_cursor.execute("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'authors'
+                        AND column_name LIKE '%id%'
+                        ORDER BY ordinal_position
+                        LIMIT 1
+                    """)
+                    authors_pk = db_cursor.fetchone()
+                    authors_pk_col = authors_pk[0] if authors_pk else 'id'
+
+                    # Discover author name column
+                    db_cursor.execute("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'authors'
+                        AND column_name LIKE '%name%'
+                        ORDER BY ordinal_position
+                        LIMIT 1
+                    """)
+                    author_name_result = db_cursor.fetchone()
+                    author_name_col = author_name_result[0] if author_name_result else 'name'
+
+                    # Discover junction table foreign keys
+                    db_cursor.execute(f"""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = '{junction_table}'
+                        AND column_name LIKE '%book%'
+                    """)
+                    junction_book_fk = db_cursor.fetchone()
+                    junction_book_col = junction_book_fk[0] if junction_book_fk else 'book_id'
+
+                    db_cursor.execute(f"""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = '{junction_table}'
+                        AND column_name LIKE '%author%'
+                    """)
+                    junction_author_fk = db_cursor.fetchone()
+                    junction_author_col = junction_author_fk[0] if junction_author_fk else 'author_id'
+
                     # Test query to get all authors for each book
                     db_cursor.execute(
                         f"""
-                        SELECT b.title, a.name as author_name
+                        SELECT b.{book_title_col}, a.{author_name_col} as author_name
                         FROM books b
-                        JOIN {junction_table} ba ON b.book_id = ba.book_id
-                        JOIN authors a ON ba.author_id = a.author_id
-                        ORDER BY b.title, a.name
+                        JOIN {junction_table} ba ON b.{books_pk_col} = ba.{junction_book_col}
+                        JOIN authors a ON ba.{junction_author_col} = a.{authors_pk_col}
+                        ORDER BY b.{book_title_col}, a.{author_name_col}
                     """
                     )
                     normalized_results = db_cursor.fetchall()
@@ -242,15 +308,15 @@ def validate_test(model_result, fixtures=None):
                     # Check that we can properly query for Gamma's books and see all co-authors
                     db_cursor.execute(
                         f"""
-                        SELECT DISTINCT b.title, 
-                               string_agg(a2.name, ', ') as all_authors
+                        SELECT DISTINCT b.{book_title_col},
+                               string_agg(a2.{author_name_col}, ', ') as all_authors
                         FROM books b
-                        JOIN {junction_table} ba1 ON b.book_id = ba1.book_id
-                        JOIN authors a1 ON ba1.author_id = a1.author_id
-                        JOIN {junction_table} ba2 ON b.book_id = ba2.book_id
-                        JOIN authors a2 ON ba2.author_id = a2.author_id
-                        WHERE a1.name LIKE '%Gamma%'
-                        GROUP BY b.title
+                        JOIN {junction_table} ba1 ON b.{books_pk_col} = ba1.{junction_book_col}
+                        JOIN authors a1 ON ba1.{junction_author_col} = a1.{authors_pk_col}
+                        JOIN {junction_table} ba2 ON b.{books_pk_col} = ba2.{junction_book_col}
+                        JOIN authors a2 ON ba2.{junction_author_col} = a2.{authors_pk_col}
+                        WHERE a1.{author_name_col} LIKE '%Gamma%'
+                        GROUP BY b.{book_title_col}
                     """
                     )
                     gamma_normalized = db_cursor.fetchall()
@@ -286,6 +352,12 @@ def validate_test(model_result, fixtures=None):
                             "Result_Message"
                         ] = "❌ Could not find Gamma's books in normalized schema"
 
+                except psycopg2.Error as e:
+                    db_connection.rollback()
+                    test_steps[2]["status"] = "failed"
+                    test_steps[2][
+                        "Result_Message"
+                    ] = f"❌ Error validating normalized schema: {str(e)}"
                 except Exception as e:
                     test_steps[2]["status"] = "failed"
                     test_steps[2][

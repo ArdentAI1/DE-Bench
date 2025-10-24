@@ -1,0 +1,71 @@
+name: Recreate Old Astro Runners
+
+# This workflow automatically recreates stale Astronomer test runner deployments
+# that are in HEALTHY status and haven't been modified in over 1 hour.
+#
+# Required Secrets:
+#   - ASTRONOMER_API_TOKEN: Your Astronomer API token for authentication
+#   - ASTRO_WORKSPACE_ID: The workspace ID (e.g., cmcnpmwr80l9601lyycmaep42)
+#   - AIRFLOW_USERNAME: Username for Airflow deployments (optional, defaults to "airflow")
+#   - AIRFLOW_PASSWORD: Password for Airflow deployments (optional, defaults to "airflow")
+#   - SLACK_APP_URL: Slack webhook URL for notifications (optional)
+
+on:
+  schedule:
+    # Run every hour at minute 0
+    - cron: '0 * * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  recreate-old-runners:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Install Astronomer CLI
+        run: |
+          curl -sSL https://install.astronomer.io | sudo bash -s
+      
+      - name: Authenticate with Astronomer
+        run: |
+          # Login using API token
+          echo "${{ secrets.ASTRONOMER_API_TOKEN }}" | astro login --token-login
+          
+          # Switch to the correct workspace
+          astro workspace switch ${{ secrets.ASTRO_WORKSPACE_ID }}
+          
+          # Verify authentication
+          astro workspace list
+      
+      - name: Set Airflow credentials
+        run: |
+          echo "AIRFLOW_USERNAME=${{ secrets.AIRFLOW_USERNAME }}" >> $GITHUB_ENV
+          echo "AIRFLOW_PASSWORD=${{ secrets.AIRFLOW_PASSWORD }}" >> $GITHUB_ENV
+          echo "SLACK_APP_URL=${{ secrets.SLACK_APP_URL }}" >> $GITHUB_ENV
+      
+      - name: Run recreate old runners script
+        run: |
+          python scripts/manage_astro_runners.py --recreate-old -y
+        env:
+          ASTRO_WORKSPACE_ID: ${{ secrets.ASTRO_WORKSPACE_ID }}
+          AIRFLOW_USERNAME: ${{ secrets.AIRFLOW_USERNAME }}
+          AIRFLOW_PASSWORD: ${{ secrets.AIRFLOW_PASSWORD }}
+          SLACK_APP_URL: ${{ secrets.SLACK_APP_URL }}
+      
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "❌ Failed to recreate old Astro runners. Check the workflow logs for details."
+          # You can add Slack/email notification here if desired
+

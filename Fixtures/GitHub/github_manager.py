@@ -63,31 +63,48 @@ class GitHubManager:
             commit_sha = self.repo.get_commits()[0].sha
             self.repo.create_git_ref(ref=f"refs/heads/{test_name}", sha=commit_sha)
             self.branch_name = test_name
-            print(f"✓ Created branch: {self.branch_name}")
+            print(f"✅ Created branch: {self.branch_name}")
         except Exception as e:
             if getattr(e, "status", None) == 422:
                 print(f"Branch '{test_name}' already exists, skipping creation.")
                 return getattr(self, "branch_name", test_name)
-            raise Exception(f"✗ Error creating branch: {e}")
+            raise Exception(f"❌ Error creating branch: {e}")
         finally:
             if build_info:
                 self._update_build_info(build_info, test_name)
         return self.branch_name
 
-    def add_merge_step_to_user_input(self, user_input: str) -> str:
+    def add_merge_step_to_user_input(self, user_input: str, branch_name: Optional[str] = None, pr_name: Optional[str] = None) -> str:
         """
-        Add merge step to the user input string.
+        Add detailed branching and PR instructions to user input.
+
+        Adds explicit instructions to ensure the agent:
+        1. Creates feature branch FROM the test base branch (not main)
+        2. Creates PR targeting the test base branch (not main)
 
         :param str user_input: User input string to modify
-        :return: Modified user input string with merge step
+        :return: Modified user input string with explicit branching instructions
+        :param str branch_name: Name of the branch to create the feature branch from, defaults to feature/{branch_name}
+        :param str pr_name: Name of the pull request to create, defaults to PR_NAME
         :rtype: str
         """
         numbers = [int(n) for n in re.findall(r"\d+", user_input)]
         last_number = max(numbers) if numbers else 0
-        # add the test name to the user input
-        user_input += (
-            f"{last_number + 1}. Set the destination branch to '{self.branch_name}'."
-        )
+
+        if not branch_name:
+            branch_name = f"feature/{self.branch_name}"
+
+        if not pr_name:
+            pr_name = "PR_NAME"
+
+        # Add explicit instructions for the branching workflow
+        # These instructions ensure the agent works on the test base branch, not main
+        user_input += f"\n{last_number + 1}. IMPORTANT: First checkout the '{self.branch_name}' branch (this is your base branch for this test, not main)."
+        user_input += f"\n{last_number + 2}. IMPORTANT: Create your feature branch FROM the '{self.branch_name}' branch you just checked out."
+        user_input += f"\n{last_number + 3}. IMPORTANT: Create your feature branch with the name '{branch_name}'."
+        user_input += f"\n{last_number + 4}. IMPORTANT: When creating the pull request, set the base/target/destination branch to '{self.branch_name}' (NOT main)."
+        user_input += f"\n{last_number + 5}. IMPORTANT: When creating the pull request, set the title to '{pr_name}'."
+
         return user_input
 
     @staticmethod
@@ -307,7 +324,7 @@ class GitHubManager:
             elif "sha" not in str(e):  # If error is not about folder already existing
                 raise e
             else:
-                print(f"{folder_name} folder setup completed with warning: {e}")
+                print(f"⚠️ {folder_name} folder setup completed with warning: {e}")
 
     def verify_branch_exists(
         self, branch_name: str, test_step: Dict[str, str]
@@ -336,13 +353,13 @@ class GitHubManager:
         if branch_exists:
             test_step["status"] = "passed"
             test_step["Result_Message"] = (
-                f"Branch '{branch_name}' was created successfully"
+                f"✅ Branch '{branch_name}' was created successfully"
             )
             print(f"✓ Branch '{branch_name}' exists")
         else:
             test_step["status"] = "failed"
-            test_step["Result_Message"] = f"Branch '{branch_name}' was not created."
-            print(f"✗ Branch '{branch_name}' was not created.")
+            test_step["Result_Message"] = f"❌ Branch '{branch_name}' was not created."
+            print(f"❌ Branch '{branch_name}' was not created.")
         return branch_exists, test_step
 
     def find_and_merge_pr(
@@ -377,14 +394,14 @@ class GitHubManager:
                 target_pr = pr
                 test_step["status"] = "passed"
                 test_step["Result_Message"] = (
-                    f"PR '{pr_title}' was created successfully"
+                    f"✅ PR '{pr_title}' was created successfully"
                 )
-                print(f"✓ Found PR: {pr_title}")
+                print(f"✅ Found PR: {pr_title}")
                 break
 
         if not target_pr and max_retries > 0:
             print(
-                f"✗ PR '{pr_title}' not found, retrying... ({max_retries} retries left)"
+                f"❌ PR '{pr_title}' not found, retrying... ({max_retries} retries left)"
             )
             time.sleep(5)
             # Return the result of the recursive retry so the caller gets the correct status
@@ -399,7 +416,7 @@ class GitHubManager:
         elif not target_pr and max_retries <= 0:
             test_step["status"] = "failed"
             test_step["Result_Message"] = f"PR '{pr_title}' not found"
-            print(f"✗ PR '{pr_title}' not found")
+            print(f"❌ PR '{pr_title}' not found")
             return False, test_step
 
         # Merge the PR with retry logic for handling conflicts in parallel execution
@@ -421,7 +438,7 @@ class GitHubManager:
                 if not merge_result.merged:
                     raise Exception(f"Merge failed: {merge_result.message}")
 
-                print(f"✓ Successfully merged PR: {pr_title}")
+                print(f"✅ Successfully merged PR: {pr_title}")
                 return True, test_step
 
             except Exception as e:
@@ -500,7 +517,7 @@ class GitHubManager:
                 branch=branch_name,
                 sha=contents.sha,
             )
-            print(f"✓ Build info updated successfully for branch {branch_name}")
+            print(f"✅ Build info updated successfully for branch {branch_name}")
             print(f"Build info: {build_info_txt}")
         except Exception as e:
             if e.status == 404:
@@ -511,10 +528,10 @@ class GitHubManager:
                         content=build_info_txt,
                         branch=branch_name,
                     )
-                    print(f"✓ Build info created successfully for branch {branch_name}")
+                    print(f"✅ Build info created successfully for branch {branch_name}")
                 except Exception as e:
                     raise Exception(
-                        f"✗ Error creating build info for branch {branch_name}: {e}"
+                        f"❌ Error creating build info for branch {branch_name}: {e}"
                     )
             else:
                 raise Exception(f"Error updating build info: {e}")
@@ -525,7 +542,7 @@ class GitHubManager:
             try:
                 # Verify the commit exists and is accessible
                 _ = self.repo.get_commit(commit_sha)
-                print(f"✓ Build info commit verified: {commit_sha[:7]}")
+                print(f"✅ Build info commit verified: {commit_sha[:7]}")
 
                 # Additional verification: check the file content matches what we wrote
                 updated_contents = self.repo.get_contents(
@@ -535,15 +552,15 @@ class GitHubManager:
                     updated_contents.decoded_content.decode("utf-8").strip()
                     == build_info_txt
                 ):
-                    print(f"✓ Build info content verified on branch {branch_name}")
+                    print(f"✅ Build info content verified on branch {branch_name}")
                     return result
                 else:
-                    print(f"⚠ Build info content mismatch on branch {branch_name}")
+                    print(f"⚠️ Build info content mismatch on branch {branch_name}")
 
             except Exception as e:
-                print(f"⚠ Could not verify build info commit: {e}")
+                print(f"⚠️ Could not verify build info commit: {e}")
         raise Exception(
-            f"✗ Error updating/validating {self.build_info} on branch {branch_name}: {result}"
+            f"❌ Error updating/validating {self.build_info} on branch {branch_name}: {result}"
         )
 
     def check_and_update_gh_secrets(self, secrets: Dict[str, str]) -> None:
@@ -590,7 +607,7 @@ class GitHubManager:
         try:
             ref = self.repo.get_git_ref(f"heads/{branch_name}")
             ref.delete()
-            print(f"✓ Deleted branch: {branch_name}")
+            print(f"✅ Deleted branch: {branch_name}")
         except Exception as e:
             print(f"Branch '{branch_name}' might not exist or other error: {e}")
 
@@ -621,7 +638,7 @@ class GitHubManager:
                     )
 
             self._iterate_directory_and_files(folder_name, keep_file_names)
-            print(f"✓ {folder_name} folder reset successfully")
+            print(f"✅ {folder_name} folder reset successfully")
 
         except Exception as e:
             print(f"Error resetting repository state: {e}")
@@ -691,7 +708,7 @@ class GitHubManager:
                             result["ci_details_error"] = str(e)
 
                         print(
-                            f"✓ Action completed with status: {run.status}/{run.conclusion}"
+                            f"✅ Action completed with status: {run.status}/{run.conclusion}"
                         )
 
                         # Return based on return_details flag
@@ -700,18 +717,18 @@ class GitHubManager:
                         else:
                             return result.get("success", False)
 
-                    print(f"✗ Action is not complete (status: {run.status})")
+                    print(f"❌ Action is not complete (status: {run.status})")
                 else:
-                    print(f"✗ No workflow runs found for PR title: {pr_title}")
+                    print(f"❌ No workflow runs found for PR title: {pr_title}")
             else:
-                print(f"✗ No workflow runs found")
+                print(f"❌ No workflow runs found")
 
             print(
                 f"Waiting 60 seconds before checking again...{retry + 1} of {max_retries}"
             )
             time.sleep(60)
 
-        print(f"✗ Action did not complete after {max_retries} retries")
+        print(f"❌ Action did not complete after {max_retries} retries")
 
         # Create timeout result
         timeout_result = {

@@ -63,7 +63,6 @@ class AirflowManager:
         host: Optional[str] = None,
         api_token: Optional[str] = None,
         api_url: Optional[str] = None,
-        max_retries: Optional[int] = 5,
         cache_manager: Optional[CacheManager] = None,
         resource_id: Optional[str] = None,
     ):
@@ -84,7 +83,6 @@ class AirflowManager:
         self.host = host
         self.api_token = api_token
         self.api_url = api_url
-        self.max_retries = max_retries
         self.cache_manager = cache_manager
         self.resource_id = resource_id
 
@@ -102,6 +100,7 @@ class AirflowManager:
         self.deployment_id = None
         self.deployment_name = None
         self.test_resources = []
+        self.secret_suffix = None  # Track the suffix used for GitHub secrets
 
         # Environment validation
         self._validate_environment()
@@ -620,25 +619,59 @@ class AirflowManager:
         deployment_name: str,
         astro_access_token: str,
         astro_workspace_id: str,
-    ) -> None:
+    ) -> str:
         """
         Checks if GitHub secrets exist, deletes them if they do, and creates new ones.
+        Creates test-specific secrets to avoid collision in parallel execution.
 
         Args:
             deployment_id: The ID of the deployment
             deployment_name: The name of the deployment
             astro_access_token: The Astro access token
             astro_workspace_id: The Astro workspace ID
+
+        Returns:
+            The secret suffix used for this test's secrets
         """
+        # Use only the UUID part of resource_id to keep secret names short
+        # GitHub has a ~50-64 character limit on secret names
+        # Extract the UUID (last part after splitting by underscore) to ensure uniqueness
+        # while keeping names under the limit
+        if self.resource_id:
+            # Extract just the UUID part: "..._timestamp_uuid" -> "uuid"
+            secret_suffix = self.resource_id.split('_')[-1]
+            print(
+                f"Worker {os.getpid()}: Using shortened secret suffix '{secret_suffix}' "
+                f"from resource_id '{self.resource_id}'"
+            )
+        else:
+            # Fallback: use last 8 chars of deployment name
+            secret_suffix = deployment_name.split('_')[-1] if '_' in deployment_name else deployment_name[-8:]
+            print(
+                f"Worker {os.getpid()}: Using deployment name suffix '{secret_suffix}' "
+                f"from deployment_name '{deployment_name}'"
+            )
+
+        # Create test-specific secret names by appending suffix
         gh_secrets = {
-            "ASTRO_DEPLOYMENT_ID": deployment_id,
-            "ASTRO_DEPLOYMENT_NAME": deployment_name,
-            "ASTRO_ACCESS_TOKEN": astro_access_token,
-            "ASTRO_WORKSPACE_ID": astro_workspace_id,
+            f"ASTRO_DEPLOYMENT_ID_{secret_suffix}": deployment_id,
+            f"ASTRO_DEPLOYMENT_NAME_{secret_suffix}": deployment_name,
+            f"ASTRO_ACCESS_TOKEN_{secret_suffix}": astro_access_token,
+            f"ASTRO_WORKSPACE_ID_{secret_suffix}": astro_workspace_id,
         }
 
+        # Validate secret name lengths (GitHub limit is ~50-64 chars)
+        max_secret_length = 50
+        for secret_name in gh_secrets.keys():
+            if len(secret_name) > max_secret_length:
+                raise ValueError(
+                    f"GitHub secret name '{secret_name}' is {len(secret_name)} characters, "
+                    f"exceeds GitHub's {max_secret_length} character limit. "
+                    f"Secret suffix: '{secret_suffix}'"
+                )
+
         if os.getenv("ASTRO_API_TOKEN"):
-            gh_secrets.pop("ASTRO_ACCESS_TOKEN")
+            gh_secrets.pop(f"ASTRO_ACCESS_TOKEN_{secret_suffix}")
 
         airflow_github_repo = os.getenv("AIRFLOW_REPO")
         g = Github(os.getenv("AIRFLOW_GITHUB_TOKEN"))
@@ -673,6 +706,9 @@ class AirflowManager:
                 print(
                     f"Worker {os.getpid()}: GitHub secret {secret} created successfully."
                 )
+
+            print(f"Worker {os.getpid()}: Created {len(gh_secrets)} test-specific secrets with suffix '{secret_suffix}'")
+            return secret_suffix
         except Exception as e:
             print(
                 f"Worker {os.getpid()}: Error checking and updating GitHub secrets: {e}"
@@ -995,13 +1031,14 @@ class AirflowManager:
     ) -> bool:
         """
         Verify if a DAG exists using the dag_id in Airflow via API call.
+        Also checks for import errors and returns False immediately if the DAG has import errors.
 
         Args:
             dag_id: The ID of the DAG to check for
             max_wait_minutes: Maximum time to wait in minutes
 
         Returns:
-            True if the DAG exists, False otherwise
+            True if the DAG exists and has no import errors, False otherwise
         """
         wait_time_seconds = 20
         max_wait_seconds = max_wait_minutes * 60
@@ -1011,6 +1048,18 @@ class AirflowManager:
             print(
                 f"Attempt {attempt + 1}/{max_retries}: Checking for DAG '{dag_id}'..."
             )
+
+            # Check for import errors first
+            try:
+                import_errors = self.get_dag_import_errors()
+                for error in import_errors:
+                    error_filename = error.get("filename", "")
+                    # Check if the import error is related to our DAG
+                    if dag_id in error_filename or dag_id in error.get("stack_trace", ""):
+                        print(f"❌ DAG '{dag_id}' has import error: {error.get('stack_trace', 'Unknown error')}")
+                        return False
+            except Exception as e:
+                print(f"⚠️ Warning: Could not check import errors: {e}")
 
             dag_response = requests.get(
                 f"{self.host.rstrip('/')}/api/v1/dags/{dag_id}",
@@ -1078,17 +1127,17 @@ class AirflowManager:
         except Exception as e:
             print(f"❌ Error listing DAGs: {e}")
 
-    def unpause_and_trigger_airflow_dag(self, dag_id: str) -> Optional[str]:
+    def unpause_and_trigger_airflow_dag(self, dag_id: str, max_retries: Optional[int] = 5) -> Optional[str]:
         """
         Unpause a DAG using the dag_id in Airflow via API call.
 
         Args:
             dag_id: The ID of the DAG to unpause
+            max_retries: Maximum number of retries, defaults to 5
 
         Returns:
             The dag_run_id if triggered successfully, else None
         """
-        max_retries = copy.deepcopy(self.max_retries)
         for attempt in range(max_retries):
             print(f"Attempt {attempt + 1}/{max_retries}: Checking for DAG...")
 
@@ -1135,11 +1184,11 @@ class AirflowManager:
         Args:
             dag_id: The ID of the DAG to check for
             dag_run_id: The ID of the DAG run to check for
+            max_retries: Maximum number of retries, defaults to 10
 
         Returns:
             True if the DAG has been executed, False otherwise
         """
-        max_retries = copy.deepcopy(self.max_retries)
         print(f"Monitoring DAG run {dag_run_id} for completion...")
 
         for attempt in range(max_retries):
@@ -1364,19 +1413,19 @@ class AirflowManager:
 
         return comprehensive_info
 
-    def get_dag_tasks(self, dag_id: str) -> list:
+    def get_dag_tasks(self, dag_id: str, max_retries: Optional[int] = 5) -> list:
         """
         Get all tasks for a specific DAG.
 
         Args:
             dag_id: The ID of the DAG to get tasks for
+            max_retries: Maximum number of retries, defaults to 5
 
         Returns:
             List of task dictionaries containing task information
         """
         print(f"🔍 Retrieving tasks for DAG: {dag_id}")
 
-        max_retries = copy.deepcopy(self.max_retries)
         for attempt in range(max_retries):
             print(f"Attempt {attempt + 1}/{max_retries}: Getting DAG tasks...")
 
@@ -1409,18 +1458,18 @@ class AirflowManager:
 
         return []
 
-    def check_dag_task_instances(self, dag_id: str, dag_run_id: str) -> bool:
+    def check_dag_task_instances(self, dag_id: str, dag_run_id: str, max_retries: Optional[int] = 5) -> bool:
         """
         Check if all tasks in a DAG have been executed.
 
         Args:
             dag_id: The ID of the DAG
             dag_run_id: The ID of the DAG run
+            max_retries: Maximum number of retries, defaults to 5
 
         Returns:
             True if tasks have been executed, False otherwise
         """
-        max_retries = copy.deepcopy(self.max_retries)
         for attempt in range(max_retries):
             print(
                 f"Attempt {attempt + 1}/{max_retries}: Checking for DAG task instances..."
@@ -1633,7 +1682,7 @@ class AirflowManager:
 
         # Create manager instance
         manager = cls(
-            cache_manager=shared_cache_manager, resource_id=resource_id, max_retries=5
+            cache_manager=shared_cache_manager, resource_id=resource_id
         )
 
         # Ensure Astro login
@@ -1673,13 +1722,18 @@ class AirflowManager:
             manager.deployment_name = astro_deployment_name
             manager.test_resources.append((astro_deployment_name, shared_cache_manager))
 
-            # Update GitHub secrets
-            manager._check_and_update_gh_secrets(
-                deployment_id=astro_deployment_id,
-                deployment_name=astro_deployment_name,
-                astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
-                astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
-            )
+            # # Update GitHub secrets with test-specific naming
+            # secret_suffix = manager._check_and_update_gh_secrets(
+            #     deployment_id=astro_deployment_id,
+            #     deployment_name=astro_deployment_name,
+            #     astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
+            #     astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
+            # )
+            # Store the secret suffix for later use in build info
+            # manager.secret_suffix = secret_suffix
+            import hashlib
+            hash_suffix = hashlib.sha256(astro_deployment_name.encode()).hexdigest()[:8]
+            manager.secret_suffix = hash_suffix
 
             # Get deployment info and set up API access
             fresh_deployment_id = manager._get_deployment_id_by_name(

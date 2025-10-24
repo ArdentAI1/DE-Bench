@@ -11,11 +11,11 @@ Create an Airflow DAG that:
 3. Loads the results into Snowflake database 'drift_db', table 'schema_drift_events'
 4. Runs every 30 minutes
 5. Name it schema_drift_alerting_etl
-6. Name the branch BRANCH_NAME
-7. Call the PR PR_NAME
-8. Use these DAG settings:
+7. Use these DAG settings:
     - retries: 2
     - retry_delay: 5 minutes
+8. Create a new feature branch called 'feature/BRANCH_NAME'
+9. Create a pull request named 'PR_NAME'
 
 Transform the schema data to extract:
 - step_id, workflow_name, organization_id, customer_id

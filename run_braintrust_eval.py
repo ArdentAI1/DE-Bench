@@ -135,18 +135,18 @@ def full_model_run(
     # 4. Execute the model
     if kwargs.get("skip_model_run"):
         print(
-            f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True"
+            f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True", flush=True
         )
         model_result = None
     else:
-        print(f"🤖 Running model for {test_name}...")
+        print(f"🤖 Running model for {test_name}...", flush=True)
         model_result = run_model(
             container=None,
             task=task_description,
             configs=model_configs,
             extra_information=custom_info,
         )
-        print(f"✅ Model execution completed for {test_name}")
+        print(f"✅ Model execution completed for {test_name}", flush=True)
 
     # Clean up model artifacts first (but keep test resources for validation)
     if config_results:
@@ -194,20 +194,20 @@ def run_de_bench_task(test_input):
         test_name = test_input.get("test_name", "Unknown")
         session_data = test_input.get("session_data", {})
 
-        print(f"🚀 Starting self-contained test execution: {test_name}")
+        print(f"🚀 Starting self-contained test execution: {test_name}", flush=True)
 
         test_resources = {}
         fixture_instances = []
 
         # 1. Extract test configuration and set up per-test resources
-        print(f"📋 Setting up resources for {test_name}...")
+        print(f"📋 Setting up resources for {test_name}...", flush=True)
         test_data = extract_test_configuration(test_name)
 
         # Set up per-test resources (using shared session data if available)
         test_resources, fixture_instances = setup_test_resources(
             test_data["resource_configs"], session_data=session_data
         )
-        print(f"✅ Resources set up for {test_name}")
+        print(f"✅ Resources set up for {test_name}", flush=True)
 
         # Register test with fixtures for global cleanup tracking
         if fixture_instances:
@@ -252,12 +252,23 @@ def run_de_bench_task(test_input):
         return result
 
     except Exception as e:
-        print(f"❌ Error in test execution for {test_name}: {e}")
+        print(f"❌ Error in test execution for {test_name}: {e}", flush=True)
+        print(f"   Traceback: {traceback.format_exc()}", flush=True)
+
         # Tear down test fixtures on error
         if fixture_instances:
             _teardown_test_fixtures(test_name, fixture_instances, test_resources)
 
-        raise
+        # Return a failure result instead of raising to prevent terminating other tests
+        return {
+            "result": {"status": "failed", "error": str(e), "traceback": traceback.format_exc()},
+            "fixtures": fixture_instances if 'fixture_instances' in locals() else [],
+            "test_name": test_name,
+            "test_resources": test_resources if 'test_resources' in locals() else {},
+            "model_configs": {},
+            "custom_info": {"mode": mode},
+            "execution_error": True,
+        }
 
 
 def cleanup_handler() -> None:
@@ -592,6 +603,7 @@ Examples:
   python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" OpenAI_Codex  # Single test with Codex
   python run_braintrust_eval.py --num-trials 3 Ardent    # Run all tests 3 times in Ardent mode
   python run_braintrust_eval.py -n 5 --filter ".*Hello.*" Claude_Code  # Run Hello tests 5 times with Claude
+  python run_braintrust_eval.py --full-concurrency Ardent  # Run all tests with max concurrency = number of tests
         """,
     )
 
@@ -630,6 +642,12 @@ Examples:
         help="Number of trials to run for each test (default: 1)",
     )
 
+    parser.add_argument(
+        "--full-concurrency",
+        action="store_true",
+        help="Use the total number of tests as max_concurrency instead of default 20",
+    )
+
     return parser.parse_args()
 
 
@@ -640,6 +658,7 @@ def run_multi_test_evaluation(
     verbose: bool = False,
     skip_model_run: bool = False,
     trial_count: int = 1,
+    full_concurrency: bool = False,
 ) -> Dict[str, Any]:
     """Run multiple tests as Braintrust evaluation for specified modes"""
     global active_session_fixtures, active_session_data, active_tests_with_fixtures
@@ -709,100 +728,168 @@ def run_multi_test_evaluation(
             print("📝 No session-level fixtures required")
             active_session_data = {}
 
-        results = {}
-
         def run_experiment_in_mode(mode: str):
-            print(f"\n🧪 Running Braintrust experiment for {mode} mode...")
-            experiment_name = construct_experiment_name(mode)
+            """Run experiment for a single mode and return (mode, result) tuple."""
+            try:
+                print(f"\n🧪 Running Braintrust experiment for {mode} mode...")
+                experiment_name = construct_experiment_name(mode)
 
-            # Create samples for this mode from all tests
-            mode_samples = []
-            for config in all_test_configs:
-                sample = {
-                    "input": {
-                        **config["case"]["input"],
+                # Create samples for this mode from all tests
+                mode_samples = []
+                for config in all_test_configs:
+                    sample = {
+                        "input": {
+                            **config["case"]["input"],
+                            "mode": mode,
+                            "test_name": config["test_name"],
+                            "session_data": active_session_data,  # Pass session data for per-task resource setup
+                            "skip_model_run": skip_model_run,
+                        },
+                        "metadata": {**config["case"]["metadata"], "mode": mode},
+                    }
+                    mode_samples.append(sample)
+
+                # Create unified validator that can handle all test types
+                def unified_validator(input, output, expected=None):
+                    test_name = "Unknown"
+                    fixtures = []
+                    test_resources = {}
+
+                    try:
+                        # Braintrust passes the full sample as 'input', so get test_name from there
+                        test_name = input.get("test_name", "Unknown")
+                        if test_name == "Unknown":
+                            # Fallback: check in metadata if it exists
+                            test_name = input.get("metadata", {}).get("test_name", "Unknown")
+
+                        print(f"🔍 Validating test: {test_name}", flush=True)
+
+                        # Handle case where output is None or task execution failed
+                        if output is None:
+                            print(f"❌ Task output is None for {test_name}", flush=True)
+                            return {
+                                "name": "test_validator",
+                                "score": 0.0,
+                                "metadata": {"error": "Task output is None", "test_steps": []}
+                            }
+
+                        # Handle case where task had execution error
+                        if isinstance(output, dict) and output.get("execution_error"):
+                            print(f"❌ Task execution error for {test_name}: {output.get('result', {}).get('error', 'Unknown error')}", flush=True)
+                            return {
+                                "name": "test_validator",
+                                "score": 0.0,
+                                "metadata": {
+                                    "error": f"Task execution failed: {output.get('result', {}).get('error', 'Unknown error')}",
+                                    "test_steps": [{"name": "Task Execution", "status": "failed", "Result_Message": f"❌ Task failed: {output.get('result', {}).get('error', 'Unknown error')}"}]
+                                }
+                            }
+
+                        # Extract model result and fixtures from the task output
+                        model_result = (
+                            output.get("result") if isinstance(output, dict) else output
+                        )
+                        fixtures_data = (
+                            output.get("fixtures", {}) if isinstance(output, dict) else {}
+                        )
+                        fixtures = fixtures_data if isinstance(fixtures_data, list) else []
+
+                        # Extract test_resources from output if available for cleanup
+                        test_resources = (
+                            output.get("test_resources", {})
+                            if isinstance(output, dict)
+                            else {}
+                        )
+
+                        # Get and run the validator
+                        validator = get_test_validator(test_name)
+                        result = validator(model_result, expected, fixtures=fixtures)
+
+                        # Ensure result has a "name" field for Braintrust
+                        if isinstance(result, dict) and "name" not in result:
+                            result["name"] = "test_validator"
+
+                        print(f"✅ Score for {test_name}: {result.get('score', 'N/A')}", flush=True)
+                        print(f"✅ Metadata for {test_name}: {result.get('metadata', {})}", flush=True)
+                        return result
+
+                    except Exception as e:
+                        print(
+                            f"❌ Validation error for {test_name}: {e}\n {traceback.format_exc()}", flush=True
+                        )
+                        # Return a proper failure result instead of False to maintain consistency
+                        return {
+                            "name": "test_validator",
+                            "score": 0.0,
+                            "metadata": {
+                                "error": f"Validation failed: {str(e)}",
+                                "traceback": traceback.format_exc(),
+                                "test_steps": [{"name": "Validation", "status": "failed", "Result_Message": f"❌ Validation error: {str(e)}"}]
+                            }
+                        }
+                    finally:
+                        # Always attempt cleanup, even if validation failed
+                        try:
+                            _teardown_test_fixtures(test_name, fixtures, test_resources)
+                        except Exception as cleanup_error:
+                            print(f"⚠️ Cleanup error for {test_name}: {cleanup_error}", flush=True)
+                            # Don't re-raise cleanup errors - they shouldn't stop other tests
+
+                print(
+                    f"🔍 Running Braintrust.Eval for {mode} mode with {len(mode_samples)} samples"
+                )
+
+                # Calculate max_concurrency based on flag
+                max_concurrency_value = len(mode_samples) if full_concurrency else 20
+                print(
+                    f"🔧 Using max_concurrency={max_concurrency_value} {'(due to full-concurrency flag)' if full_concurrency else ''}"
+                )
+
+                # Run Braintrust.Eval for this mode with all tests
+                result = braintrust.Eval(
+                    name="DE-Bench",
+                    experiment_name=experiment_name,
+                    data=mode_samples,
+                    task=run_de_bench_task,
+                    scores=[unified_validator],
+                    metadata={
                         "mode": mode,
-                        "test_name": config["test_name"],
-                        "session_data": active_session_data,  # Pass session data for per-task resource setup
-                        "skip_model_run": skip_model_run,
+                        "test_types": test_names,
+                        "timestamp": str(time.time()),
+                        "num_tests_included": len(mode_samples),
+                        "num_tests_excluded": len(all_valid_tests) - len(test_names),
+                        "all_valid_tests": all_valid_tests,
                     },
-                    "metadata": {**config["case"]["metadata"], "mode": mode},
-                }
-                mode_samples.append(sample)
-
-            # Create unified validator that can handle all test types
-            def unified_validator(input, output, expected=None):
-                # Braintrust passes the full sample as 'input', so get test_name from there
-                test_name = input.get("test_name", "Unknown")
-                if test_name == "Unknown":
-                    # Fallback: check in metadata if it exists
-                    test_name = input.get("metadata", {}).get("test_name", "Unknown")
-
-                print(f"🔍 Validating test: {test_name}")
-
-                # Extract model result and fixtures from the task output
-                model_result = (
-                    output.get("result") if isinstance(output, dict) else output
+                    max_concurrency=max_concurrency_value,
+                    trial_count=trial_count,
                 )
-                fixtures_data = (
-                    output.get("fixtures", {}) if isinstance(output, dict) else {}
-                )
-                fixtures = fixtures_data if isinstance(fixtures_data, list) else []
 
-                try:
-                    validator = get_test_validator(test_name)
-                    result = validator(model_result, expected, fixtures=fixtures)
+                print(f"✅ Completed {mode} experiment with {len(mode_samples)} samples")
+                print(f"   Summary: {result.summary}")
 
-                    print(f"✅ Score for {test_name}: {result['score']}")
-                    print(f"✅ Metadata for {test_name}: {result['metadata']}")
-                    return result
+                # Note: Model artifacts and test resources are now cleaned up inside run_de_bench_task
+                return (mode, result)
 
-                except Exception as e:
-                    print(
-                        f"❌ Validation error for {test_name}: {e}\n {traceback.format_exc()}"
-                    )
-                    return False
-                finally:
-                    # Extract test_resources from output if available for cleanup
-                    test_resources = (
-                        output.get("test_resources", {})
-                        if isinstance(output, dict)
-                        else {}
-                    )
-                    _teardown_test_fixtures(test_name, fixtures, test_resources)
+            except Exception as e:
+                print(f"❌ Error running experiment for {mode} mode: {e}")
+                print(f"   Traceback: {traceback.format_exc()}")
+                # Create a dummy failed result to maintain consistency
+                mock_result = type('MockResult', (), {
+                    'summary': f"Failed to run experiment for {mode}: {str(e)}",
+                    'scores': []
+                })()
+                print(f"⚠️ Skipping {mode} mode due to error, continuing with other modes...")
+                return (mode, mock_result)
 
-            print(
-                f"🔍 Running Braintrust.Eval for {mode} mode with {len(mode_samples)} samples"
-            )
+        # Run mode experiments in parallel and collect results
+        print(f"🔄 Running experiments for {len(modes)} mode(s) in parallel...")
+        mode_results = map_func(run_experiment_in_mode, modes)
 
-            # Run Braintrust.Eval for this mode with all tests
-            result = braintrust.Eval(
-                name="DE-Bench",
-                experiment_name=experiment_name,
-                data=mode_samples,
-                task=run_de_bench_task,
-                scores=[unified_validator],
-                metadata={
-                    "mode": mode,
-                    "test_types": test_names,
-                    "timestamp": str(time.time()),
-                    "num_tests_included": len(mode_samples),
-                    "num_tests_excluded": len(all_valid_tests) - len(test_names),
-                    "all_valid_tests": all_valid_tests,
-                },
-                # TODO: Make this configurable
-                max_concurrency=20,
-                trial_count=trial_count,
-            )
-
+        # Build results dictionary from returned tuples
+        results = {}
+        for mode, result in mode_results:
             results[mode] = result
-            print(f"✅ Completed {mode} experiment with {len(mode_samples)} samples")
-            print(f"   Summary: {result.summary}")
-
-            # Note: Model artifacts and test resources are now cleaned up inside run_de_bench_task
-
-        # Run mode experiments in parallel
-        map_func(run_experiment_in_mode, modes)
+            print(f"📊 Collected result for {mode} mode")
 
         return results
 
@@ -844,6 +931,7 @@ if __name__ == "__main__":
             verbose=args.verbose,
             skip_model_run=args.skip_model_run,
             trial_count=args.num_trials,
+            full_concurrency=args.full_concurrency,
         )
 
         if results:

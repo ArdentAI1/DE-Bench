@@ -184,16 +184,43 @@ def validate_test(model_result, fixtures=None):
 
             # Step 4: Verify field extraction consistency
             print("🔍 Checking field extraction consistency...")
-            
-            # Test JSONB queries for consistent field extraction
-            test_queries = [
-                # Test basic field extraction across versions
-                "SELECT COUNT(*) FROM products_normalized WHERE product_name IS NOT NULL",
-                # Test price extraction (could be direct number or nested object)
-                "SELECT COUNT(*) FROM products_normalized WHERE price_amount > 0",
-                # Test category extraction
-                "SELECT COUNT(*) FROM products_normalized WHERE category IS NOT NULL"
-            ]
+
+            # Discover actual column names from products_normalized
+            db_cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'products_normalized'
+                AND column_name NOT IN ('id', 'created_at', 'updated_at')
+                ORDER BY ordinal_position
+            """)
+            available_columns = [row[0] for row in db_cursor.fetchall()]
+
+            # Find columns that match semantic intent
+            name_col = next((col for col in available_columns if 'name' in col.lower()), None)
+            price_col = next((col for col in available_columns if 'price' in col.lower()), None)
+            category_col = next((col for col in available_columns if 'category' in col.lower()), None)
+
+            # Build test queries based on discovered columns
+            test_queries = []
+            if name_col:
+                test_queries.append(f"SELECT COUNT(*) FROM products_normalized WHERE {name_col} IS NOT NULL")
+            if price_col:
+                # Handle both numeric and text price columns
+                try:
+                    db_cursor.execute(f"SELECT data_type FROM information_schema.columns WHERE table_name = 'products_normalized' AND column_name = '{price_col}'")
+                    price_type = db_cursor.fetchone()
+                    if price_type and 'numeric' in price_type[0].lower():
+                        test_queries.append(f"SELECT COUNT(*) FROM products_normalized WHERE {price_col} > 0")
+                    else:
+                        test_queries.append(f"SELECT COUNT(*) FROM products_normalized WHERE {price_col} IS NOT NULL")
+                except:
+                    test_queries.append(f"SELECT COUNT(*) FROM products_normalized WHERE {price_col} IS NOT NULL")
+            if category_col:
+                test_queries.append(f"SELECT COUNT(*) FROM products_normalized WHERE {category_col} IS NOT NULL")
+
+            # If no semantic columns found, use ANY columns available
+            if not test_queries and available_columns:
+                test_queries = [f"SELECT COUNT(*) FROM products_normalized WHERE {col} IS NOT NULL" for col in available_columns[:3]]
             
             extraction_results = []
             for query in test_queries:
@@ -202,6 +229,7 @@ def validate_test(model_result, fixtures=None):
                     result = db_cursor.fetchone()[0]
                     extraction_results.append(result)
                 except Exception as e:
+                    db_connection.rollback()  # Rollback on error to clear transaction state
                     extraction_results.append(0)
             
             # Should have consistent extraction across different schema formats
@@ -233,13 +261,14 @@ def validate_test(model_result, fixtures=None):
             # Test a JSONB query performance (should use index)
             try:
                 db_cursor.execute("""
-                    EXPLAIN (FORMAT JSON) 
-                    SELECT * FROM raw_product_data 
+                    EXPLAIN (FORMAT JSON)
+                    SELECT * FROM raw_product_data
                     WHERE product_data @> '{"category": "Electronics"}'
                 """)
                 query_plan = db_cursor.fetchone()
                 uses_index = 'Index' in str(query_plan) if query_plan else False
-            except:
+            except Exception as e:
+                db_connection.rollback()  # Rollback on error
                 uses_index = False
             
             if len(gin_indexes) > 0:

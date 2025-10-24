@@ -16,8 +16,8 @@ Create an Airflow DAG that:
 9. Enforces governance with lineage, automated data-quality monitoring, GDPR anonymization, audit logging, retention policies, and access controls.
 10. Ensures observability with comprehensive logging, quality and failure alerts, SLA dashboards, distributed tracing, health checks, and automated recovery.
 11. Name the main DAG 'enterprise_data_platform_dag'.
-12. Create it in branch 'BRANCH_NAME'.
-13. Name the PR 'PR_NAME'.
+12. Create a new feature branch called 'feature/BRANCH_NAME'.
+13. Create a pull request named 'PR_NAME'.
 """
 
 # Configuration will be generated dynamically by create_model_inputs function

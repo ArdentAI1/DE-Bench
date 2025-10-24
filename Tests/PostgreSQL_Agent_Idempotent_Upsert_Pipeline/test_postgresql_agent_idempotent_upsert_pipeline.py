@@ -141,29 +141,44 @@ def validate_test(model_result, fixtures=None):
         try:
             # Step 2: Check if upsert operations were performed
             print("🔍 Checking for upsert operations...")
-            
+
             # Look for evidence of INSERT ... ON CONFLICT usage or equivalent upsert logic
             # Check if data was loaded into dim_customers table
             db_cursor.execute("SELECT COUNT(*) FROM dim_customers")
             customer_count = db_cursor.fetchone()[0]
-            
-            # Should have original seed data plus any new customers added by agent
-            if customer_count >= 2:  # At least the original seed data
-                # Check for specific test customers that should have been upserted
-                db_cursor.execute(
-                    "SELECT customer_id, email, subscription_tier FROM dim_customers WHERE customer_id IN ('ALICE_001', 'BOB_001', 'CAROL_001', 'DAVE_001') ORDER BY customer_id"
-                )
-                test_customers = db_cursor.fetchall()
-                
-                if len(test_customers) >= 3:  # Alice, Bob, Carol minimum
+
+            # Should have original seed data (5 customers) plus any new customers added by agent
+            if customer_count >= 5:  # At least the original seed data
+                # Check for specific test customers and Dave who should have been added
+                test_customers = []
+                try:
+                    db_cursor.execute(
+                        "SELECT customer_id, email, subscription_tier FROM dim_customers WHERE customer_id IN ('ALICE_001', 'BOB_001', 'CAROL_001', 'DAVE_001') ORDER BY customer_id"
+                    )
+                    test_customers = db_cursor.fetchall()
+                except psycopg2.Error as e:
+                    # If customer_id query fails, try fallback with email patterns
+                    if "invalid input syntax for type integer" in str(e):
+                        db_connection.rollback()
+                        db_cursor.execute(
+                            "SELECT customer_id, email, subscription_tier FROM dim_customers WHERE email IN ('alice@example.com', 'bob@example.com', 'carol@example.com') OR first_name IN ('Alice', 'Bob', 'Carol', 'Dave') ORDER BY email"
+                        )
+                        test_customers = db_cursor.fetchall()
+                    else:
+                        raise
+
+                if len(test_customers) >= 4:  # Alice, Bob, Carol (existing) + Dave (new)
                     test_steps[1]["status"] = "passed"
-                    test_steps[1]["Result_Message"] = f"✅ Upsert operations completed - found {len(test_customers)} test customers"
-                else:
+                    test_steps[1]["Result_Message"] = f"✅ Upsert operations completed - found {len(test_customers)} test customers: {test_customers}"
+                elif len(test_customers) >= 3:  # At least Alice, Bob, Carol
                     test_steps[1]["status"] = "partial"
-                    test_steps[1]["Result_Message"] = f"⚠️ Partial upsert success - found {len(test_customers)} customers, expected at least 3"
+                    test_steps[1]["Result_Message"] = f"⚠️ Partial upsert success - found {len(test_customers)} customers, expected Dave to be added too: {test_customers}"
+                else:
+                    test_steps[1]["status"] = "failed"
+                    test_steps[1]["Result_Message"] = f"❌ Insufficient upsert operations - found {len(test_customers)} customers, expected at least Alice, Bob, Carol: {test_customers}"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ No evidence of upsert operations - only {customer_count} customers found"
+                test_steps[1]["Result_Message"] = f"❌ No evidence of upsert operations - only {customer_count} customers found, expected at least 5 (original seed data)"
 
             # Step 3: Test idempotency by checking if repeated operations don't create duplicates
             print("🔍 Testing idempotency...")
@@ -195,24 +210,79 @@ def validate_test(model_result, fixtures=None):
 
             # Step 4: Check conflict resolution - look for updated records
             print("🔍 Checking conflict resolution...")
-            
-            # Look for Alice's record which should have been updated
-            db_cursor.execute(
-                "SELECT customer_id, email, subscription_tier, last_updated_at FROM dim_customers WHERE customer_id = 'ALICE_001' OR first_name = 'Alice'"
-            )
-            alice_record = db_cursor.fetchone()
-            
-            if alice_record:
-                # Check if Alice's tier was updated to Enterprise (as per test scenario)
-                if 'Enterprise' in str(alice_record) or 'Premium' in str(alice_record):
-                    test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = f"✅ Conflict resolution working - Alice's record updated: {alice_record}"
+
+            alice_record = None
+            bob_record = None
+
+            try:
+                # Try querying by customer_id first (expected VARCHAR schema)
+                db_cursor.execute(
+                    "SELECT customer_id, email, subscription_tier, first_name, last_name FROM dim_customers WHERE customer_id = 'ALICE_001'"
+                )
+                alice_record = db_cursor.fetchone()
+
+                db_cursor.execute(
+                    "SELECT customer_id, email, subscription_tier, first_name, last_name FROM dim_customers WHERE customer_id = 'BOB_001'"
+                )
+                bob_record = db_cursor.fetchone()
+
+            except psycopg2.Error as e:
+                # If customer_id query fails (likely due to type mismatch), try querying by email
+                if "invalid input syntax for type integer" in str(e):
+                    db_connection.rollback()  # Clear the error state
+
+                    try:
+                        db_cursor.execute(
+                            "SELECT customer_id, email, subscription_tier, first_name, last_name FROM dim_customers WHERE email LIKE '%alice%' OR first_name = 'Alice'"
+                        )
+                        alice_record = db_cursor.fetchone()
+
+                        db_cursor.execute(
+                            "SELECT customer_id, email, subscription_tier, first_name, last_name FROM dim_customers WHERE email LIKE '%bob%' OR first_name = 'Bob'"
+                        )
+                        bob_record = db_cursor.fetchone()
+                    except Exception as fallback_error:
+                        test_steps[3]["status"] = "failed"
+                        test_steps[3]["Result_Message"] = f"❌ Schema mismatch: customer_id should be VARCHAR but appears to be INTEGER. Fallback query also failed: {fallback_error}"
+                        raise  # Re-raise to skip to exception handler
                 else:
-                    test_steps[3]["status"] = "partial"
-                    test_steps[3]["Result_Message"] = f"⚠️ Alice found but tier may not be updated: {alice_record}"
+                    raise  # Re-raise other errors
+
+            updates_found = 0
+            update_details = []
+
+            if alice_record:
+                # Check if Alice's email and tier were updated as specified
+                if 'alice.johnson@newdomain.com' in str(alice_record) and 'Enterprise' in str(alice_record):
+                    updates_found += 1
+                    update_details.append(f"Alice fully updated: {alice_record}")
+                elif 'Enterprise' in str(alice_record):
+                    updates_found += 0.5
+                    update_details.append(f"Alice tier updated but email may not be: {alice_record}")
+                else:
+                    update_details.append(f"Alice found but may not be updated: {alice_record}")
+            else:
+                update_details.append("Alice's record not found")
+
+            if bob_record:
+                # Check if Bob's tier was updated from Free to Premium
+                if 'Premium' in str(bob_record):
+                    updates_found += 1
+                    update_details.append(f"Bob tier updated to Premium: {bob_record}")
+                else:
+                    update_details.append(f"Bob found but tier may not be updated: {bob_record}")
+            else:
+                update_details.append("Bob's record not found")
+
+            if updates_found >= 1.5:  # At least Alice tier + Bob tier or Alice full update
+                test_steps[3]["status"] = "passed"
+                test_steps[3]["Result_Message"] = f"✅ Conflict resolution working - Updates: {'; '.join(update_details)}"
+            elif updates_found >= 0.5:
+                test_steps[3]["status"] = "partial"
+                test_steps[3]["Result_Message"] = f"⚠️ Partial conflict resolution - Updates: {'; '.join(update_details)}"
             else:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = "❌ Could not find Alice's record to verify conflict resolution"
+                test_steps[3]["Result_Message"] = f"❌ No evidence of proper updates - Details: {'; '.join(update_details)}"
 
             # Step 5: Verify audit trail implementation
             print("🔍 Checking audit trail...")
