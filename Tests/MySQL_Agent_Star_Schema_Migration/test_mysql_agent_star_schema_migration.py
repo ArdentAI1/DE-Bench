@@ -345,14 +345,14 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Check if new data warehouse was created
-            print(f"DEBUG: About to execute first query")
+            print(f"DEBUG: About to execute first query", flush=True)
             db_cursor.execute("""
                 SELECT COUNT(*) 
                 FROM information_schema.schemata 
                 WHERE schema_name = 'data_warehouse'
             """)
             data_warehouse_exists = db_cursor.fetchone()[0] > 0
-            print(f"DEBUG: First query completed, data_warehouse_exists={data_warehouse_exists}")
+            print(f"DEBUG: First query completed, data_warehouse_exists={data_warehouse_exists}", flush=True)
 
             if data_warehouse_exists:
                 test_steps[1]["status"] = "passed"
@@ -360,14 +360,14 @@ def validate_test(model_result, fixtures=None):
                 target_schema = "data_warehouse"
             else:
                 # Also check for any new database that was created (might have different name)
-                print(f"DEBUG: About to execute warehouse query with source_db_name='{source_db_name}'")
+                print(f"DEBUG: About to execute warehouse query with source_db_name='{source_db_name}'", flush=True)
                 db_cursor.execute("""
                     SELECT schema_name 
                     FROM information_schema.schemata 
                     WHERE schema_name NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys', %s)
                     AND (schema_name LIKE '%warehouse%' OR schema_name LIKE '%star%' OR schema_name LIKE '%dim%')
                 """, (source_db_name,))
-                print(f"DEBUG: Warehouse query completed")
+                print(f"DEBUG: Warehouse query completed", flush=True)
                 warehouse_schemas = db_cursor.fetchall()
 
                 if warehouse_schemas:
@@ -378,13 +378,13 @@ def validate_test(model_result, fixtures=None):
                     test_steps[1]["Result_Message"] = f"✅ Data warehouse '{target_schema}' created successfully"
                 else:
                     # Check for any new schema at all
-                    print(f"DEBUG: About to execute any_new_schemas query with source_db_name='{source_db_name}'")
+                    print(f"DEBUG: About to execute any_new_schemas query with source_db_name='{source_db_name}'", flush=True)
                     db_cursor.execute("""
                         SELECT schema_name 
                         FROM information_schema.schemata 
                         WHERE schema_name NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys', %s)
                     """, (source_db_name,))
-                    print(f"DEBUG: Any new schemas query completed")
+                    print(f"DEBUG: Any new schemas query completed", flush=True)
                     any_new_schemas = db_cursor.fetchall()
                     
                     if any_new_schemas:
@@ -403,7 +403,7 @@ def validate_test(model_result, fixtures=None):
             if not target_schema:
                 raise Exception("Target schema not properly defined")
             
-            print(f"DEBUG: About to execute tables query with target_schema='{target_schema}'")
+            print(f"DEBUG: About to execute tables query with target_schema='{target_schema}'", flush=True)
             db_cursor.execute("""
                 SELECT table_name, table_rows 
                 FROM information_schema.tables 
@@ -411,7 +411,7 @@ def validate_test(model_result, fixtures=None):
                 AND table_type = 'BASE TABLE'
                 ORDER BY table_name
             """, (target_schema,))
-            print(f"DEBUG: Tables query completed")
+            print(f"DEBUG: Tables query completed", flush=True)
             all_tables = db_cursor.fetchall()
             table_names = [table[0] for table in all_tables]
 

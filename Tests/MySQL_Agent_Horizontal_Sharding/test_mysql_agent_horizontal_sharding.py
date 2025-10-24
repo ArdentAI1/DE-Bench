@@ -203,7 +203,7 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Verify routing database tables (flexible approach)
-            print("🔍 Checking routing database...")
+            print("🔍 Checking routing database...", flush=True)
 
             # Check for common routing table patterns
             db_cursor.execute("SHOW TABLES")
@@ -244,7 +244,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[1]["Result_Message"] = "❌ Routing database tables not found"
 
             # Step 3: Verify shard creation (check for databases or schemas named shard_*)
-            print("🔍 Checking for shards...")
+            print("🔍 Checking for shards...", flush=True)
             
             # Check for databases or schemas with shard naming
             db_cursor.execute("SHOW DATABASES LIKE 'shard_%'")
@@ -267,7 +267,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = "❌ Shards not properly created"
 
             # Step 4: Verify data distribution
-            print("🔍 Checking data distribution...")
+            print("🔍 Checking data distribution...", flush=True)
             
             if has_shard_map:
                 # Check distribution from shard_map
@@ -300,7 +300,7 @@ def validate_test(model_result, fixtures=None):
 
             # Step 5: Verify query routing functions
             try:
-                print("🔍 Checking query routing functions...")
+                print("🔍 Checking query routing functions...", flush=True)
 
                 # Check for routing functions
                 db_cursor.execute("""
@@ -324,7 +324,7 @@ def validate_test(model_result, fixtures=None):
 
             # Step 6: Verify rebalancing procedure
             try:
-                print("🔍 Checking rebalancing procedures...")
+                print("🔍 Checking rebalancing procedures...", flush=True)
 
                 db_cursor.execute("""
                     SELECT ROUTINE_NAME
@@ -347,7 +347,7 @@ def validate_test(model_result, fixtures=None):
 
             # Step 7: Verify monitoring views
             try:
-                print("🔍 Checking monitoring views...")
+                print("🔍 Checking monitoring views...", flush=True)
 
                 db_cursor.execute("""
                     SELECT TABLE_NAME

@@ -140,7 +140,7 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Verify JSONB data processing
-            print("🔍 Checking JSONB data processing...")
+            print("🔍 Checking JSONB data processing...", flush=True)
             
             # Check if raw JSONB data exists
             db_cursor.execute("SELECT COUNT(*) FROM raw_product_data")
@@ -161,7 +161,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[1]["Result_Message"] = f"❌ Insufficient JSONB data processing - {raw_count} raw, {normalized_count} normalized"
 
             # Step 3: Test schema evolution handling
-            print("🔍 Testing schema evolution handling...")
+            print("🔍 Testing schema evolution handling...", flush=True)
             
             # Check if different schema versions are handled
             db_cursor.execute(
@@ -183,7 +183,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = f"❌ Limited schema evolution handling: {schema_versions}"
 
             # Step 4: Verify field extraction consistency
-            print("🔍 Checking field extraction consistency...")
+            print("🔍 Checking field extraction consistency...", flush=True)
 
             # Discover actual column names from products_normalized
             db_cursor.execute("""
@@ -246,7 +246,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = f"❌ Poor field extraction consistency - {extraction_results} successful extractions"
 
             # Step 5: Check performance optimization (JSONB indexes)
-            print("🔍 Checking performance optimization...")
+            print("🔍 Checking performance optimization...", flush=True)
             
             # Check if GIN indexes exist for JSONB columns
             db_cursor.execute("""

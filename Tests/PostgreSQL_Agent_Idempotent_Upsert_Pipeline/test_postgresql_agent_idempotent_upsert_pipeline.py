@@ -140,7 +140,7 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Check if upsert operations were performed
-            print("🔍 Checking for upsert operations...")
+            print("🔍 Checking for upsert operations...", flush=True)
 
             # Look for evidence of INSERT ... ON CONFLICT usage or equivalent upsert logic
             # Check if data was loaded into dim_customers table
@@ -181,7 +181,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[1]["Result_Message"] = f"❌ No evidence of upsert operations - only {customer_count} customers found, expected at least 5 (original seed data)"
 
             # Step 3: Test idempotency by checking if repeated operations don't create duplicates
-            print("🔍 Testing idempotency...")
+            print("🔍 Testing idempotency...", flush=True)
             
             # Get current state
             db_cursor.execute("SELECT COUNT(*) FROM dim_customers")
@@ -209,7 +209,7 @@ def validate_test(model_result, fixtures=None):
                     test_steps[2]["Result_Message"] = f"❌ Found {len(duplicates)} duplicate emails - idempotency failed"
 
             # Step 4: Check conflict resolution - look for updated records
-            print("🔍 Checking conflict resolution...")
+            print("🔍 Checking conflict resolution...", flush=True)
 
             alice_record = None
             bob_record = None
@@ -285,7 +285,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = f"❌ No evidence of proper updates - Details: {'; '.join(update_details)}"
 
             # Step 5: Verify audit trail implementation
-            print("🔍 Checking audit trail...")
+            print("🔍 Checking audit trail...", flush=True)
             
             if audit_count > 0:
                 # Check audit log structure

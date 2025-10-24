@@ -99,8 +99,8 @@ def create_model_inputs(
         secrets={"ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"]}
     )
 
-    print(f"🔧 Generated branch: {branch_name}")
-    print(f"🔧 Generated PR: {pr_title}")
+    print(f"🔧 Generated branch: {branch_name}", flush=True)
+    print(f"🔧 Generated PR: {pr_title}", flush=True)
 
     return {
         **base_model_inputs,

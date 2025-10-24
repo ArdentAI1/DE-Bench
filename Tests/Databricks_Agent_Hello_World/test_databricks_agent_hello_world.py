@@ -64,7 +64,7 @@ def create_model_inputs(
     # For now, return basic structure since DatabricksFixture doesn't exist yet
     # When implemented, this should call create_config_from_fixtures(fixtures)
 
-    print(f"🔧 Databricks test prepared with timestamp: {test_timestamp}_{test_uuid}")
+    print(f"🔧 Databricks test prepared with timestamp: {test_timestamp}_{test_uuid}", flush=True)
 
     # Placeholder config until DatabricksFixture is implemented
     return {
@@ -212,11 +212,11 @@ def validate_test(model_result, fixtures=None):
     score = passed_steps / total_steps
 
     print(
-        f"🎯 Validation completed: {passed_steps}/{total_steps} steps passed (Score: {score:.2f})"
+        f"🎯 Validation completed: {passed_steps}/{total_steps} steps passed (Score: {score:.2f}, flush=True)"
     )
     print(
         "⚠️  NOTE: This test requires DatabricksFixture implementation to be fully functional"
-    )
+    , flush=True)
 
     return {
         "score": score,

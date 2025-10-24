@@ -162,7 +162,7 @@ def validate_test(model_result, fixtures=None):
         if mysql_fixture:
             # Get the database name (now just the original name)
             db_name = "update_records_test_db"
-            print(f"🔍 Connecting to database: {db_name}")
+            print(f"🔍 Connecting to database: {db_name}", flush=True)
             db_connection = mysql_fixture.get_connection(database=db_name)
             db_cursor = db_connection.cursor()
         else:

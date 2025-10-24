@@ -149,7 +149,7 @@ def validate_test(model_result, fixtures=None):
                 orders_count = cursor.fetchone()[0]
                 cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.ORDER_SUMMARY")
                 summary_count = cursor.fetchone()[0]
-                print(f"✅ Base tables verified: ORDERS ({orders_count} records), ORDER_SUMMARY ({summary_count} records)")
+                print(f"✅ Base tables verified: ORDERS ({orders_count} records, flush=True), ORDER_SUMMARY ({summary_count} records)")
             except Exception as e:
                 raise Exception(f"Base tables not found or accessible: {str(e)}")
 
@@ -180,7 +180,7 @@ def validate_test(model_result, fixtures=None):
                         orders_stream = stream_dict
                         break
                 except Exception as e:
-                    print(f"⚠️ Error parsing stream row: {e}")
+                    print(f"⚠️ Error parsing stream row: {e}", flush=True)
                     continue
 
             if orders_stream:
@@ -224,7 +224,7 @@ def validate_test(model_result, fixtures=None):
                         cdc_task = task_dict
                         break
                 except Exception as e:
-                    print(f"⚠️ Error parsing task row: {e}")
+                    print(f"⚠️ Error parsing task row: {e}", flush=True)
                     continue
 
             if cdc_task:

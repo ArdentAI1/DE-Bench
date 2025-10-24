@@ -141,7 +141,7 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Check for external stages
-            print("🔍 Checking for external stages...")
+            print("🔍 Checking for external stages...", flush=True)
             
             snowflake_cur.execute(f"SHOW STAGES IN SCHEMA {database_name}.{schema_name}")
             stages = snowflake_cur.fetchall()
@@ -157,7 +157,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[1]["Result_Message"] = f"⚠️ Found {len(stages)} stage(s), but may not be external stages"
 
             # Step 3: Check for external tables
-            print("🔍 Checking for external tables...")
+            print("🔍 Checking for external tables...", flush=True)
             
             snowflake_cur.execute(f"""
                 SHOW TABLES IN SCHEMA {database_name}.{schema_name}
@@ -185,7 +185,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = "❌ No tables found"
 
             # Step 4: Test query functionality
-            print("🔍 Testing query functionality...")
+            print("🔍 Testing query functionality...", flush=True)
             
             query_worked = False
             if len(all_tables) > 0:
@@ -206,7 +206,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = "❌ No tables to query"
 
             # Step 5: Check schema handling (INFER_SCHEMA or flexible columns)
-            print("🔍 Checking schema handling...")
+            print("🔍 Checking schema handling...", flush=True)
             
             schema_features = []
             
@@ -235,7 +235,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[4]["Result_Message"] = "⚠️ Schema handling may be basic"
 
             # Step 6: Check for partition columns
-            print("🔍 Checking for partition columns...")
+            print("🔍 Checking for partition columns...", flush=True)
             
             partition_found = False
             for table_info in all_tables[:3]:
@@ -260,7 +260,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[5]["Result_Message"] = "⚠️ No explicit partition columns found (may use metadata)"
 
             # Step 7: Check file format configuration
-            print("🔍 Checking file format configuration...")
+            print("🔍 Checking file format configuration...", flush=True)
             
             snowflake_cur.execute(f"SHOW FILE FORMATS IN SCHEMA {database_name}.{schema_name}")
             file_formats = snowflake_cur.fetchall()

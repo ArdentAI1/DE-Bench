@@ -152,12 +152,12 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Demonstrate the missing users problem first
-            print("🔍 Step 1: Demonstrating missing users problem...")
+            print("🔍 Step 1: Demonstrating missing users problem...", flush=True)
 
             # Check initial user count
             db_cursor.execute("SELECT COUNT(*) FROM users")
             total_users = db_cursor.fetchone()[0]
-            print(f"Total users in database: {total_users}")
+            print(f"Total users in database: {total_users}", flush=True)
 
             # Check users with subscriptions via INNER JOIN (problematic query)
             db_cursor.execute(
@@ -168,7 +168,7 @@ def validate_test(model_result, fixtures=None):
             """
             )
             users_with_subs_inner = db_cursor.fetchone()[0]
-            print(f"Users visible with INNER JOIN: {users_with_subs_inner}")
+            print(f"Users visible with INNER JOIN: {users_with_subs_inner}", flush=True)
 
             if users_with_subs_inner < total_users:
                 test_steps[0]["status"] = "passed"
@@ -182,7 +182,7 @@ def validate_test(model_result, fixtures=None):
                 ] = f"❌ Missing users problem not demonstrated: All {total_users} users are visible"
 
             # Step 3: Validate that the agent's fix shows all users
-            print("🔍 Step 3: Validating agent's fix...")
+            print("🔍 Step 3: Validating agent's fix...", flush=True)
 
             # Try to find a query/view/function that shows all users with subscription data
             # This could be a new view, a corrected query, or a stored procedure

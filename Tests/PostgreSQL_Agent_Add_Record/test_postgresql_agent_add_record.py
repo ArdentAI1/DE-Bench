@@ -103,11 +103,11 @@ def validate_test(model_result, fixtures=None):
             ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
-        print("🔍 Model result:")
-        print(model_result)
+        print("🔍 Model result:", flush=True)
+        print(model_result, flush=True)
 
-        print("🔍 Fixtures:")
-        print(fixtures)
+        print("🔍 Fixtures:", flush=True)
+        print(fixtures, flush=True)
 
         test_steps[0]["status"] = "passed"
         test_steps[0][
@@ -123,13 +123,13 @@ def validate_test(model_result, fixtures=None):
             )
 
         if not postgres_fixture:
-            print("❌ PostgreSQL fixture not found")
+            print("❌ PostgreSQL fixture not found", flush=True)
             raise Exception("PostgreSQL fixture not found")
 
         # Get PostgreSQL resource data from fixture
         resource_data = getattr(postgres_fixture, "_resource_data", None)
         if not resource_data:
-            print("❌ PostgreSQL resource data not available")
+            print("❌ PostgreSQL resource data not available", flush=True)
             raise Exception("PostgreSQL resource data not available")
 
         created_resources = resource_data["created_resources"]
@@ -139,14 +139,14 @@ def validate_test(model_result, fixtures=None):
         db_connection = postgres_fixture.get_connection(created_db_name)
         db_cursor = db_connection.cursor()
 
-        print("🔍 Database connection:")
-        print(db_connection)
-        print("🔍 Database cursor:")
-        print(db_cursor)
+        print("🔍 Database connection:", flush=True)
+        print(db_connection, flush=True)
+        print("🔍 Database cursor:", flush=True)
+        print(db_cursor, flush=True)
 
         try:
             # Step 2: Validate that Alice Green was added correctly
-            print("🔍 Checking if Alice Green was added...")
+            print("🔍 Checking if Alice Green was added...", flush=True)
             db_cursor.execute(
                 "SELECT id, name, email, age FROM users WHERE name = 'Alice Green'"
             )
@@ -169,7 +169,7 @@ def validate_test(model_result, fixtures=None):
                 raise Exception("Agent failed to insert Alice Green correctly")
 
             # Step 3: Verify original records are preserved
-            print("🔍 Checking that original records are preserved...")
+            print("🔍 Checking that original records are preserved...", flush=True)
             db_cursor.execute(
                 "SELECT name, email, age FROM users WHERE name IN ('John Doe', 'Jane Smith', 'Bob Johnson') ORDER BY name"
             )
@@ -202,7 +202,7 @@ def validate_test(model_result, fixtures=None):
                 overall_success = True
                 print(
                     "✅ Add Record to PostgreSQL Agent test passed - record inserted correctly"
-                )
+                , flush=True)
             else:
                 raise Exception(
                     f"Unexpected record count. Expected 4, got {total_count}"

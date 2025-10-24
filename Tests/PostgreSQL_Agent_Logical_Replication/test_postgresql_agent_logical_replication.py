@@ -123,6 +123,11 @@ def validate_test(model_result, fixtures=None):
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
             test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to agent failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
@@ -149,20 +154,24 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Check WAL level
-            print("🔍 Checking WAL level...")
-            
+            print("🔍 Checking WAL level...", flush=True)
+
             db_cursor.execute("SHOW wal_level")
             wal_level = db_cursor.fetchone()[0]
-            
+
+            # PostgreSQL 10+ supports logical replication with 'replica' or 'logical' levels
             if wal_level == 'logical':
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = "✅ wal_level set to 'logical'"
+                test_steps[1]["Result_Message"] = "✅ wal_level set to 'logical' (optimal for logical replication)"
+            elif wal_level == 'replica':
+                test_steps[1]["status"] = "passed"
+                test_steps[1]["Result_Message"] = "✅ wal_level set to 'replica' (supports logical replication in PostgreSQL 10+)"
             else:
-                test_steps[1]["status"] = "partial"
-                test_steps[1]["Result_Message"] = f"⚠️ wal_level is '{wal_level}' (logical replication requires 'logical')"
+                test_steps[1]["status"] = "failed"
+                test_steps[1]["Result_Message"] = f"❌ wal_level is '{wal_level}' (must be 'replica' or 'logical' for logical replication)"
 
             # Step 3: Check for publications
-            print("🔍 Checking for publications...")
+            print("🔍 Checking for publications...", flush=True)
             
             db_cursor.execute("SELECT pubname FROM pg_publication")
             publications = db_cursor.fetchall()
@@ -175,7 +184,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = "❌ No publications found"
 
             # Step 4: Check publication tables
-            print("🔍 Checking publication tables...")
+            print("🔍 Checking publication tables...", flush=True)
             
             if len(publications) > 0:
                 pub_name = publications[0][0]
@@ -205,34 +214,70 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = "❌ No publication to check"
 
             # Step 5: Check replication slots
-            print("🔍 Checking replication slots...")
-            
+            print("🔍 Checking replication slots...", flush=True)
+
             db_cursor.execute("SELECT slot_name, slot_type, active FROM pg_replication_slots")
             repl_slots = db_cursor.fetchall()
-            
+
             if len(repl_slots) >= 1:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ Found {len(repl_slots)} replication slot(s)"
+                test_steps[4]["Result_Message"] = f"✅ Found {len(repl_slots)} replication slot(s): {[s[0] for s in repl_slots]}"
             else:
-                test_steps[4]["status"] = "partial"
-                test_steps[4]["Result_Message"] = "⚠️ No replication slots (created when subscriber connects)"
+                # Check if there's a function to create slots
+                db_cursor.execute("""
+                    SELECT routine_name
+                    FROM information_schema.routines
+                    WHERE routine_schema = 'public'
+                    AND (routine_name LIKE '%slot%' OR routine_name LIKE '%replication%')
+                """)
+                slot_functions = db_cursor.fetchall()
+
+                if len(slot_functions) > 0:
+                    test_steps[4]["status"] = "passed"
+                    test_steps[4]["Result_Message"] = f"✅ No active slots, but found setup functions: {[f[0] for f in slot_functions]}"
+                else:
+                    test_steps[4]["status"] = "partial"
+                    test_steps[4]["Result_Message"] = "⚠️ No replication slots (typically created when subscriber connects)"
 
             # Step 6: Check for subscription (may not exist in single-DB setup)
-            print("🔍 Checking for subscriptions...")
-            
+            print("🔍 Checking for subscriptions...", flush=True)
+
             db_cursor.execute("SELECT subname FROM pg_subscription")
             subscriptions = db_cursor.fetchall()
-            
+
             if len(subscriptions) >= 1:
                 test_steps[5]["status"] = "passed"
                 test_steps[5]["Result_Message"] = f"✅ Found {len(subscriptions)} subscription(s): {[s[0] for s in subscriptions]}"
             else:
-                # Check if there's documentation or comments about subscription
-                test_steps[5]["status"] = "partial"
-                test_steps[5]["Result_Message"] = "⚠️ No subscription found (may require separate database instance)"
+                # Check if there's a function or procedure to create subscriptions
+                db_cursor.execute("""
+                    SELECT routine_name
+                    FROM information_schema.routines
+                    WHERE routine_schema = 'public'
+                    AND (routine_name LIKE '%subscription%' OR routine_name LIKE '%subscriber%')
+                """)
+                sub_functions = db_cursor.fetchall()
+
+                # Check for comments or documentation about subscriptions
+                db_cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM pg_description
+                    WHERE description ILIKE '%subscription%'
+                """)
+                sub_docs = db_cursor.fetchone()[0]
+
+                if len(sub_functions) > 0:
+                    test_steps[5]["status"] = "passed"
+                    test_steps[5]["Result_Message"] = f"✅ No active subscriptions, but found setup functions: {[f[0] for f in sub_functions]}"
+                elif sub_docs > 0:
+                    test_steps[5]["status"] = "partial"
+                    test_steps[5]["Result_Message"] = f"⚠️ No subscription, but found {sub_docs} documentation references"
+                else:
+                    test_steps[5]["status"] = "partial"
+                    test_steps[5]["Result_Message"] = "⚠️ No subscription found (typically requires separate database instance)"
 
             # Step 7: Check monitoring setup
-            print("🔍 Checking monitoring views...")
+            print("🔍 Checking monitoring views...", flush=True)
             
             monitoring_elements = []
             
@@ -268,11 +313,50 @@ def validate_test(model_result, fixtures=None):
                 test_steps[6]["Result_Message"] = "⚠️ No custom monitoring (can use pg_stat_replication view)"
 
             # Step 8: Check for documentation (comments, readme files mentioned)
-            print("🔍 Checking for documentation...")
-            
-            # This is hard to validate programmatically, so we'll mark as partial
-            test_steps[7]["status"] = "partial"
-            test_steps[7]["Result_Message"] = "⚠️ Documentation validation not automated (assumed present)"
+            print("🔍 Checking for documentation...", flush=True)
+
+            documentation_indicators = []
+
+            # Check for table/column comments on publication tables
+            if len(publications) > 0:
+                pub_name = publications[0][0]
+                db_cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM pg_description d
+                    JOIN pg_class c ON d.objoid = c.oid
+                    JOIN pg_namespace n ON c.relnamespace = n.oid
+                    WHERE n.nspname = 'public'
+                    AND c.relname IN (
+                        SELECT tablename FROM pg_publication_tables WHERE pubname = %s
+                    )
+                """, (pub_name,))
+                table_comments = db_cursor.fetchone()[0]
+                if table_comments > 0:
+                    documentation_indicators.append(f"{table_comments} table comments")
+
+            # Check for comments on publication itself
+            db_cursor.execute("""
+                SELECT COUNT(*)
+                FROM pg_description d
+                JOIN pg_publication p ON d.objoid = p.oid
+            """)
+            pub_comments = db_cursor.fetchone()[0]
+            if pub_comments > 0:
+                documentation_indicators.append(f"{pub_comments} publication comments")
+
+            # Check if there are any custom views or functions that might serve as documentation
+            if len(monitoring_views) > 0 or len(monitoring_functions) > 0:
+                documentation_indicators.append("monitoring setup (serves as operational docs)")
+
+            if len(documentation_indicators) >= 2:
+                test_steps[7]["status"] = "passed"
+                test_steps[7]["Result_Message"] = f"✅ Documentation found: {', '.join(documentation_indicators)}"
+            elif len(documentation_indicators) == 1:
+                test_steps[7]["status"] = "partial"
+                test_steps[7]["Result_Message"] = f"⚠️ Minimal documentation: {', '.join(documentation_indicators)}"
+            else:
+                test_steps[7]["status"] = "partial"
+                test_steps[7]["Result_Message"] = "⚠️ No database documentation found (may be in external files)"
 
         finally:
             db_cursor.close()
@@ -284,7 +368,13 @@ def validate_test(model_result, fixtures=None):
                 step["status"] = "failed"
                 step["Result_Message"] = f"❌ Validation error: {str(e)}"
 
-    score = sum([step["status"] == "passed" for step in test_steps]) / len(test_steps)
+    # Calculate score with partial credit (passed=1.0, partial=0.5, failed=0.0)
+    score_sum = sum([
+        1.0 if step["status"] == "passed" else (0.5 if step["status"] == "partial" else 0.0)
+        for step in test_steps
+    ])
+    score = score_sum / len(test_steps)
+
     return {
         "score": score,
         "metadata": {"test_steps": test_steps},

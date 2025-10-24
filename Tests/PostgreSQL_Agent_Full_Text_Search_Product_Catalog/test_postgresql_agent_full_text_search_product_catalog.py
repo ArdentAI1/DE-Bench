@@ -158,7 +158,7 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Verify tsvector column creation
-            print("🔍 Checking tsvector column...")
+            print("🔍 Checking tsvector column...", flush=True)
             
             # Check if tsvector column exists
             db_cursor.execute("""
@@ -190,7 +190,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[1]["Result_Message"] = "❌ No tsvector column found on products table"
 
             # Step 3: Verify GIN index
-            print("🔍 Checking GIN index...")
+            print("🔍 Checking GIN index...", flush=True)
             
             db_cursor.execute("""
                 SELECT indexname, indexdef 
@@ -208,7 +208,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = "❌ No GIN index found on products table"
 
             # Step 4: Test basic search functionality
-            print("🔍 Testing basic search...")
+            print("🔍 Testing basic search...", flush=True)
             
             # Try to find search function or perform direct search
             search_results = []
@@ -230,7 +230,7 @@ def validate_test(model_result, fixtures=None):
                     search_results = db_cursor.fetchall()
                     search_worked = len(search_results) > 0
                 except Exception as e:
-                    print(f"Search function error: {e}")
+                    print(f"Search function error: {e}", flush=True)
             
             # Fallback: Try direct tsvector search
             if not search_worked and len(tsvector_columns) > 0:
@@ -245,7 +245,7 @@ def validate_test(model_result, fixtures=None):
                     search_results = db_cursor.fetchall()
                     search_worked = len(search_results) > 0
                 except Exception as e:
-                    print(f"Direct search error: {e}")
+                    print(f"Direct search error: {e}", flush=True)
             
             if search_worked:
                 test_steps[3]["status"] = "passed"
@@ -255,7 +255,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = "❌ Search functionality not working or returns no results"
 
             # Step 5: Test advanced search features
-            print("🔍 Testing advanced search features...")
+            print("🔍 Testing advanced search features...", flush=True)
             
             advanced_features_count = 0
             
@@ -294,7 +294,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[4]["Result_Message"] = "⚠️ Limited advanced search features detected"
 
             # Step 6: Verify search ranking
-            print("🔍 Checking search ranking...")
+            print("🔍 Checking search ranking...", flush=True)
             
             if len(tsvector_columns) > 0 and search_worked:
                 tsvector_col = tsvector_columns[0][0]
@@ -331,7 +331,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[5]["Result_Message"] = "❌ Cannot test ranking without working search"
 
             # Step 7: Test trigger maintenance
-            print("🔍 Testing trigger maintenance...")
+            print("🔍 Testing trigger maintenance...", flush=True)
             
             if len(tsvector_columns) > 0:
                 tsvector_col = tsvector_columns[0][0]
@@ -371,7 +371,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[6]["Result_Message"] = "❌ Cannot test triggers without tsvector column"
 
             # Step 8: Performance validation
-            print("🔍 Measuring search performance...")
+            print("🔍 Measuring search performance...", flush=True)
             
             if search_worked and len(tsvector_columns) > 0:
                 tsvector_col = tsvector_columns[0][0]

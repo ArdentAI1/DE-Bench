@@ -140,27 +140,27 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Demonstrate the integer division problem first
-            print("🔍 Demonstrating integer division problem...")
+            print("🔍 Demonstrating integer division problem...", flush=True)
             db_cursor.execute(
                 "SELECT user_id, total_items, total_orders, total_items / total_orders AS avg_items_per_order FROM purchases_bad ORDER BY user_id"
             )
             original_results = db_cursor.fetchall()
 
-            print("Original results (showing integer division problem):")
+            print("Original results (showing integer division problem, flush=True):")
             for row in original_results:
                 print(
-                    f"  User {row[0]}: {row[1]} items / {row[2]} orders = {row[3]} (truncated)"
+                    f"  User {row[0]}: {row[1]} items / {row[2]} orders = {row[3]} (truncated, flush=True)"
                 )
 
             # Check if the problem was demonstrated (all division results should be 0 due to integer truncation)
             division_results = [row[3] for row in original_results]
             if all(result == 0 for result in division_results):
-                print("✅ Integer division problem confirmed - all results are 0")
+                print("✅ Integer division problem confirmed - all results are 0", flush=True)
             else:
-                print("⚠️ Warning: Integer division problem not clearly demonstrated")
+                print("⚠️ Warning: Integer division problem not clearly demonstrated", flush=True)
 
             # Step 3: Check if the agent fixed the issue
-            print("🔍 Checking if agent fixed the integer division issue...")
+            print("🔍 Checking if agent fixed the integer division issue...", flush=True)
 
             # Try different approaches the agent might have used:
             # 1. Check if column types were changed to DECIMAL/NUMERIC
@@ -174,7 +174,7 @@ def validate_test(model_result, fixtures=None):
                 """
                 )
                 column_types = db_cursor.fetchall()
-                print(f"Column types: {column_types}")
+                print(f"Column types: {column_types}", flush=True)
 
                 # Check if types were changed to DECIMAL or NUMERIC
                 decimal_types = [
@@ -183,7 +183,7 @@ def validate_test(model_result, fixtures=None):
                     if "numeric" in col[1].lower() or "decimal" in col[1].lower()
                 ]
                 if decimal_types:
-                    print("✅ Agent changed column types to support decimal division")
+                    print("✅ Agent changed column types to support decimal division", flush=True)
 
                     # Test the division again
                     db_cursor.execute(
@@ -244,7 +244,7 @@ def validate_test(model_result, fixtures=None):
 
                     if new_tables:
                         print(
-                            f"✅ Agent created new table(s): {[t[0] for t in new_tables]}"
+                            f"✅ Agent created new table(s, flush=True): {[t[0] for t in new_tables]}"
                         )
 
                         # Try to find a table with proper decimal calculations

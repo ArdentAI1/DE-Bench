@@ -198,12 +198,12 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Check for query analysis (look for comments or documentation)
-            print("🔍 Checking for slow query analysis...")
+            print("🔍 Checking for slow query analysis...", flush=True)
             test_steps[1]["status"] = "passed"
             test_steps[1]["Result_Message"] = "✅ Query analysis assumed completed"
 
             # Step 3: Verify index creation
-            print("🔍 Checking for new indexes...")
+            print("🔍 Checking for new indexes...", flush=True)
             
             # Check indexes on each table
             tables_to_check = ["customers", "products", "orders", "order_items"]
@@ -224,7 +224,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = f"❌ Only {total_new_indexes} indexes found, expected at least 4"
 
             # Step 4: Test query performance
-            print("🔍 Testing query performance...")
+            print("🔍 Testing query performance...", flush=True)
             
             # Test a typical join query
             import time as time_module
@@ -251,7 +251,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = f"⚠️ Query completed but slow: {query_time_ms:.2f}ms"
 
             # Step 5: Check FK indexes specifically
-            print("🔍 Checking foreign key indexes...")
+            print("🔍 Checking foreign key indexes...", flush=True)
             
             fk_indexed = 0
             
@@ -281,7 +281,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[4]["Result_Message"] = f"❌ Only {fk_indexed} FK columns indexed, expected at least 2"
 
             # Step 6: Check index usage with EXPLAIN
-            print("🔍 Checking index usage with EXPLAIN...")
+            print("🔍 Checking index usage with EXPLAIN...", flush=True)
             
             try:
                 db_cursor.execute("""
@@ -290,7 +290,7 @@ def validate_test(model_result, fixtures=None):
                 explain_result = db_cursor.fetchall()
                 uses_index = any('index' in str(row).lower() or 'ref' in str(row).lower() for row in explain_result)
             except Exception as e:
-                print(f"EXPLAIN query error: {e}")
+                print(f"EXPLAIN query error: {e}", flush=True)
                 uses_index = False
             
             if uses_index:
@@ -301,7 +301,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[5]["Result_Message"] = "❌ EXPLAIN shows table scans, indexes not being used"
 
             # Step 7: Check for summary tables
-            print("🔍 Looking for summary/aggregate tables...")
+            print("🔍 Looking for summary/aggregate tables...", flush=True)
             
             try:
                 db_cursor.execute("SHOW TABLES")
@@ -316,7 +316,7 @@ def validate_test(model_result, fixtures=None):
                     test_steps[6]["status"] = "partial"
                     test_steps[6]["Result_Message"] = "⚠️ No summary tables found (optional optimization)"
             except Exception as e:
-                print(f"Summary table check error: {e}")
+                print(f"Summary table check error: {e}", flush=True)
                 test_steps[6]["status"] = "partial"
                 test_steps[6]["Result_Message"] = "⚠️ Could not check for summary tables"
 
