@@ -90,8 +90,15 @@ def matches_test_branch_pattern(branch_name: str) -> bool:
     
     # Pattern 2: starts with 'test_airflow_'
     airflow_test_pattern = r'^test_airflow_.*'
-    
-    return bool(re.match(timestamp_hash_pattern, branch_name)) or bool(re.match(airflow_test_pattern, branch_name))
+
+    # Pattern 3: starts with 'feature/test_'
+    feature_test_pattern = r'^feature/test_.*'
+
+    possible_patterns = [timestamp_hash_pattern, airflow_test_pattern, feature_test_pattern]
+    for pattern in possible_patterns:
+        if bool(re.match(pattern, branch_name)):
+            return True
+    return False
 
 
 def get_prs_with_test_branches(repo: Repository) -> List[Dict[str, Any]]:
