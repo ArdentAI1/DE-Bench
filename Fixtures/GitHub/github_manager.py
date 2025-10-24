@@ -5,10 +5,14 @@ This module provides a class for managing GitHub operations.
 import os
 import re
 import random
+import shutil
 import time
+import zipfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 import datetime
 import requests
+from pathlib import Path
+
 
 import github
 from github import Github, Repository
@@ -27,6 +31,7 @@ class GitHubManager:
         test_name: str,
         create_branch: bool = True,
         build_info: Optional[Dict[str, str]] = None,
+        state_archive_path: Optional[Union[str, Path]] = None,
     ):
         """
         Initialize the GitHub manager.
@@ -47,6 +52,8 @@ class GitHubManager:
             )
         else:
             self.branch_name = test_name
+        if state_archive_path:
+            self.unpack_and_push_state_file(state_archive_path)
 
     def create_test_branch(
         self, test_name: str, build_info: Optional[Dict[str, str]]
@@ -73,6 +80,77 @@ class GitHubManager:
             if build_info:
                 self._update_build_info(build_info, test_name)
         return self.branch_name
+
+    def unpack_and_push_state_file(self, state_archive_path: Union[str, Path]) -> None:
+        """
+        Unpack the state file and push it to the new branch
+
+        :param Union[str, Path] state_archive_path: Path to the state archive file
+        :rtype: None
+        """
+        if isinstance(state_archive_path, str):
+            state_archive_path = Path(state_archive_path)
+        if not state_archive_path.exists():
+            print(f"State file {state_archive_path.absolute()} does not exist")
+            return
+        if not state_archive_path.is_file():
+            print(f"State file {state_archive_path.absolute()} is not a file")
+            return
+        if state_archive_path.suffix != ".zip":
+            print(f"State file {state_archive_path.absolute()} is not a zip file, it is a {state_archive_path.suffix} file!")
+            return
+        # make a directory for the state file, using the branch name
+        state_file_dir = os.path.join(self.branch_name, "state_file")
+        os.makedirs(state_file_dir, exist_ok=True)
+        # unpack the zip and push it to the new branch
+        with zipfile.ZipFile(state_archive_path.absolute(), "r") as zip_ref:
+            zip_ref.extractall(state_file_dir)
+        # push the extracted content of the state file to the new branch
+        for root, dirs, files in os.walk(state_file_dir):
+            # Skip .git and .github directories (GitHub manages these internally)
+            dirs[:] = [d for d in dirs if d not in ['.git', '.github']]
+
+            for file in files:
+                local_file_path = os.path.join(root, file)
+                # Compute the path relative to state_file_dir for GitHub
+                rel_path = os.path.relpath(local_file_path, state_file_dir)
+                # Use forward slashes for GitHub paths (even on Windows)
+                github_path = rel_path.replace(os.sep, '/')
+
+                # Skip any files that are in .git or .github directories (in case they weren't filtered by dirs)
+                if github_path.startswith('.git/') or github_path.startswith('.github/'):
+                    print(f"Skipping {github_path} (GitHub-managed directory)")
+                    continue
+
+                file_content = open(local_file_path, "rb").read()
+
+                # Check if file already exists on the branch
+                try:
+                    existing_file = self.repo.get_contents(github_path, ref=self.branch_name)
+                    # File exists, update it
+                    self.repo.update_file(
+                        path=github_path,
+                        message=f"Update {file} in {self.branch_name} branch",
+                        content=file_content,
+                        sha=existing_file.sha,
+                        branch=self.branch_name,
+                    )
+                    print(f"Updated existing file: {github_path}")
+                except github.GithubException as e:
+                    if e.status == 404:
+                        # File doesn't exist, create it
+                        self.repo.create_file(
+                            path=github_path,
+                            message=f"Add {file} to {self.branch_name} branch",
+                            content=file_content,
+                            branch=self.branch_name,
+                        )
+                        print(f"Created new file: {github_path}")
+                    else:
+                        raise
+        # delete the state file directory
+        shutil.rmtree(state_file_dir)
+        print(f"✅ State file unpacked {state_archive_path.name} and pushed to {self.branch_name} branch")
 
     def add_merge_step_to_user_input(self, user_input: str, branch_name: Optional[str] = None, pr_name: Optional[str] = None) -> str:
         """
