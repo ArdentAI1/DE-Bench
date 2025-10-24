@@ -125,12 +125,15 @@ def create_model_inputs(
     github_manager = github_resource_data.get("github_manager")
 
     pr_title = f"Add Cross-Database Analytics Pipeline {test_timestamp}_{test_uuid}"
-    branch_name = f"feature/cross-db-integration-{test_timestamp}_{test_uuid}"
+    branch_name = github_resource_data.get("resource_id")
 
     task_description = Test_Configs.User_Input
     task_description = github_manager.add_merge_step_to_user_input(task_description)
     task_description = task_description.replace("BRANCH_NAME", branch_name)
     task_description = task_description.replace("PR_NAME", pr_title)
+
+    print(f"🔧 Generated dynamic branch name: {branch_name}")
+    print(f"🔧 Generated dynamic PR title: {pr_title}")
 
     github_manager.check_and_update_gh_secrets(
         secrets={"ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"]}
@@ -181,58 +184,253 @@ def validate_test(model_result, fixtures=None):
         github_resource_data = getattr(github_fixture, "_resource_data", None)
 
         airflow_instance = airflow_resource_data["airflow_instance"]
+        base_url = airflow_resource_data["base_url"]
         github_manager = github_resource_data.get("github_manager")
         database_name = snowflake_resource_data.get("database_name")
         schema_name = snowflake_resource_data.get("schema_name")
 
         pr_title = f"Add Cross-Database Analytics Pipeline {test_timestamp}_{test_uuid}"
-        branch_name = f"feature/cross-db-integration-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # GitHub workflow
+        print(f"🔍 Checking for branch: {branch_name}")
         time.sleep(10)
+
         branch_exists, test_steps[1] = github_manager.verify_branch_exists(branch_name, test_steps[1])
         if not branch_exists:
+            test_steps[1]["status"] = "failed"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
+
         test_steps[1]["status"] = "passed"
+        test_steps[1]["Result_Message"] = f"✅ Git branch '{branch_name}' created successfully"
+
+        # Capture agent's code snapshot for observability (after branch verification)
+        print(f"📸 Capturing agent code snapshot from branch: {branch_name}")
+        print(f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch")
+        try:
+            agent_code_snapshot = github_manager.get_multiple_file_contents_from_branch(
+                branch_name=branch_name,
+                paths_to_capture=[
+                    "dags/",  # All DAG files created by the agent
+                    "requirements.txt",  # Root requirements file
+                    "Requirements/requirements.txt"  # Alternative requirements location
+                ]
+            )
+            print(f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}")
+            print(f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
+                  f"({agent_code_snapshot['summary']['total_size_bytes']} bytes)")
+
+            # Store snapshot in base test metadata immediately (incremental capture)
+            test_steps.append({
+                "name": "Agent Code Snapshot Capture",
+                "description": "Capture exact code created by agent for debugging",
+                "status": "passed",
+                "Result_Message": f"✅ Captured {agent_code_snapshot['summary']['total_files']} files "
+                                f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
+                "agent_code_snapshot": agent_code_snapshot,
+                "capture_timestamp": agent_code_snapshot["capture_timestamp"],
+                "branch_captured": branch_name
+            })
+            print(f"📋 Agent code snapshot added to test metadata for immediate availability")
+
+        except Exception as e:
+            print(f"⚠️ Failed to capture agent code snapshot: {e}")
+            agent_code_snapshot = None
+            # Still add a test step to show the attempt
+            test_steps.append({
+                "name": "Agent Code Snapshot Capture",
+                "description": "Capture exact code created by agent for debugging",
+                "status": "failed",
+                "Result_Message": f"❌ Failed to capture code snapshot: {str(e)}",
+                "agent_code_snapshot": None,
+                "capture_error": str(e)
+            })
 
         pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
-            pr_title=pr_title, test_step=test_steps[2], commit_title=pr_title, merge_method="squash",
-            build_info={"deploymentId": airflow_resource_data["deployment_id"], "deploymentName": airflow_resource_data["deployment_name"]}
+            pr_title=pr_title,
+            test_step=test_steps[2],
+            commit_title=pr_title,
+            merge_method="squash",
+            build_info={
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
+            },
         )
-        if not pr_exists:
-            return {"score": 0.0, "metadata": {"test_steps": test_steps}}
-        test_steps[2]["status"] = "passed"
 
-        action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
-        if not action_status["completed"] or not action_status["success"]:
-            test_steps[3]["status"] = "failed"
+        if not pr_exists:
+            test_steps[2]["status"] = "failed"
+            test_steps[2]["Result_Message"] = "❌ Unable to find and merge PR"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
-        test_steps[3]["status"] = "passed"
+
+        test_steps[2]["status"] = "passed"
+        test_steps[2]["Result_Message"] = f"✅ PR '{pr_title}' created and merged successfully"
+
+        # GitHub action completion with CI failure details
+        action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
+
+        if not action_status["completed"]:
+            test_steps[3]["status"] = "failed"
+            test_steps[3]["Result_Message"] = f"❌ GitHub action timed out (status: {action_status['status']})"
+            test_steps[3]["action_status"] = action_status
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
+            return {"score": 0.0, "metadata": {"test_steps": test_steps}}
+        elif not action_status["success"]:
+            test_steps[3]["status"] = "failed"
+            test_steps[3]["Result_Message"] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            test_steps[3]["action_status"] = action_status
+            # CI details are automatically included in action_status["ci_details"]
+            if "ci_details" in action_status:
+                print(f"📋 CI details captured: {len(action_status['ci_details'].get('jobs', []))} jobs analyzed")
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
+            return {"score": 0.0, "metadata": {"test_steps": test_steps}}
+        else:
+            test_steps[3]["status"] = "passed"
+            test_steps[3]["Result_Message"] = "✅ GitHub action completed successfully"
+            test_steps[3]["action_status"] = action_status
+            # TESTING: Show CI details even for successful runs
+            if "ci_details" in action_status:
+                print(f"📋 CI details captured for successful run: {len(action_status['ci_details'].get('jobs', []))} jobs analyzed")
 
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
+            test_steps[4]["Result_Message"] = "❌ Airflow instance did not redeploy successfully"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
+
         test_steps[4]["status"] = "passed"
+        test_steps[4]["Result_Message"] = "✅ Airflow redeployed successfully after GitHub action"
 
         # Check DAG
         dag_name = "cross_database_analytics_pipeline"
-        if not airflow_instance.verify_airflow_dag_exists(dag_name):
+        print(f"🔍 Checking for DAG: {dag_name} in Airflow at {base_url}")
+
+        if airflow_instance.verify_airflow_dag_exists(dag_name):
+            test_steps[5]["status"] = "passed"
+            test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
+        else:
             test_steps[5]["status"] = "failed"
-            test_steps[5]["Result_Message"] = f"❌ DAG '{dag_name}' not found"
+            test_steps[5]["Result_Message"] = f"❌ DAG '{dag_name}' not found in Airflow"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
-        test_steps[5]["status"] = "passed"
-        test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' exists"
 
         # Execute DAG
+        print(f"🔍 Triggering DAG: {dag_name}")
         dag_run_id = airflow_instance.unpause_and_trigger_airflow_dag(dag_name)
-        if dag_run_id:
-            airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
-            test_steps[6]["status"] = "passed"
-            test_steps[6]["Result_Message"] = f"✅ DAG executed successfully"
-        else:
+
+        if not dag_run_id:
             test_steps[6]["status"] = "failed"
-            test_steps[6]["Result_Message"] = "❌ DAG execution failed"
+            test_steps[6]["Result_Message"] = "❌ Failed to trigger DAG"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to earlier failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
+
+        # Monitor the DAG run until completion
+        airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
+        test_steps[6]["status"] = "passed"
+        test_steps[6]["Result_Message"] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+
+        # Capture comprehensive DAG information for debugging (source, import errors, task logs)
+        print("📊 Capturing comprehensive DAG information for debugging...")
+        try:
+            comprehensive_dag_info = airflow_instance.get_comprehensive_dag_info(
+                dag_id=dag_name,
+                dag_run_id=dag_run_id,
+                github_manager=github_manager,
+            )
+
+            # Add agent code snapshot to comprehensive DAG info (captured earlier)
+            if agent_code_snapshot:
+                comprehensive_dag_info["agent_code_snapshot"] = agent_code_snapshot
+                print(f"📸 Agent code snapshot added to comprehensive DAG info: "
+                      f"{agent_code_snapshot['summary']['total_files']} files, "
+                      f"{agent_code_snapshot['summary']['total_size_bytes']} bytes")
+            else:
+                print("⚠️ Agent code snapshot not available")
+
+            dag_source = comprehensive_dag_info.get("dag_source", {})
+            import_errors = comprehensive_dag_info.get("import_errors", [])
+
+            if dag_source.get("source_code"):
+                print(
+                    f"📄 DAG source code captured ({len(dag_source['source_code'])} characters)"
+                )
+                print(
+                    f"📄 Source code preview: {dag_source['source_code'][:200]}..."
+                )
+            else:
+                print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files")
+
+            if import_errors:
+                print(f"❌ Found {len(import_errors)} import errors")
+                for error in import_errors:
+                    print(
+                        f"   - {error.get('filename', 'Unknown')}: {error.get('stack_trace', 'No details')}"
+                    )
+            else:
+                print("✅ No DAG import errors found")
+
+            # Attach to test metadata
+            test_steps.append(
+                {
+                    "name": "DAG Information Capture",
+                    "description": "Capture comprehensive DAG information for debugging",
+                    "status": "passed",
+                    "Result_Message": "✅ Comprehensive DAG information captured successfully",
+                    "comprehensive_dag_info": comprehensive_dag_info,
+                    "dag_source_code": dag_source.get("source_code"),
+                    "dag_file_path": dag_source.get("file_path"),
+                    "dag_import_errors": import_errors,
+                    "task_logs_summary": {
+                        task_id: {
+                            "state": task_info.get("state"),
+                            "duration": task_info.get("duration"),
+                            "log_length": len(task_info.get("logs", "")),
+                        }
+                        for task_id, task_info in comprehensive_dag_info.get("task_logs", {}).items()
+                    },
+                }
+            )
+
+        except Exception as e:
+            print(f"⚠️ Could not capture comprehensive DAG info: {e}")
+            test_steps.append(
+                {
+                    "name": "DAG Information Capture",
+                    "description": "Capture comprehensive DAG information for debugging",
+                    "status": "failed",
+                    "Result_Message": f"❌ Failed to capture DAG information: {str(e)}",
+                }
+            )
 
         # Check Snowflake for results
         snowflake_conn = snowflake.connector.connect(
