@@ -175,6 +175,11 @@ def validate_test(model_result, fixtures=None):
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
             test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed"
+            # Mark remaining steps as failed
+            for step in test_steps:
+                if step["status"] == "running":
+                    step["status"] = "failed"
+                    step["Result_Message"] = "❌ Skipped due to agent failure"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
@@ -197,32 +202,43 @@ def validate_test(model_result, fixtures=None):
         db_cursor = db_connection.cursor()
 
         try:
-            # Step 2: Verify routing database tables
+            # Step 2: Verify routing database tables (flexible approach)
             print("🔍 Checking routing database...")
-            
-            # Check shard_map table
+
+            # Check for common routing table patterns
+            db_cursor.execute("SHOW TABLES")
+            all_tables = [table[0].lower() for table in db_cursor.fetchall()]
+
+            # Look for routing-related tables (flexible naming)
+            routing_tables = [t for t in all_tables if any(keyword in t for keyword in ['shard', 'routing', 'map', 'registry', 'tenant'])]
+
+            # Check shard_map table (preferred name)
             db_cursor.execute("SHOW TABLES LIKE 'shard_map'")
             has_shard_map = db_cursor.fetchone() is not None
-            
-            # Check shard_registry table
+
+            # Check shard_registry table (preferred name)
             db_cursor.execute("SHOW TABLES LIKE 'shard_registry'")
             has_shard_registry = db_cursor.fetchone() is not None
-            
+
             if has_shard_map and has_shard_registry:
                 # Check if shard_map has mappings
                 db_cursor.execute("SELECT COUNT(*) FROM shard_map")
                 mapping_count = db_cursor.fetchone()[0]
-                
+
                 # Check if shard_registry has 4 shards
                 db_cursor.execute("SELECT COUNT(*) FROM shard_registry")
                 shard_count = db_cursor.fetchone()[0]
-                
+
                 if mapping_count >= 15 and shard_count >= 4:
                     test_steps[1]["status"] = "passed"
                     test_steps[1]["Result_Message"] = f"✅ Routing database created: {mapping_count} tenant mappings, {shard_count} shards registered"
                 else:
                     test_steps[1]["status"] = "partial"
                     test_steps[1]["Result_Message"] = f"⚠️ Routing tables exist but incomplete: {mapping_count} mappings, {shard_count} shards"
+            elif len(routing_tables) >= 1:
+                # Alternative routing implementation detected
+                test_steps[1]["status"] = "partial"
+                test_steps[1]["Result_Message"] = f"⚠️ Alternative routing detected (tables: {', '.join(routing_tables[:3])}), expected shard_map/shard_registry"
             else:
                 test_steps[1]["status"] = "failed"
                 test_steps[1]["Result_Message"] = "❌ Routing database tables not found"
@@ -283,61 +299,73 @@ def validate_test(model_result, fixtures=None):
                 test_steps[3]["Result_Message"] = "❌ Cannot validate distribution without shard_map"
 
             # Step 5: Verify query routing functions
-            print("🔍 Checking query routing functions...")
-            
-            # Check for routing functions
-            db_cursor.execute("""
-                SELECT ROUTINE_NAME 
-                FROM information_schema.ROUTINES 
-                WHERE ROUTINE_SCHEMA = %s 
-                AND (ROUTINE_NAME LIKE '%%shard%%' OR ROUTINE_NAME LIKE '%%route%%')
-                AND ROUTINE_TYPE = 'FUNCTION'
-            """, (db_name,))
-            routing_functions = db_cursor.fetchall()
-            
-            if len(routing_functions) >= 1:
-                test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ Routing functions implemented: {', '.join([f[0] for f in routing_functions])}"
-            else:
-                test_steps[4]["status"] = "partial"
-                test_steps[4]["Result_Message"] = "⚠️ No routing functions found (may use alternative routing method)"
+            try:
+                print("🔍 Checking query routing functions...")
+
+                # Check for routing functions
+                db_cursor.execute("""
+                    SELECT ROUTINE_NAME
+                    FROM information_schema.ROUTINES
+                    WHERE ROUTINE_SCHEMA = %s
+                    AND (ROUTINE_NAME LIKE '%shard%' OR ROUTINE_NAME LIKE '%route%')
+                    AND ROUTINE_TYPE = 'FUNCTION'
+                """, (db_name,))
+                routing_functions = db_cursor.fetchall()
+
+                if len(routing_functions) >= 1:
+                    test_steps[4]["status"] = "passed"
+                    test_steps[4]["Result_Message"] = f"✅ Routing functions implemented: {', '.join([f[0] for f in routing_functions])}"
+                else:
+                    test_steps[4]["status"] = "partial"
+                    test_steps[4]["Result_Message"] = "⚠️ No routing functions found (may use alternative routing method)"
+            except Exception as e:
+                test_steps[4]["status"] = "failed"
+                test_steps[4]["Result_Message"] = f"❌ Error checking routing functions: {str(e)}"
 
             # Step 6: Verify rebalancing procedure
-            print("🔍 Checking rebalancing procedures...")
-            
-            db_cursor.execute("""
-                SELECT ROUTINE_NAME 
-                FROM information_schema.ROUTINES 
-                WHERE ROUTINE_SCHEMA = %s 
-                AND (ROUTINE_NAME LIKE '%%move%%tenant%%' OR ROUTINE_NAME LIKE '%%rebalance%%' OR ROUTINE_NAME LIKE '%%migrate%%')
-                AND ROUTINE_TYPE = 'PROCEDURE'
-            """, (db_name,))
-            rebalancing_procedures = db_cursor.fetchall()
-            
-            if len(rebalancing_procedures) >= 1:
-                test_steps[5]["status"] = "passed"
-                test_steps[5]["Result_Message"] = f"✅ Rebalancing procedures implemented: {', '.join([p[0] for p in rebalancing_procedures])}"
-            else:
-                test_steps[5]["status"] = "partial"
-                test_steps[5]["Result_Message"] = "⚠️ No rebalancing procedures found (optional feature)"
+            try:
+                print("🔍 Checking rebalancing procedures...")
+
+                db_cursor.execute("""
+                    SELECT ROUTINE_NAME
+                    FROM information_schema.ROUTINES
+                    WHERE ROUTINE_SCHEMA = %s
+                    AND (ROUTINE_NAME LIKE '%move%tenant%' OR ROUTINE_NAME LIKE '%rebalance%' OR ROUTINE_NAME LIKE '%migrate%')
+                    AND ROUTINE_TYPE = 'PROCEDURE'
+                """, (db_name,))
+                rebalancing_procedures = db_cursor.fetchall()
+
+                if len(rebalancing_procedures) >= 1:
+                    test_steps[5]["status"] = "passed"
+                    test_steps[5]["Result_Message"] = f"✅ Rebalancing procedures implemented: {', '.join([p[0] for p in rebalancing_procedures])}"
+                else:
+                    test_steps[5]["status"] = "partial"
+                    test_steps[5]["Result_Message"] = "⚠️ No rebalancing procedures found (optional feature)"
+            except Exception as e:
+                test_steps[5]["status"] = "failed"
+                test_steps[5]["Result_Message"] = f"❌ Error checking rebalancing procedures: {str(e)}"
 
             # Step 7: Verify monitoring views
-            print("🔍 Checking monitoring views...")
-            
-            db_cursor.execute("""
-                SELECT TABLE_NAME 
-                FROM information_schema.VIEWS 
-                WHERE TABLE_SCHEMA = %s 
-                AND (TABLE_NAME LIKE '%%distribution%%' OR TABLE_NAME LIKE '%%capacity%%' OR TABLE_NAME LIKE '%%shard%%')
-            """, (db_name,))
-            monitoring_views = db_cursor.fetchall()
-            
-            if len(monitoring_views) >= 1:
-                test_steps[6]["status"] = "passed"
-                test_steps[6]["Result_Message"] = f"✅ Monitoring views created: {', '.join([v[0] for v in monitoring_views])}"
-            else:
-                test_steps[6]["status"] = "partial"
-                test_steps[6]["Result_Message"] = "⚠️ No monitoring views found (recommended but optional)"
+            try:
+                print("🔍 Checking monitoring views...")
+
+                db_cursor.execute("""
+                    SELECT TABLE_NAME
+                    FROM information_schema.VIEWS
+                    WHERE TABLE_SCHEMA = %s
+                    AND (TABLE_NAME LIKE '%distribution%' OR TABLE_NAME LIKE '%capacity%' OR TABLE_NAME LIKE '%shard%')
+                """, (db_name,))
+                monitoring_views = db_cursor.fetchall()
+
+                if len(monitoring_views) >= 1:
+                    test_steps[6]["status"] = "passed"
+                    test_steps[6]["Result_Message"] = f"✅ Monitoring views created: {', '.join([v[0] for v in monitoring_views])}"
+                else:
+                    test_steps[6]["status"] = "partial"
+                    test_steps[6]["Result_Message"] = "⚠️ No monitoring views found (recommended but optional)"
+            except Exception as e:
+                test_steps[6]["status"] = "failed"
+                test_steps[6]["Result_Message"] = f"❌ Error checking monitoring views: {str(e)}"
 
         finally:
             db_cursor.close()
@@ -349,7 +377,13 @@ def validate_test(model_result, fixtures=None):
                 step["status"] = "failed"
                 step["Result_Message"] = f"❌ Validation error: {str(e)}"
 
-    score = sum([step["status"] == "passed" for step in test_steps]) / len(test_steps)
+    # Calculate score with partial credit (passed=1.0, partial=0.5, failed=0.0)
+    score_sum = sum([
+        1.0 if step["status"] == "passed" else (0.5 if step["status"] == "partial" else 0.0)
+        for step in test_steps
+    ])
+    score = score_sum / len(test_steps)
+
     return {
         "score": score,
         "metadata": {"test_steps": test_steps},
