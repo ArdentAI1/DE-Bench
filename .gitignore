@@ -41,3 +41,4 @@ tmp_airflow_tests/*
 
 .DS_Store
 */**/.DS_Store
+*.log
