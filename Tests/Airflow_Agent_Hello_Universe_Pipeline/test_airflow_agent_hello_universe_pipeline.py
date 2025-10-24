@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from Fixtures.base_fixture import DEBenchFixture
 
 # Dynamic config loading
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
@@ -36,6 +37,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
         "resource_id": f"test_airflow_hello_universe_pipeline_test_{test_timestamp}_{test_uuid}",
+        "state_archive_path": f"{root_dir}/Fixtures/Airflow/GitHub_States/empty-state.zip",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
