@@ -17,8 +17,8 @@ Create an Airflow DAG that:
 5. Runs daily at midnight
 6. Has a single task named 'process_dataframe'
 7. Name the DAG 'pandas_dataframe_dag'
-8. Create it in a branch called 'BRANCH_NAME'
-9. Name the PR 'PR_NAME'
+8. Create a new feature branch called 'feature/BRANCH_NAME'
+9. Create a pull request named 'PR_NAME'
 """
 
 # Configuration will be generated dynamically by create_model_inputs function

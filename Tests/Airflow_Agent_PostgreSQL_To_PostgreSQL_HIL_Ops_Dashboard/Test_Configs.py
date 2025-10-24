@@ -11,8 +11,8 @@ Create an Airflow DAG that:
 4. Sends Slack/webhook notifications for high-priority interventions using SLACK_APP_URL from environment variables
 5. Runs every 5 minutes for real-time ops monitoring
 6. Name it hil_ops_dashboard_etl
-7. Name the branch BRANCH_NAME
-8. Call the PR PR_NAME
+7. Create a new feature branch called 'feature/BRANCH_NAME'
+8. Create a pull request named 'PR_NAME'
 """
 
 # Configuration will be generated dynamically by create_model_inputs function

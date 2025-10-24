@@ -41,3 +41,6 @@ tmp_airflow_tests/*
 
 .DS_Store
 */**/.DS_Store
+
+# Parallel evaluation logs
+logs/

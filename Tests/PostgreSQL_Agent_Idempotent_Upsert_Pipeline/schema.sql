@@ -42,4 +42,8 @@ CREATE INDEX idx_staging_batch_id ON staging_customers(batch_id);
 -- Initial seed data to simulate existing customers
 INSERT INTO dim_customers (customer_id, email, first_name, last_name, subscription_tier, registration_date) VALUES
 ('CUST_001', 'existing@example.com', 'Existing', 'User', 'Premium', '2023-01-15'),
-('CUST_002', 'legacy@example.com', 'Legacy', 'Customer', 'Free', '2022-06-20');
+('CUST_002', 'legacy@example.com', 'Legacy', 'Customer', 'Free', '2022-06-20'),
+-- Test customers that will be used in validation
+('ALICE_001', 'alice@example.com', 'Alice', 'Johnson', 'Premium', '2023-03-10'),
+('BOB_001', 'bob@example.com', 'Bob', 'Smith', 'Free', '2023-04-15'),
+('CAROL_001', 'carol@example.com', 'Carol', 'Davis', 'Premium', '2023-05-20');

@@ -164,6 +164,10 @@ def set_up_model_configs(Configs, custom_info=None):
                             "X-Braintrust-Exported-Parent-Span": current_span().export(),
                         },
                     )
+                elif service == "github":
+                    # Handle GitHub service - skip Ardent config as it's handled locally
+                    print(f"🐙 GitHub service detected - handling locally (no Ardent config needed)")
+                    service_result = {"status": "handled_locally", "service": service}
                 else:
                     # Handle unknown service types
                     print(f"⚠️ Unknown service type: {service}")

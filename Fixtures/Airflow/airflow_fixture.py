@@ -34,6 +34,7 @@ class AirflowResourceData(TypedDict):
     status: str
     deployment_id: str
     deployment_name: str
+    secret_suffix: str  # Suffix for test-specific GitHub secrets
     base_url: str
     api_url: str
     api_token: str
@@ -218,6 +219,7 @@ class AirflowFixture(
                 status="active",
                 deployment_id=airflow_manager.deployment_id,
                 deployment_name=airflow_manager.deployment_name,
+                secret_suffix=airflow_manager.secret_suffix,  # Include secret suffix for parallel execution
                 base_url=airflow_manager.host,
                 api_url=airflow_manager.api_url,
                 api_token=airflow_manager.api_token,
