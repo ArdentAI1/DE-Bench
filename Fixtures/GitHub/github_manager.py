@@ -102,8 +102,8 @@ class GitHubManager:
         user_input += f"\n{last_number + 1}. IMPORTANT: First checkout the '{self.branch_name}' branch (this is your base branch for this test, not main)."
         user_input += f"\n{last_number + 2}. IMPORTANT: Create your feature branch FROM the '{self.branch_name}' branch you just checked out."
         user_input += f"\n{last_number + 3}. IMPORTANT: Create your feature branch with the name '{branch_name}'."
-        user_input += f"\n{last_number + 3}. IMPORTANT: When creating the pull request, set the base/target/destination branch to '{self.branch_name}' (NOT main)."
-        user_input += f"\n{last_number + 3}. IMPORTANT: When creating the pull request, set the title to '{pr_name}'."
+        user_input += f"\n{last_number + 4}. IMPORTANT: When creating the pull request, set the base/target/destination branch to '{self.branch_name}' (NOT main)."
+        user_input += f"\n{last_number + 5}. IMPORTANT: When creating the pull request, set the title to '{pr_name}'."
 
         return user_input
 

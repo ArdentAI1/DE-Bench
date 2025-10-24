@@ -295,7 +295,7 @@ def validate_test(model_result, fixtures=None):
 
         # Generate the same branch and PR names used in create_model_inputs
         pr_title = f"Add PostgreSQL to Snowflake Workflow Observability {test_timestamp}_{test_uuid}"
-        branch_name = f"feature/workflow-observability-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
         print(f"🔍 Checking for branch: {branch_name}")

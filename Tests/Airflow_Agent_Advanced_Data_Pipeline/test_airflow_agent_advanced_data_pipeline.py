@@ -18,6 +18,9 @@ Test_Configs = importlib.import_module(module_path)
 # Generate unique identifiers for parallel execution
 test_timestamp = int(time.time())
 test_uuid = uuid.uuid4().hex[:8]
+PR_NAME = f"Add Advanced Data Engineering Pipeline {test_timestamp}_{test_uuid}"
+BRANCH_NAME = f"test_airflow_advanced_data_pipeline_{test_timestamp}_{test_uuid}"
+FEATURE_BRANCH_NAME = f"feature/{BRANCH_NAME}"
 
 
 def get_fixtures() -> List[DEBenchFixture]:
@@ -47,7 +50,7 @@ def get_fixtures() -> List[DEBenchFixture]:
 
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
-        "resource_id": f"test_airflow_advanced_data_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": BRANCH_NAME,
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -87,10 +90,6 @@ def create_model_inputs(
     if not github_manager:
         raise Exception("GitHub manager not available")
 
-    # Generate dynamic branch and PR names
-    pr_title = f"Add Advanced Data Engineering Pipeline {test_timestamp}_{test_uuid}"
-    branch_name = github_resource_data.get("resource_id")
-
     # Start with the original user input from Test_Configs
     task_description = Test_Configs.User_Input
 
@@ -98,8 +97,8 @@ def create_model_inputs(
     task_description = github_manager.add_merge_step_to_user_input(task_description)
 
     # Replace placeholders with dynamic values
-    task_description = task_description.replace("BRANCH_NAME", branch_name)
-    task_description = task_description.replace("PR_NAME", pr_title)
+    task_description = task_description.replace("BRANCH_NAME", BRANCH_NAME)
+    task_description = task_description.replace("PR_NAME", PR_NAME)
 
     # Set up GitHub secrets for Astro access
     github_manager.check_and_update_gh_secrets(
@@ -108,8 +107,8 @@ def create_model_inputs(
         }
     )
 
-    print(f"🔧 Generated dynamic branch name: {branch_name}")
-    print(f"🔧 Generated dynamic PR title: {pr_title}")
+    print(f"🔧 Generated dynamic branch name: {BRANCH_NAME}")
+    print(f"🔧 Generated dynamic PR title: {PR_NAME}")
 
     # Use the helper to automatically create config from all fixtures
     return {
@@ -283,10 +282,7 @@ def validate_test(model_result, fixtures=None):
             raise Exception("GitHub manager not available")
 
         # Generate the same branch and PR names used in create_model_inputs
-        pr_title = (
-            f"Add Advanced Data Engineering Pipeline {test_timestamp}_{test_uuid}"
-        )
-        branch_name = f"feature/advanced-data-pipeline-{test_timestamp}_{test_uuid}"
+        branch_name = FEATURE_BRANCH_NAME
 
         # Step 2: Check if git branch was created
         print(f"🔍 Checking for branch: {branch_name}")
@@ -356,12 +352,12 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 3: Check if PR was created and merge it
-        print(f"🔍 Checking for PR: {pr_title}")
+        print(f"🔍 Checking for PR: {PR_NAME}")
         try:
             pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
-                pr_title=pr_title,
+                pr_title=PR_NAME,
                 test_step=test_steps[2],
-                commit_title=pr_title,
+                commit_title=PR_NAME,
                 merge_method="squash",
                 build_info={
                     "deploymentId": airflow_resource_data["deployment_id"],
@@ -378,7 +374,7 @@ def validate_test(model_result, fixtures=None):
             test_steps[2]["status"] = "passed"
             test_steps[2][
                 "Result_Message"
-            ] = f"✅ PR '{pr_title}' created and merged successfully"
+            ] = f"✅ PR '{PR_NAME}' created and merged successfully"
 
         except Exception as e:
             test_steps[2]["status"] = "failed"
@@ -390,7 +386,7 @@ def validate_test(model_result, fixtures=None):
         # Step 4: Check if GitHub action completed
         print(f"🔍 Waiting for GitHub action to complete...")
         try:
-            action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
+            action_status = github_manager.check_if_action_is_complete(PR_NAME=PR_NAME, return_details=True)
 
             if not action_status["completed"]:
                 test_steps[3]["status"] = "failed"

@@ -47,7 +47,7 @@ def get_fixtures() -> List[DEBenchFixture]:
 
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
-        "resource_id": f"test_airflow_db_deduplication_test_{test_timestamp}_{test_uuid}",
+        "resource_id": f"test_airflow_db_deduplication_{test_timestamp}_{test_uuid}",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -273,7 +273,7 @@ def validate_test(model_result, fixtures=None):
 
         # Generate the same branch and PR names used in create_model_inputs
         pr_title = f"Add Database Deduplication with Stored Procedures {test_timestamp}_{test_uuid}"
-        branch_name = f"feature/database-deduplication-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
         print(f"🔍 Checking for branch: {branch_name}")

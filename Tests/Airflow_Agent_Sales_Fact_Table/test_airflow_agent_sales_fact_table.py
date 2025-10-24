@@ -286,7 +286,7 @@ def validate_test(model_result, fixtures=None):
         pr_title = (
             f"Add Sales Fact Table Creation Pipeline {test_timestamp}_{test_uuid}"
         )
-        branch_name = f"feature/sales-fact-table-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # Step 2: Check if git branch was created
         print(f"🔍 Checking for branch: {branch_name}")

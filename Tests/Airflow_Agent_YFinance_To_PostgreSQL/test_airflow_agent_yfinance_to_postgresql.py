@@ -95,13 +95,7 @@ def create_model_inputs(
     task_description = Test_Configs.User_Input
 
     # Add merge step to user input
-    task_description = github_manager.add_merge_step_to_user_input(task_description)
-
-    # Replace placeholders with dynamic values
-    task_description = task_description.replace("BRANCH_NAME", branch_name)
-    task_description = task_description.replace("PR_NAME", pr_title)
-
-    # Set up GitHub secrets for Astro access
+    task_description = github_manager.add_merge_step_to_user_input(task_description)c
     github_manager.check_and_update_gh_secrets(
         secrets={
             "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
@@ -271,7 +265,7 @@ def validate_test(model_result, fixtures=None):
         pr_title = (
             f"Add YFinance Tesla Stock Data Pipeline {test_timestamp}_{test_uuid}"
         )
-        branch_name = f"feature/yfinance-tesla-{test_timestamp}_{test_uuid}"
+        branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
         print(f"🔍 Checking for branch: {branch_name}")
