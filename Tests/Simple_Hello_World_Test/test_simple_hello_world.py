@@ -99,7 +99,7 @@ def validate_test(model_result, fixtures=None):
     else:
         response_text = str(model_result)
 
-    print(f"Checking response text: '{response_text}'")
+    print(f"Checking response text: '{response_text}'", flush=True)
 
     # VALIDATION 1: Check if 'hello world' appears in the text response
     text_validation_passed = False
@@ -109,13 +109,13 @@ def validate_test(model_result, fixtures=None):
             "Result_Message"
         ] = f"✅ Successfully found 'hello world' in text response"
         text_validation_passed = True
-        print("✅ Text response validation: PASSED")
+        print("✅ Text response validation: PASSED", flush=True)
     else:
         test_steps[0]["status"] = "failed"
         test_steps[0][
             "Result_Message"
         ] = f"❌ Did not find 'hello world' in text response"
-        print("❌ Text response validation: FAILED")
+        print("❌ Text response validation: FAILED", flush=True)
 
     # VALIDATION 2: Check for Python script that returns 'hello world'
     script_validation_passed = False
@@ -134,7 +134,7 @@ def validate_test(model_result, fixtures=None):
         matches = re.findall(pattern, response_text, re.DOTALL | re.IGNORECASE)
         if matches:
             extracted_code = matches[0].strip()
-            print(f"Found Python code pattern: {extracted_code}")
+            print(f"Found Python code pattern: {extracted_code}", flush=True)
             break
 
     if extracted_code:
@@ -169,7 +169,7 @@ def validate_test(model_result, fixtures=None):
                     "Result_Message"
                 ] = f"✅ Python script successfully returned 'hello world': {result}"
                 script_validation_passed = True
-                print("✅ Python script validation: PASSED")
+                print("✅ Python script validation: PASSED", flush=True)
             else:
                 # Fallback: check if the code contains a simple return statement
                 if (
@@ -182,29 +182,29 @@ def validate_test(model_result, fixtures=None):
                     ] = f"✅ Python script contains valid return statement with 'hello world'"
                     script_validation_passed = True
                     print(
-                        "✅ Python script validation: PASSED (contains return statement)"
+                        "✅ Python script validation: PASSED (contains return statement, flush=True)"
                     )
                 else:
                     test_steps[1]["status"] = "failed"
                     test_steps[1][
                         "Result_Message"
                     ] = f"❌ Python script did not return 'hello world', got: {result}"
-                    print(f"❌ Python script validation: FAILED - returned {result}")
+                    print(f"❌ Python script validation: FAILED - returned {result}", flush=True)
 
         except Exception as e:
             test_steps[1]["status"] = "failed"
             test_steps[1]["Result_Message"] = f"❌ Error executing Python script: {e}"
-            print(f"❌ Python script validation: ERROR - {e}")
+            print(f"❌ Python script validation: ERROR - {e}", flush=True)
     else:
         test_steps[1]["status"] = "failed"
         test_steps[1]["Result_Message"] = "❌ No Python script found in response"
-        print("❌ Python script validation: FAILED - no code found")
+        print("❌ Python script validation: FAILED - no code found", flush=True)
 
     # Overall validation: both must pass
     overall_success = text_validation_passed and script_validation_passed
 
     if overall_success:
-        print("🎉 Overall validation: PASSED")
+        print("🎉 Overall validation: PASSED", flush=True)
     else:
         failed_parts = []
         if not text_validation_passed:
@@ -213,7 +213,7 @@ def validate_test(model_result, fixtures=None):
             failed_parts.append("Python script")
 
         error_msg = f"Validation failed for: {', '.join(failed_parts)}"
-        print(f"❌ Overall validation: FAILED - {error_msg}")
+        print(f"❌ Overall validation: FAILED - {error_msg}", flush=True)
 
     # Calculate score as the fraction of steps that passed
     score = sum([step["status"] == "passed" for step in test_steps]) / len(test_steps)

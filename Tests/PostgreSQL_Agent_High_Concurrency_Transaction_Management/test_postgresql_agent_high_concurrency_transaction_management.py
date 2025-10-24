@@ -178,7 +178,7 @@ def validate_test(model_result, fixtures=None):
             transaction_pk = transaction_pk_result[0] if transaction_pk_result else 'transaction_id'
 
             # Step 2: Verify transaction processing
-            print("🔍 Checking transaction processing...")
+            print("🔍 Checking transaction processing...", flush=True)
             
             # Check if transactions were created beyond the seed data
             db_cursor.execute("SELECT COUNT(*) FROM transactions")
@@ -209,7 +209,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[1]["Result_Message"] = f"❌ No evidence of transaction processing - only {transaction_count} transactions found"
 
             # Step 3: Verify concurrency control mechanisms
-            print("🔍 Testing concurrency control...")
+            print("🔍 Testing concurrency control...", flush=True)
             
             # Check for evidence of concurrent transaction handling
             # Look for transactions with retry counts (indicates deadlock handling)
@@ -240,7 +240,7 @@ def validate_test(model_result, fixtures=None):
                 test_steps[2]["Result_Message"] = "⚠️ Limited evidence of concurrency control mechanisms"
 
             # Step 4: Verify data consistency
-            print("🔍 Checking data consistency...")
+            print("🔍 Checking data consistency...", flush=True)
 
             try:
                 # Check that all account balances are non-negative
@@ -282,7 +282,7 @@ def validate_test(model_result, fixtures=None):
                     test_steps[3]["Result_Message"] = f"❌ Data consistency violated - {negative_balances} negative balances, {len(inconsistent_balances)} inconsistencies"
 
             # Step 5: Verify audit trail compliance
-            print("🔍 Checking audit trail compliance...")
+            print("🔍 Checking audit trail compliance...", flush=True)
 
             try:
                 # Check if balance history is being maintained

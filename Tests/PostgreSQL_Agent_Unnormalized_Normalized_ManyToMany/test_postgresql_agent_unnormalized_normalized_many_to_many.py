@@ -140,25 +140,25 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Step 2: Demonstrate the normalization problem first
-            print("🔍 Analyzing the unnormalized schema problem...")
+            print("🔍 Analyzing the unnormalized schema problem...", flush=True)
             db_cursor.execute(
                 "SELECT book_id, title, authors FROM books_bad ORDER BY book_id"
             )
             original_data = db_cursor.fetchall()
 
-            print("Original unnormalized data:")
+            print("Original unnormalized data:", flush=True)
             for row in original_data:
-                print(f"  Book {row[0]}: '{row[1]}' by {row[2]}")
+                print(f"  Book {row[0]}: '{row[1]}' by {row[2]}", flush=True)
 
             # Demonstrate the problem: searching for 'Gamma' doesn't show co-authors properly
             db_cursor.execute(
                 "SELECT title, authors FROM books_bad WHERE authors LIKE '%Gamma%'"
             )
             gamma_books = db_cursor.fetchall()
-            print(f"Books by Gamma (showing incomplete author info): {gamma_books}")
+            print(f"Books by Gamma (showing incomplete author info, flush=True): {gamma_books}")
 
             # Step 3: Check if the agent created a normalized schema
-            print("🔍 Checking for normalized schema...")
+            print("🔍 Checking for normalized schema...", flush=True)
 
             # Check what tables exist
             db_cursor.execute(
@@ -169,7 +169,7 @@ def validate_test(model_result, fixtures=None):
             """
             )
             all_tables = [row[0] for row in db_cursor.fetchall()]
-            print(f"Available tables: {all_tables}")
+            print(f"Available tables: {all_tables}", flush=True)
 
             # Look for signs of normalization
             normalized_tables = []
@@ -178,12 +178,12 @@ def validate_test(model_result, fixtures=None):
             # Check for books table (normalized)
             if "books" in all_tables:
                 normalized_tables.append("books")
-                print("✅ Found normalized 'books' table")
+                print("✅ Found normalized 'books' table", flush=True)
 
             # Check for authors table
             if "authors" in all_tables:
                 normalized_tables.append("authors")
-                print("✅ Found 'authors' table")
+                print("✅ Found 'authors' table", flush=True)
 
             # Check for junction table (various naming patterns)
             junction_patterns = [
@@ -195,7 +195,7 @@ def validate_test(model_result, fixtures=None):
             for pattern in junction_patterns:
                 if pattern in all_tables:
                     junction_tables.append(pattern)
-                    print(f"✅ Found junction table '{pattern}'")
+                    print(f"✅ Found junction table '{pattern}'", flush=True)
 
             if len(normalized_tables) >= 2 and junction_tables:
                 test_steps[1]["status"] = "passed"
@@ -204,7 +204,7 @@ def validate_test(model_result, fixtures=None):
                 ] = f"✅ Normalized schema created with tables: {normalized_tables + junction_tables}"
 
                 # Step 4: Validate that all author information is preserved
-                print("🔍 Validating data preservation and queryability...")
+                print("🔍 Validating data preservation and queryability...", flush=True)
 
                 try:
                     junction_table = junction_tables[
@@ -289,21 +289,21 @@ def validate_test(model_result, fixtures=None):
                     )
                     normalized_results = db_cursor.fetchall()
 
-                    print("Normalized query results:")
+                    print("Normalized query results:", flush=True)
                     current_book = None
                     authors_for_book = []
                     for row in normalized_results:
                         if current_book != row[0]:
                             if current_book:
                                 print(
-                                    f"  '{current_book}' by {', '.join(authors_for_book)}"
+                                    f"  '{current_book}' by {', '.join(authors_for_book)}, flush=True"
                                 )
                             current_book = row[0]
                             authors_for_book = [row[1]]
                         else:
                             authors_for_book.append(row[1])
                     if current_book:
-                        print(f"  '{current_book}' by {', '.join(authors_for_book)}")
+                        print(f"  '{current_book}' by {', '.join(authors_for_book)}, flush=True")
 
                     # Check that we can properly query for Gamma's books and see all co-authors
                     db_cursor.execute(
@@ -322,7 +322,7 @@ def validate_test(model_result, fixtures=None):
                     gamma_normalized = db_cursor.fetchall()
 
                     if gamma_normalized:
-                        print(f"Gamma's books with all co-authors: {gamma_normalized}")
+                        print(f"Gamma's books with all co-authors: {gamma_normalized}", flush=True)
 
                         # Check if we have complete author information
                         has_design_patterns = any(

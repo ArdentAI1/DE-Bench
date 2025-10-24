@@ -108,8 +108,8 @@ def create_model_inputs(
         }
     )
 
-    print(f"🔧 Generated dynamic branch name: {branch_name}")
-    print(f"🔧 Generated dynamic PR title: {pr_title}")
+    print(f"🔧 Generated dynamic branch name: {branch_name}", flush=True)
+    print(f"🔧 Generated dynamic PR title: {pr_title}", flush=True)
 
     # Use the helper to automatically create config from all fixtures
     return {
@@ -247,7 +247,7 @@ def validate_test(model_result, fixtures=None):
         branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
-        print(f"🔍 Checking for branch: {branch_name}")
+        print(f"🔍 Checking for branch: {branch_name}", flush=True)
         time.sleep(10)
 
         branch_exists, test_steps[1] = github_manager.verify_branch_exists(branch_name, test_steps[1])
@@ -259,8 +259,8 @@ def validate_test(model_result, fixtures=None):
         test_steps[1]["Result_Message"] = f"✅ Git branch '{branch_name}' created successfully"
 
         # Capture agent's code snapshot for observability (after branch verification)
-        print(f"📸 Capturing agent code snapshot from branch: {branch_name}")
-        print(f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch")
+        print(f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True)
+        print(f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch", flush=True)
         try:
             agent_code_snapshot = github_manager.get_multiple_file_contents_from_branch(
                 branch_name=branch_name,
@@ -270,9 +270,9 @@ def validate_test(model_result, fixtures=None):
                     "Requirements/requirements.txt"  # Alternative requirements location
                 ]
             )
-            print(f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}")
+            print(f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True")
             print(f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
-                  f"({agent_code_snapshot['summary']['total_size_bytes']} bytes)")
+                  f"({agent_code_snapshot['summary']['total_size_bytes']} bytes, flush=True)")
             
             # Store snapshot in base test metadata immediately (incremental capture)
             test_steps.append({
@@ -285,10 +285,10 @@ def validate_test(model_result, fixtures=None):
                 "capture_timestamp": agent_code_snapshot["capture_timestamp"],
                 "branch_captured": branch_name
             })
-            print(f"📋 Agent code snapshot added to test metadata for immediate availability")
+            print(f"📋 Agent code snapshot added to test metadata for immediate availability", flush=True)
             
         except Exception as e:
-            print(f"⚠️ Failed to capture agent code snapshot: {e}")
+            print(f"⚠️ Failed to capture agent code snapshot: {e}", flush=True)
             agent_code_snapshot = None
             # Still add a test step to show the attempt
             test_steps.append({
@@ -350,7 +350,7 @@ def validate_test(model_result, fixtures=None):
 
         # DAG existence check
         dag_name = "user_deduplication_dag"
-        print(f"🔍 Checking for DAG: {dag_name} in Airflow at {base_url}")
+        print(f"🔍 Checking for DAG: {dag_name} in Airflow at {base_url}", flush=True)
 
         if airflow_instance.verify_airflow_dag_exists(dag_name):
             test_steps[5]["status"] = "passed"
@@ -376,7 +376,7 @@ def validate_test(model_result, fixtures=None):
             test_steps[6]["Result_Message"] = f"❌ Error checking DAG tasks: {str(e)}"
 
         # DAG execution
-        print(f"🔍 Triggering DAG: {dag_name}")
+        print(f"🔍 Triggering DAG: {dag_name}", flush=True)
         dag_run_id = airflow_instance.unpause_and_trigger_airflow_dag(dag_name)
 
         if not dag_run_id:
@@ -390,7 +390,7 @@ def validate_test(model_result, fixtures=None):
         test_steps[7]["Result_Message"] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
-        print("📊 Capturing comprehensive DAG information for debugging...")
+        print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
         try:
             comprehensive_dag_info = airflow_instance.get_comprehensive_dag_info(
                 dag_id=dag_name,
@@ -403,31 +403,31 @@ def validate_test(model_result, fixtures=None):
                 comprehensive_dag_info["agent_code_snapshot"] = agent_code_snapshot
                 print(f"📸 Agent code snapshot added to comprehensive DAG info: "
                       f"{agent_code_snapshot['summary']['total_files']} files, "
-                      f"{agent_code_snapshot['summary']['total_size_bytes']} bytes")
+                      f"{agent_code_snapshot['summary']['total_size_bytes']} bytes", flush=True)
             else:
-                print("⚠️ Agent code snapshot not available")
+                print("⚠️ Agent code snapshot not available", flush=True)
 
             dag_source = comprehensive_dag_info.get("dag_source", {})
             import_errors = comprehensive_dag_info.get("import_errors", [])
 
             if dag_source.get("source_code"):
                 print(
-                    f"📄 DAG source code captured ({len(dag_source['source_code'])} characters)"
+                    f"📄 DAG source code captured ({len(dag_source['source_code'])}, flush=True characters)"
                 )
                 print(
                     f"📄 Source code preview: {dag_source['source_code'][:200]}..."
-                )
+                , flush=True)
             else:
-                print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files")
+                print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files", flush=True)
 
             if import_errors:
-                print(f"❌ Found {len(import_errors)} import errors")
+                print(f"❌ Found {len(import_errors)}, flush=True import errors")
                 for error in import_errors:
                     print(
-                        f"   - {error.get('filename', 'Unknown')}: {error.get('stack_trace', 'No details')}"
+                        f"   - {error.get('filename', 'Unknown')}, flush=True: {error.get('stack_trace', 'No details')}"
                     )
             else:
-                print("✅ No DAG import errors found")
+                print("✅ No DAG import errors found", flush=True)
 
             # Attach to test metadata
             test_steps.append(
@@ -452,7 +452,7 @@ def validate_test(model_result, fixtures=None):
             )
 
         except Exception as e:
-            print(f"⚠️ Could not capture comprehensive DAG info: {e}")
+            print(f"⚠️ Could not capture comprehensive DAG info: {e}", flush=True)
             test_steps.append(
                 {
                     "name": "DAG Information Capture",
@@ -476,7 +476,7 @@ def validate_test(model_result, fixtures=None):
         )
         cur = conn.cursor()
 
-        print(f"🔍 Connected to PostgreSQL database: {database_name}")
+        print(f"🔍 Connected to PostgreSQL database: {database_name}", flush=True)
 
         # Step 9: Check if deduplicated_users table was created
         try:
@@ -529,7 +529,7 @@ def validate_test(model_result, fixtures=None):
     total_steps = len(test_steps)
     score = passed_steps / total_steps
 
-    print(f"🎯 Validation completed: {passed_steps}/{total_steps} steps passed (Score: {score:.2f})")
+    print(f"🎯 Validation completed: {passed_steps}/{total_steps} steps passed (Score: {score:.2f}, flush=True)")
 
     return {
         "score": score,
