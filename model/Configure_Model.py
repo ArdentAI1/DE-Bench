@@ -93,19 +93,20 @@ def set_up_model_configs(Configs, custom_info=None):
                     print(f"   Databases: {service_config['databases']}")
 
                     try:
-                        service_result = Ardent_Client.set_config(
-                            config_type="postgreSQL",
-                            Hostname=service_config["hostname"],
-                            Port=service_config["port"],
-                            username=service_config["username"],
-                            password=service_config["password"],
-                            databases=service_config["databases"],
-                            header_overrides={
-                                "X-Braintrust-Exported-Parent-Span": current_span().export(),
+                        service_result = Ardent_Client.setup_connector(
+                            service_name="postgresql",  # V2 API uses lowercase
+                            connection_details={
+                                "host": service_config["hostname"],  # V2 API uses "host" not "hostname"
+                                "port": service_config["port"],
+                                "username": service_config["username"],
+                                "password": service_config["password"],
                             },
+                            name="PostgreSQL Connection",
+                            selected_paths=[db["name"] for db in service_config["databases"]],
                         )
+                        print(f"✅ PostgreSQL config set successfully")
                     except Exception as e:
-                        print("EXCEPTION", e.response.text, e.response.__dict__)
+                        print("EXCEPTION", str(e))
                         raise
 
                 elif service == "mysql":
@@ -285,8 +286,10 @@ def cleanup_model_artifacts(Configs, custom_info=None):
         if "services" in Configs:
             for service in Configs["services"]:
                 if service in custom_info:
-                    id = custom_info[service]["specific_config"]["id"]
-                    Ardent_Client.delete_config(config_id=id)
+                    # New V2 API: connector ID is returned directly
+                    connector_id = custom_info[service].get("id")
+                    if connector_id:
+                        Ardent_Client.delete_connector(connector_id=connector_id)
 
         if "job_id" in custom_info:
             Ardent_Client.delete_job(job_id=custom_info["job_id"])

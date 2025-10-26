@@ -93,6 +93,7 @@ def full_model_run(
             {
                 "publicKey": test_resources["supabase_account_resource"]["publicKey"],
                 "secretKey": test_resources["supabase_account_resource"]["secretKey"],
+                "org_id": test_resources["supabase_account_resource"].get("org_id"),  # V2 API requires org_id
             }
         )
 

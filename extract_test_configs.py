@@ -329,10 +329,61 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
 
         response["jwt_token"] = jwt_token
 
-        # Create API keys
+        # Get org_id using V2 API
+        my_orgs_response = requests.get(
+            f"{os.getenv('ARDENT_BASE_URL')}/v2/my-orgs",
+            headers={
+                "Authorization": f"Bearer {jwt_token}",
+            },
+            timeout=120,
+        )
+
+        if not my_orgs_response.ok:
+            raise requests.exceptions.ConnectionError(
+                f"Failed to get orgs: HTTP {my_orgs_response.status_code} - {my_orgs_response.text}"
+            )
+
+        orgs_data = my_orgs_response.json()
+        
+        # If no orgs exist, create one for the new user
+        if not orgs_data.get("orgs") or len(orgs_data["orgs"]) == 0:
+            print(f"No orgs found for user {user_id}, creating default org...")
+            
+            create_org_response = requests.post(
+                f"{os.getenv('ARDENT_BASE_URL')}/v2/orgs",
+                json={
+                    "name": f"DE-Bench Test Org {test_id}"
+                },
+                headers={
+                    "Authorization": f"Bearer {jwt_token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=120,
+            )
+            
+            if not create_org_response.ok:
+                raise requests.exceptions.ConnectionError(
+                    f"Failed to create org: HTTP {create_org_response.status_code} - {create_org_response.text}"
+                )
+            
+            org_data = create_org_response.json()
+            org_id = org_data["id"]
+            print(f"Created new org: {org_id}")
+        else:
+            org_id = orgs_data["orgs"][0]["org_id"]
+            print(f"Using existing org_id: {org_id}")
+
+        # Create API keys using V2 API
         token_creation_response = requests.post(
-            f"{os.getenv('ARDENT_BASE_URL')}/v1/api/createKeys",
-            json={"userID": user_id},
+            f"{os.getenv('ARDENT_BASE_URL')}/v2/orgs/{org_id}/api-keys",
+            json={
+                "name": f"DE-Bench Test Key {test_id}",
+                "scopes": [
+                    "jobs.create", "jobs.read", "jobs.update", "jobs.delete",
+                    "connectors.create", "connectors.read", "connectors.update", "connectors.delete"
+                ],
+                "expires_days": None  # Never expire
+            },
             headers={
                 "Authorization": f"Bearer {jwt_token}",
                 "Content-Type": "application/json",
@@ -346,8 +397,10 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
             )
 
         token_data = token_creation_response.json()
-        response["publicKey"] = token_data["publicKey"]
-        response["secretKey"] = token_data["secretKey"]
+        response["publicKey"] = token_data["public_key"]  # V2 uses public_key
+        response["secretKey"] = token_data["secret_key"]  # V2 uses secret_key
+        response["api_key_id"] = token_data["api_key_id"]  # Store for cleanup
+        response["org_id"] = org_id  # Store org_id for job creation
 
     print(f"Supabase account resource created successfully for user: {user_id}")
     return response
@@ -393,23 +446,33 @@ def cleanup_supabase_account_resource(
     try:
         user_id = supabase_resource_data["userID"]
 
-        # Delete API keys if they exist
+        # Delete API keys if they exist (V2 API)
         if (
-            "publicKey" in supabase_resource_data
+            "api_key_id" in supabase_resource_data
             and "jwt_token" in supabase_resource_data
         ):
-            delete_key_response = requests.delete(
-                f"{os.getenv('ARDENT_BASE_URL')}/v1/api/deleteKey",
-                json={
-                    "userID": user_id,
-                    "publicKey": supabase_resource_data["publicKey"],
-                },
+            # Get org_id from V2 API
+            my_orgs_response = requests.get(
+                f"{os.getenv('ARDENT_BASE_URL')}/v2/my-orgs",
                 headers={
                     "Authorization": f"Bearer {supabase_resource_data['jwt_token']}",
-                    "Content-Type": "application/json",
                 },
                 timeout=10,
             )
+            
+            if my_orgs_response.ok:
+                orgs_data = my_orgs_response.json()
+                if orgs_data.get("orgs") and len(orgs_data["orgs"]) > 0:
+                    org_id = orgs_data["orgs"][0]["org_id"]
+                    
+                    # Delete API key using V2 API
+                    delete_key_response = requests.delete(
+                        f"{os.getenv('ARDENT_BASE_URL')}/v2/orgs/{org_id}/api-keys/{supabase_resource_data['api_key_id']}",
+                        headers={
+                            "Authorization": f"Bearer {supabase_resource_data['jwt_token']}",
+                        },
+                        timeout=10,
+                    )
 
         # Always delete the user
         supabase_client.auth.admin.delete_user(user_id)
