@@ -40,6 +40,7 @@ def run_model(container, task, configs, extra_information={}):
 
         result = Ardent_Client.create_and_execute_job(
             message=task,
+            org_id=extra_information.get("org_id"),  # V2 API requires org_id
             header_overrides={
                 "X-Braintrust-Exported-Parent-Span": current_span().export(),
             },
