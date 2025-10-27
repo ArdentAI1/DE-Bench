@@ -409,5 +409,6 @@ class SnowflakeFixture(
                 "schema": resource_data.get("schema"),
                 "warehouse": self._connection_params["warehouse"],
                 "role": self._connection_params["role"],
+                "created_resources": resource_data.get("created_resources", []),
             }
         }
