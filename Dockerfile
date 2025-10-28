@@ -8,11 +8,14 @@ RUN apt-get update && \
 # Install Astro CLI (pinned to version 1.34.1 to match local environment)
 RUN curl -sSL https://install.astronomer.io | bash -s -- v1.34.1
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Copy dependency files and install Python dependencies
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Copy the rest of the application
 COPY . .
