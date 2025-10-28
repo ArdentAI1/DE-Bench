@@ -23,7 +23,7 @@ def run_model(container, task, configs, extra_information={}):
     result = None
 
     mode = extra_information.get("mode", "Ardent")
-    
+
     print(f"{mode=}")
     print(f"{container=}")
     print(f"{task=}")
@@ -39,8 +39,8 @@ def run_model(container, task, configs, extra_information={}):
         )
 
         result = Ardent_Client.create_and_execute_job(
+            org_id=extra_information.get("org_id"),
             message=task,
-            org_id=extra_information.get("org_id"),  # V2 API requires org_id
             header_overrides={
                 "X-Braintrust-Exported-Parent-Span": current_span().export(),
             },
