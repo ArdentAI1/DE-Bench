@@ -1,5 +1,6 @@
 __pycache__
 venv
+.venv
 dev_venv/
 
 Results/Test_Results.json

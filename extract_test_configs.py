@@ -331,7 +331,7 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
 
         # Get org_id using V2 API
         my_orgs_response = requests.get(
-            f"{os.getenv('ARDENT_BASE_URL')}/v2/my-orgs",
+            f"{os.getenv('ARDENT_BASE_URL')}/v1/my-orgs",
             headers={
                 "Authorization": f"Bearer {jwt_token}",
             },
@@ -344,28 +344,26 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
             )
 
         orgs_data = my_orgs_response.json()
-        
+
         # If no orgs exist, create one for the new user
         if not orgs_data.get("orgs") or len(orgs_data["orgs"]) == 0:
             print(f"No orgs found for user {user_id}, creating default org...")
-            
+
             create_org_response = requests.post(
-                f"{os.getenv('ARDENT_BASE_URL')}/v2/orgs",
-                json={
-                    "name": f"DE-Bench Test Org {test_id}"
-                },
+                f"{os.getenv('ARDENT_BASE_URL')}/v1/orgs",
+                json={"name": f"DE-Bench Test Org {test_id}"},
                 headers={
                     "Authorization": f"Bearer {jwt_token}",
                     "Content-Type": "application/json",
                 },
                 timeout=120,
             )
-            
+
             if not create_org_response.ok:
                 raise requests.exceptions.ConnectionError(
                     f"Failed to create org: HTTP {create_org_response.status_code} - {create_org_response.text}"
                 )
-            
+
             org_data = create_org_response.json()
             org_id = org_data["id"]
             print(f"Created new org: {org_id}")
@@ -375,14 +373,20 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
 
         # Create API keys using V2 API
         token_creation_response = requests.post(
-            f"{os.getenv('ARDENT_BASE_URL')}/v2/orgs/{org_id}/api-keys",
+            f"{os.getenv('ARDENT_BASE_URL')}/v1/orgs/{org_id}/api-keys",
             json={
                 "name": f"DE-Bench Test Key {test_id}",
                 "scopes": [
-                    "jobs.create", "jobs.read", "jobs.update", "jobs.delete",
-                    "connectors.create", "connectors.read", "connectors.update", "connectors.delete"
+                    "jobs.create",
+                    "jobs.read",
+                    "jobs.update",
+                    "jobs.delete",
+                    "connectors.create",
+                    "connectors.read",
+                    "connectors.update",
+                    "connectors.delete",
                 ],
-                "expires_days": None  # Never expire
+                "expires_days": None,  # Never expire
             },
             headers={
                 "Authorization": f"Bearer {jwt_token}",
@@ -453,21 +457,21 @@ def cleanup_supabase_account_resource(
         ):
             # Get org_id from V2 API
             my_orgs_response = requests.get(
-                f"{os.getenv('ARDENT_BASE_URL')}/v2/my-orgs",
+                f"{os.getenv('ARDENT_BASE_URL')}/v1/my-orgs",
                 headers={
                     "Authorization": f"Bearer {supabase_resource_data['jwt_token']}",
                 },
                 timeout=10,
             )
-            
+
             if my_orgs_response.ok:
                 orgs_data = my_orgs_response.json()
                 if orgs_data.get("orgs") and len(orgs_data["orgs"]) > 0:
                     org_id = orgs_data["orgs"][0]["org_id"]
-                    
+
                     # Delete API key using V2 API
                     delete_key_response = requests.delete(
-                        f"{os.getenv('ARDENT_BASE_URL')}/v2/orgs/{org_id}/api-keys/{supabase_resource_data['api_key_id']}",
+                        f"{os.getenv('ARDENT_BASE_URL')}/v1/orgs/{org_id}/api-keys/{supabase_resource_data['api_key_id']}",
                         headers={
                             "Authorization": f"Bearer {supabase_resource_data['jwt_token']}",
                         },

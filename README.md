@@ -217,9 +217,17 @@ The distributed locking mechanism will be automatically initialized when you run
 
 ### 4. Install Dependencies
 
+This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable dependency management.
+
 ```bash
-pip install -r requirements.txt
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies and create virtual environment
+uv sync
 ```
+
+**Note**: `uv sync` will automatically create a `.venv` virtual environment and install all dependencies from `pyproject.toml` and `uv.lock`. You can run commands using `uv run` which automatically uses the project's virtual environment without manual activation.
 
 ### 5. Run Tests
 
@@ -227,21 +235,21 @@ The framework uses Braintrust for evaluation. Run tests using the evaluation scr
 
 ```bash
 # Run all tests
-python run_braintrust_eval.py Ardent
+uv run python run_braintrust_eval.py Ardent
 
 # Run specific test
-python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" Ardent
+uv run python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" Ardent
 
 # Run tests by category
-python run_braintrust_eval.py --filter "PostgreSQL_Agent.*" Ardent
-python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+uv run python run_braintrust_eval.py --filter "PostgreSQL_Agent.*" Ardent
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
 
 # Run multiple test patterns
-python run_braintrust_eval.py --filter "MongoDB.*" "MySQL.*" Ardent
+uv run python run_braintrust_eval.py --filter "MongoDB.*" "MySQL.*" Ardent
 
 # Run with different AI modes
-python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" Claude_Code
-python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" OpenAI_Codex
+uv run python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" Claude_Code
+uv run python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" OpenAI_Codex
 
 ```
 
@@ -253,15 +261,15 @@ python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" OpenAI_Codex
 ### Filter Examples:
 ```bash
 # Database tests
-python run_braintrust_eval.py --filter ".*Agent_Add_Record" Ardent
+uv run python run_braintrust_eval.py --filter ".*Agent_Add_Record" Ardent
 
 # Airflow pipeline tests  
-python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
 
 # Specific database types
-python run_braintrust_eval.py --filter "PostgreSQL.*" Ardent
-python run_braintrust_eval.py --filter "Snowflake.*" Ardent
-python run_braintrust_eval.py --filter "MongoDB.*" Ardent
+uv run python run_braintrust_eval.py --filter "PostgreSQL.*" Ardent
+uv run python run_braintrust_eval.py --filter "Snowflake.*" Ardent
+uv run python run_braintrust_eval.py --filter "MongoDB.*" Ardent
 
 ```
 
@@ -315,7 +323,7 @@ Snowflake:
 ### Viewing Available Tests
 ```bash
 # See all available tests
-python run_braintrust_eval.py --help
+uv run python run_braintrust_eval.py --help
 
 # Tests are automatically discovered from Tests/ directory
 # Each test must follow the standard pattern (see Tests/TESTS.md)
@@ -324,7 +332,7 @@ python run_braintrust_eval.py --help
 ### Debugging Failed Tests
 ```bash
 # Use verbose mode for detailed error information
-python run_braintrust_eval.py --filter "Test_Name" --verbose Ardent
+uv run python run_braintrust_eval.py --filter "Test_Name" --verbose Ardent
 
 # Check Braintrust dashboard for detailed execution logs
 # URL will be provided in the output
