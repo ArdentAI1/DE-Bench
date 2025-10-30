@@ -93,7 +93,9 @@ def full_model_run(
             {
                 "publicKey": test_resources["supabase_account_resource"]["publicKey"],
                 "secretKey": test_resources["supabase_account_resource"]["secretKey"],
-                "org_id": test_resources["supabase_account_resource"].get("org_id"),  # V2 API requires org_id
+                "org_id": test_resources["supabase_account_resource"].get(
+                    "org_id"
+                ),  # V2 API requires org_id
             }
         )
 
@@ -136,7 +138,8 @@ def full_model_run(
     # 4. Execute the model
     if kwargs.get("skip_model_run"):
         print(
-            f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True", flush=True
+            f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True",
+            flush=True,
         )
         model_result = None
     else:
@@ -262,10 +265,14 @@ def run_de_bench_task(test_input):
 
         # Return a failure result instead of raising to prevent terminating other tests
         return {
-            "result": {"status": "failed", "error": str(e), "traceback": traceback.format_exc()},
-            "fixtures": fixture_instances if 'fixture_instances' in locals() else [],
+            "result": {
+                "status": "failed",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            "fixtures": fixture_instances if "fixture_instances" in locals() else [],
             "test_name": test_name,
-            "test_resources": test_resources if 'test_resources' in locals() else {},
+            "test_resources": test_resources if "test_resources" in locals() else {},
             "model_configs": {},
             "custom_info": {"mode": mode},
             "execution_error": True,
@@ -761,7 +768,9 @@ def run_multi_test_evaluation(
                         test_name = input.get("test_name", "Unknown")
                         if test_name == "Unknown":
                             # Fallback: check in metadata if it exists
-                            test_name = input.get("metadata", {}).get("test_name", "Unknown")
+                            test_name = input.get("metadata", {}).get(
+                                "test_name", "Unknown"
+                            )
 
                         print(f"🔍 Validating test: {test_name}", flush=True)
 
@@ -769,21 +778,33 @@ def run_multi_test_evaluation(
                         if output is None:
                             print(f"❌ Task output is None for {test_name}", flush=True)
                             return {
-                                "name": "test_validator",
+                                "name": "validator",
                                 "score": 0.0,
-                                "metadata": {"error": "Task output is None", "test_steps": []}
+                                "metadata": {
+                                    "error": "Task output is None",
+                                    "test_steps": [],
+                                },
                             }
 
                         # Handle case where task had execution error
                         if isinstance(output, dict) and output.get("execution_error"):
-                            print(f"❌ Task execution error for {test_name}: {output.get('result', {}).get('error', 'Unknown error')}", flush=True)
+                            print(
+                                f"❌ Task execution error for {test_name}: {output.get('result', {}).get('error', 'Unknown error')}",
+                                flush=True,
+                            )
                             return {
-                                "name": "test_validator",
+                                "name": "validator",
                                 "score": 0.0,
                                 "metadata": {
                                     "error": f"Task execution failed: {output.get('result', {}).get('error', 'Unknown error')}",
-                                    "test_steps": [{"name": "Task Execution", "status": "failed", "Result_Message": f"❌ Task failed: {output.get('result', {}).get('error', 'Unknown error')}"}]
-                                }
+                                    "test_steps": [
+                                        {
+                                            "name": "Task Execution",
+                                            "status": "failed",
+                                            "Result_Message": f"❌ Task failed: {output.get('result', {}).get('error', 'Unknown error')}",
+                                        }
+                                    ],
+                                },
                             }
 
                         # Extract model result and fixtures from the task output
@@ -791,9 +812,13 @@ def run_multi_test_evaluation(
                             output.get("result") if isinstance(output, dict) else output
                         )
                         fixtures_data = (
-                            output.get("fixtures", {}) if isinstance(output, dict) else {}
+                            output.get("fixtures", {})
+                            if isinstance(output, dict)
+                            else {}
                         )
-                        fixtures = fixtures_data if isinstance(fixtures_data, list) else []
+                        fixtures = (
+                            fixtures_data if isinstance(fixtures_data, list) else []
+                        )
 
                         # Extract test_resources from output if available for cleanup
                         test_resources = (
@@ -808,32 +833,48 @@ def run_multi_test_evaluation(
 
                         # Ensure result has a "name" field for Braintrust
                         if isinstance(result, dict) and "name" not in result:
-                            result["name"] = "test_validator"
+                            result["name"] = "validator"
 
-                        print(f"✅ Score for {test_name}: {result.get('score', 'N/A')}", flush=True)
-                        print(f"✅ Metadata for {test_name}: {result.get('metadata', {})}", flush=True)
+                        print(
+                            f"✅ Score for {test_name}: {result.get('score', 'N/A')}",
+                            flush=True,
+                        )
+                        print(
+                            f"✅ Metadata for {test_name}: {result.get('metadata', {})}",
+                            flush=True,
+                        )
                         return result
 
                     except Exception as e:
                         print(
-                            f"❌ Validation error for {test_name}: {e}\n {traceback.format_exc()}", flush=True
+                            f"❌ Validation error for {test_name}: {e}\n {traceback.format_exc()}",
+                            flush=True,
                         )
                         # Return a proper failure result instead of False to maintain consistency
                         return {
-                            "name": "test_validator",
+                            "name": "validator",
                             "score": 0.0,
                             "metadata": {
                                 "error": f"Validation failed: {str(e)}",
                                 "traceback": traceback.format_exc(),
-                                "test_steps": [{"name": "Validation", "status": "failed", "Result_Message": f"❌ Validation error: {str(e)}"}]
-                            }
+                                "test_steps": [
+                                    {
+                                        "name": "Validation",
+                                        "status": "failed",
+                                        "Result_Message": f"❌ Validation error: {str(e)}",
+                                    }
+                                ],
+                            },
                         }
                     finally:
                         # Always attempt cleanup, even if validation failed
                         try:
                             _teardown_test_fixtures(test_name, fixtures, test_resources)
                         except Exception as cleanup_error:
-                            print(f"⚠️ Cleanup error for {test_name}: {cleanup_error}", flush=True)
+                            print(
+                                f"⚠️ Cleanup error for {test_name}: {cleanup_error}",
+                                flush=True,
+                            )
                             # Don't re-raise cleanup errors - they shouldn't stop other tests
 
                 print(
@@ -865,7 +906,9 @@ def run_multi_test_evaluation(
                     trial_count=trial_count,
                 )
 
-                print(f"✅ Completed {mode} experiment with {len(mode_samples)} samples")
+                print(
+                    f"✅ Completed {mode} experiment with {len(mode_samples)} samples"
+                )
                 print(f"   Summary: {result.summary}")
 
                 # Note: Model artifacts and test resources are now cleaned up inside run_de_bench_task
@@ -875,11 +918,17 @@ def run_multi_test_evaluation(
                 print(f"❌ Error running experiment for {mode} mode: {e}")
                 print(f"   Traceback: {traceback.format_exc()}")
                 # Create a dummy failed result to maintain consistency
-                mock_result = type('MockResult', (), {
-                    'summary': f"Failed to run experiment for {mode}: {str(e)}",
-                    'scores': []
-                })()
-                print(f"⚠️ Skipping {mode} mode due to error, continuing with other modes...")
+                mock_result = type(
+                    "MockResult",
+                    (),
+                    {
+                        "summary": f"Failed to run experiment for {mode}: {str(e)}",
+                        "scores": [],
+                    },
+                )()
+                print(
+                    f"⚠️ Skipping {mode} mode due to error, continuing with other modes..."
+                )
                 return (mode, mock_result)
 
         # Run mode experiments in parallel and collect results
