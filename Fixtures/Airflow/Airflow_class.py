@@ -13,6 +13,7 @@ better resource sharing and dependency management.
 """
 
 import copy
+import base64
 import fcntl
 import functools
 import os
@@ -65,6 +66,7 @@ class AirflowManager:
         api_url: Optional[str] = None,
         cache_manager: Optional[CacheManager] = None,
         resource_id: Optional[str] = None,
+        require_astro: bool = True,
     ):
         """
         Initialize the AirflowManager with all necessary configurations.
@@ -77,6 +79,7 @@ class AirflowManager:
             max_retries: Maximum number of retries for operations
             cache_manager: Shared cache manager instance
             resource_id: Unique identifier for this resource
+            require_astro: If False, skip Astro environment validation (for Kubernetes mode)
         """
         # Core instance variables
         self.airflow_dir = airflow_dir.absolute() if airflow_dir else None
@@ -87,14 +90,7 @@ class AirflowManager:
         self.resource_id = resource_id
 
         # API headers for Airflow requests
-        self.api_headers = (
-            {
-                "Authorization": f"Bearer {self.api_token}",
-                "Cache-Control": "no-cache",
-            }
-            if api_token
-            else {}
-        )
+        self.api_headers = self.set_api_headers(require_astro=require_astro)
 
         # Deployment tracking
         self.deployment_id = None
@@ -102,11 +98,20 @@ class AirflowManager:
         self.test_resources = []
         self.secret_suffix = None  # Track the suffix used for GitHub secrets
 
-        # Environment validation
-        self._validate_environment()
+        # Environment validation (skip for Kubernetes mode)
+        self._validate_environment(require_astro=require_astro)
 
-    def _validate_environment(self):
-        """Validate required environment variables and installations."""
+    def _validate_environment(self, require_astro: bool = True):
+        """
+        Validate required environment variables and installations.
+        
+        Args:
+            require_astro: If False, skip Astro-specific validation (for Kubernetes mode)
+        """
+        # If not requiring Astro (e.g., Kubernetes mode), skip validation
+        if not require_astro:
+            return
+        
         required_envars = [
             "ASTRO_WORKSPACE_ID",
             "AIRFLOW_GITHUB_TOKEN",
@@ -125,6 +130,28 @@ class AirflowManager:
 
         # Validate Astro CLI installation
         self._parse_astro_version()
+
+    def set_api_headers(self, require_astro: bool = True) -> Dict[str, str]:
+        """
+        Set the API headers for Airflow requests.
+
+        :param bool require_astro: If True, use Astro authentication, otherwise use basic authentication
+        :return: The API headers as a dictionary to use for subsequent requests
+        :rtype: Dict[str, str]
+        """
+        if require_astro:
+            return (
+                {
+                    "Authorization": f"Bearer {self.api_token}",
+                    "Cache-Control": "no-cache",
+                }
+                if self.api_token
+                else {}
+            )
+        # Running for Kubernetes mode, use basic authentication
+        return {
+            "Authorization": f"Basic {base64.b64encode(f'{os.getenv('AIRFLOW_USERNAME', 'admin')}:{os.getenv('AIRFLOW_PASSWORD', 'admin')}'.encode()).decode()}",
+        }
 
     # ===== UTILITY METHODS =====
 
