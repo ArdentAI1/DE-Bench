@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from Fixtures.base_fixture import DEBenchFixture
 
 # Dynamic config loading
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
@@ -28,14 +29,19 @@ def get_fixtures() -> List[DEBenchFixture]:
     from Fixtures.Airflow.airflow_fixture import AirflowFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Initialize Airflow fixture with test-specific configuration
+    # Initialize Airflow fixture with Kubernetes deployment
+    resource_id = f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
-        "resource_id": f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": resource_id,
+        "use_kubernetes": True,  # Enable Kubernetes deployment
+        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
+        "kubernetes_namespace": resource_id.replace("_", "-"),
     }
 
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
-        "resource_id": f"test_airflow_hello_universe_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": f"test_{resource_id}",
+        "state_archive_path": f"{root_dir}/Fixtures/Airflow/GitHub_States/empty-state.zip",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -45,7 +51,7 @@ def get_fixtures() -> List[DEBenchFixture]:
 
 
 def create_model_inputs(
-    base_model_inputs: Dict[str, Any], fixtures: List[DEBenchFixture]
+        base_model_inputs: Dict[str, Any], fixtures: List[DEBenchFixture]
 ) -> Dict[str, Any]:
     """
     Create test-specific config using the set-up fixtures.
@@ -186,8 +192,10 @@ def validate_test(model_result, fixtures=None):
         test_steps[0]["Result_Message"] = "✅ AI Agent completed task execution successfully"
 
         # Get fixtures for Airflow and GitHub
-        airflow_fixture = next((f for f in fixtures if f.get_resource_type() == "airflow_resource"), None) if fixtures else None
-        github_fixture = next((f for f in fixtures if f.get_resource_type() == "github_resource"), None) if fixtures else None
+        airflow_fixture = next((f for f in fixtures if f.get_resource_type() == "airflow_resource"),
+                               None) if fixtures else None
+        github_fixture = next((f for f in fixtures if f.get_resource_type() == "github_resource"),
+                              None) if fixtures else None
 
         if not airflow_fixture:
             raise Exception("Airflow fixture not found")
@@ -238,29 +246,30 @@ def validate_test(model_result, fixtures=None):
                     "Requirements/requirements.txt"  # Alternative requirements location
                 ]
             )
-            print(f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True")
+            print(
+                f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True")
             print(f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
                   f"({agent_code_snapshot['summary']['total_size_bytes']} bytes, flush=True)")
-            
+
             # Store snapshot in base test metadata immediately (incremental capture)
             test_steps.append({
                 "name": "Agent Code Snapshot Capture",
                 "description": "Capture exact code created by agent for debugging",
                 "status": "passed",
                 "Result_Message": f"✅ Captured {agent_code_snapshot['summary']['total_files']} files "
-                                f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
+                                  f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
                 "agent_code_snapshot": agent_code_snapshot,
                 "capture_timestamp": agent_code_snapshot["capture_timestamp"],
                 "branch_captured": branch_name
             })
             print(f"📋 Agent code snapshot added to test metadata for immediate availability", flush=True)
-            
+
         except Exception as e:
             print(f"⚠️ Failed to capture agent code snapshot: {e}", flush=True)
             agent_code_snapshot = None
             # Still add a test step to show the attempt
             test_steps.append({
-                "name": "Agent Code Snapshot Capture", 
+                "name": "Agent Code Snapshot Capture",
                 "description": "Capture exact code created by agent for debugging",
                 "status": "failed",
                 "Result_Message": f"❌ Failed to capture code snapshot: {str(e)}",
@@ -291,7 +300,7 @@ def validate_test(model_result, fixtures=None):
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
-        
+
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
             test_steps[3]["Result_Message"] = f"❌ GitHub action timed out (status: {action_status['status']})"
@@ -369,9 +378,10 @@ def validate_test(model_result, fixtures=None):
                 )
                 print(
                     f"📄 Source code preview: {dag_source['source_code'][:200]}..."
-                , flush=True)
+                    , flush=True)
             else:
-                print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files", flush=True)
+                print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files",
+                      flush=True)
 
             if import_errors:
                 print(f"❌ Found {len(import_errors)}, flush=True import errors")
