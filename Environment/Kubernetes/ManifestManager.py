@@ -193,6 +193,25 @@ spec:
             else:
                 raise Exception(f"Failed to delete job {job_name}: {e}")  # noqa
 
+    def delete_namespace(self, namespace: str) -> bool:
+        """
+        Delete a Namespace from the Kubernetes cluster
+
+        :param str namespace: The namespace to delete
+        :return: True if deleted, False if Namespace didn't exist
+        """
+        self._ensure_api_attributes_set()
+        try:
+            self.k8s_core_api.delete_namespace(name=namespace)
+            print(f"Deleted namespace: {namespace}")
+            return True
+        except k8s_client_sdk.ApiException as e:
+            if e.status == 404:  # Namespace doesn't exist
+                print(f"Namespace {namespace} not found")
+                return False
+            else:
+                raise Exception(f"Failed to delete namespace {namespace}: {e}")  # noqa
+
     def reapply_job(self, namespace: str, container: str) -> None:
         """
         Reapply a Job by deleting the existing one and creating a new one with updated container.
@@ -290,20 +309,26 @@ spec:
         Get the external IP of the LoadBalancer service in the given namespace
         """
         self._ensure_api_attributes_set()
-        for _ in range(10):
+        max_attempts = 60  # Wait up to 60 seconds (1 second per attempt)
+        for attempt in range(max_attempts):
             try:
                 service = self.k8s_core_api.read_namespaced_service(
                     name=f"{namespace}-service", namespace=namespace
                 )
                 if service.status.load_balancer.ingress:
                     external_ip = service.status.load_balancer.ingress[0].ip
-                    print(f"Service {namespace}-service has external IP: {external_ip}")
-                    break
-                else:
-                    print(f"Waiting for external IP for service {namespace}-service...")
-                    time.sleep(1)
+                    if external_ip:
+                        print(f"Service {namespace}-service has external IP: {external_ip}")
+                        return external_ip
+                print(f"Waiting for external IP for service {namespace}-service... (attempt {attempt + 1}/{max_attempts})")
+                time.sleep(1)
             except k8s_client_sdk.ApiException as e:
-                print(f"Error fetching service {namespace}-service: {e}")
+                if e.status != 404:  # 404 is expected if service doesn't exist yet
+                    print(f"Error fetching service {namespace}-service: {e}")
+                time.sleep(1)
+        
+        print(f"Failed to get external IP for service {namespace}-service after {max_attempts} attempts")
+        return None
 
     @staticmethod
     def verify_pod_health(external_ip: str, port: int = 8080) -> bool:
