@@ -22,6 +22,25 @@ def set_up_model_configs(Configs, custom_info=None):
     # For non-Ardent modes, no remote config setup is required
     if mode == "Ardent":
 
+        @traced(name="setup_ardent_connector")
+        def setup_ardent_connector(
+            service_name,
+            connection_details,
+            name,
+            selected_paths,
+            header_overrides=None,
+        ):
+            return Ardent_Client.setup_connector(
+                service_name=service_name,
+                connection_details=connection_details,
+                name=name,
+                selected_paths=selected_paths,
+                header_overrides={
+                    **(header_overrides or {}),
+                    "X-Braintrust-Exported-Parent-Span": current_span().export(),
+                },
+            )
+
         Ardent_Client = ArdentClient(
             public_key=custom_info["publicKey"],
             secret_key=custom_info["secretKey"],
@@ -29,10 +48,8 @@ def set_up_model_configs(Configs, custom_info=None):
         )
 
         if "services" in Configs:
-
             for service in Configs["services"]:
                 service_config = Configs["services"][service]
-
 
                 print(f"🔍 SERVICE CONFIG: {service_config}")
                 print(f"🔍 SERVICE: {service}")
@@ -46,13 +63,18 @@ def set_up_model_configs(Configs, custom_info=None):
                     print(f"   Databases: {service_config.get('databases', 'MISSING')}")
 
                     try:
-                        service_result = Ardent_Client.set_config(
-                            config_type="mongodb",
-                            connection_string=service_config["connection_string"],
-                            databases=service_config["databases"],
-                            header_overrides={
-                                "X-Braintrust-Exported-Parent-Span": current_span().export(),
+                        service_result = setup_ardent_connector(
+                            service_name="mongodb",
+                            connection_details={
+                                "connection_string": service_config[
+                                    "connection_string"
+                                ],
+                                "databases": service_config["databases"],
                             },
+                            name="MongoDB Connection",
+                            selected_paths=[
+                                db["name"] for db in service_config["databases"]
+                            ],
                         )
                         print(f"✅ MongoDB config set successfully")
                     except Exception as e:
@@ -67,7 +89,6 @@ def set_up_model_configs(Configs, custom_info=None):
                         raise
 
                 elif service == "postgreSQL":
-
                     print(f"🔧 Setting up PostgreSQL config:")
                     print(f"   Hostname: {service_config['hostname']}")
                     print(f"   Port: {service_config['port']}")
@@ -76,16 +97,20 @@ def set_up_model_configs(Configs, custom_info=None):
                     print(f"   Databases: {service_config['databases']}")
 
                     try:
-                        service_result = Ardent_Client.setup_connector(
+                        service_result = setup_ardent_connector(
                             service_name="postgresql",  # V2 API uses lowercase
                             connection_details={
-                                "host": service_config["hostname"],  # V2 API uses "host" not "hostname"
+                                "host": service_config[
+                                    "hostname"
+                                ],  # V2 API uses "host" not "hostname"
                                 "port": service_config["port"],
                                 "username": service_config["username"],
                                 "password": service_config["password"],
                             },
                             name="PostgreSQL Connection",
-                            selected_paths=[db["name"] for db in service_config["databases"]],
+                            selected_paths=[
+                                db["name"] for db in service_config["databases"]
+                            ],
                         )
                         print(f"✅ PostgreSQL config set successfully")
                     except Exception as e:
@@ -100,7 +125,7 @@ def set_up_model_configs(Configs, custom_info=None):
                     print(f"   Databases: {service_config['databases']}")
 
                     try:
-                        service_result = Ardent_Client.setup_connector(
+                        service_result = setup_ardent_connector(
                             service_name="mysql",  # V2 API uses lowercase
                             connection_details={
                                 "host": service_config["host"],
@@ -109,7 +134,9 @@ def set_up_model_configs(Configs, custom_info=None):
                                 "password": service_config["password"],
                             },
                             name="MySQL Connection",
-                            selected_paths=[db["name"] for db in service_config["databases"]],
+                            selected_paths=[
+                                db["name"] for db in service_config["databases"]
+                            ],
                         )
                         print(f"✅ MySQL config set successfully")
                     except Exception as e:
@@ -117,7 +144,7 @@ def set_up_model_configs(Configs, custom_info=None):
                         raise
 
                 elif service == "tigerbeetle":
-                    service_result = Ardent_Client.set_config(
+                    service_result = setup_ardent_connector(
                         config_type="tigerbeetle",
                         cluster_id=service_config["cluster_id"],
                         replica_addresses=service_config["replica_addresses"],
@@ -127,7 +154,7 @@ def set_up_model_configs(Configs, custom_info=None):
                     )
 
                 elif service == "databricks":
-                    service_result = Ardent_Client.set_config(
+                    service_result = setup_ardent_connector(
                         config_type="databricks",
                         server_hostname=service_config["host"],
                         access_token=service_config["token"],
@@ -141,9 +168,6 @@ def set_up_model_configs(Configs, custom_info=None):
                                 ],
                             }
                         ],
-                        header_overrides={
-                            "X-Braintrust-Exported-Parent-Span": current_span().export(),
-                        },
                     )
 
                 elif service == "snowflake":
@@ -156,25 +180,27 @@ def set_up_model_configs(Configs, custom_info=None):
                     # Build selected_paths from created_resources (V2 API format)
                     created_resources = service_config.get("created_resources", [])
                     selected_paths = []
-                    
+
                     for resource in created_resources:
                         if resource["type"] == "database":
                             db_name = resource["name"]
                             schema_name = resource.get("schema")
                             tables = resource.get("tables", [])
-                            
+
                             if tables:
                                 # If tables exist, select each table: database.schema.table
                                 for table in tables:
-                                    selected_paths.append(f"{db_name}.{schema_name}.{table}")
+                                    selected_paths.append(
+                                        f"{db_name}.{schema_name}.{table}"
+                                    )
                             else:
                                 # Otherwise select the whole schema: database.schema
                                 selected_paths.append(f"{db_name}.{schema_name}")
-                    
+
                     print(f"   Selected paths: {selected_paths}")
 
                     try:
-                        service_result = Ardent_Client.setup_connector(
+                        service_result = setup_ardent_connector(
                             service_name="snowflake",  # V2 API uses lowercase
                             connection_details={
                                 "account": service_config["account"],
@@ -195,28 +221,42 @@ def set_up_model_configs(Configs, custom_info=None):
                     print(f"🔧 Setting up Airflow config:")
                     print(f"   Webserver URL: {service_config.get('host')}")
                     print(f"   Username: {service_config.get('username')}")
-                    print(f"   GitHub Token: {'***' if service_config.get('github_token') else 'NOT SET'}")
+                    print(
+                        f"   GitHub Token: {'***' if service_config.get('github_token') else 'NOT SET'}"
+                    )
                     print(f"   Repository: {service_config.get('repo')}")
                     print(f"   DAG Path: {service_config.get('dag_path')}")
-                    print(f"   Requirements Path: {service_config.get('requirements_path')}")
+                    print(
+                        f"   Requirements Path: {service_config.get('requirements_path')}"
+                    )
 
                     try:
                         connection_details = {
-                            "webserver_url": service_config.get("host"),  # Fixture provides "host"
+                            "webserver_url": service_config.get(
+                                "host"
+                            ),  # Fixture provides "host"
                             "github_token": service_config.get("github_token"),
                             "repo": service_config.get("repo"),
                             "dag_path": service_config.get("dag_path", "dags/"),
-                            "requirements_path": service_config.get("requirements_path", "requirements.txt"),
+                            "requirements_path": service_config.get(
+                                "requirements_path", "requirements.txt"
+                            ),
                         }
-                        
+
                         # Add authentication - either username/password or api_token
                         if service_config.get("api_token"):
-                            connection_details["api_token"] = service_config.get("api_token")
+                            connection_details["api_token"] = service_config.get(
+                                "api_token"
+                            )
                         else:
-                            connection_details["username"] = service_config.get("username")
-                            connection_details["password"] = service_config.get("password")
+                            connection_details["username"] = service_config.get(
+                                "username"
+                            )
+                            connection_details["password"] = service_config.get(
+                                "password"
+                            )
 
-                        service_result = Ardent_Client.setup_connector(
+                        service_result = setup_ardent_connector(
                             service_name="airflow",  # V2 API uses lowercase
                             connection_details=connection_details,
                             name="Airflow Connection",
@@ -229,7 +269,9 @@ def set_up_model_configs(Configs, custom_info=None):
 
                 elif service == "github":
                     # Handle GitHub service - skip Ardent config as it's handled locally
-                    print(f"🐙 GitHub service detected - handling locally (no Ardent config needed)")
+                    print(
+                        f"🐙 GitHub service detected - handling locally (no Ardent config needed)"
+                    )
                     service_result = {"status": "handled_locally", "service": service}
                 else:
                     # Handle unknown service types
@@ -264,7 +306,10 @@ def set_up_model_configs(Configs, custom_info=None):
 
         # Create job with mounted Azure File Share
         job_k8s.create_job_in_namespace_with_volume_mount(
-            api_instance=api_instance, shareName=file_share_name, jobID=job_name, mode = mode
+            api_instance=api_instance,
+            shareName=file_share_name,
+            jobID=job_name,
+            mode=mode,
         )
 
         # Wait for pod and run commands
@@ -308,7 +353,10 @@ def set_up_model_configs(Configs, custom_info=None):
 
         # Create job with mounted Azure File Share
         job_k8s.create_job_in_namespace_with_volume_mount(
-            api_instance=api_instance, shareName=file_share_name, jobID=job_name, mode="OpenAI_Codex"
+            api_instance=api_instance,
+            shareName=file_share_name,
+            jobID=job_name,
+            mode="OpenAI_Codex",
         )
 
         # Wait for pod and run commands
@@ -357,7 +405,6 @@ def cleanup_model_artifacts(Configs, custom_info=None):
             Ardent_Client.delete_job(job_id=custom_info["job_id"])
 
     elif mode == "Claude_Code":
-
         print("Cleaning up Kubernetes job for Claude Code")
         print(custom_info)
         # Cleanup Kubernetes job for Claude Code
@@ -381,7 +428,6 @@ def cleanup_model_artifacts(Configs, custom_info=None):
                 print(f"Error during Kubernetes cleanup: {e}")
 
     elif mode == "OpenAI_Codex":
-
         print("Cleaning up Kubernetes job for OpenAI Codex")
         print(custom_info)
         # Cleanup Kubernetes job for OpenAI Codex
