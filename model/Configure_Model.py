@@ -260,7 +260,9 @@ def set_up_model_configs(Configs, custom_info=None):
                             service_name="airflow",  # V2 API uses lowercase
                             connection_details=connection_details,
                             name="Airflow Connection",
-                            selected_paths=[],  # Airflow doesn't provide DAG list in fixture, will be discovered
+                            selected_paths=[
+                                "*"
+                            ],  # Select all DAGs, should be fine for most tests.
                         )
                         print(f"✅ Airflow config set successfully")
                     except Exception as e:
