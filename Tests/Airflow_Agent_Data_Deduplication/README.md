@@ -69,7 +69,7 @@ pytest Tests/Airflow_Agent_Data_Deduplication/test_airflow_agent_data_deduplicat
 - `POSTGRES_PORT`: PostgreSQL port
 - `POSTGRES_USERNAME`: PostgreSQL username
 - `POSTGRES_PASSWORD`: PostgreSQL password
-- `ASTRO_ACCESS_TOKEN`: Astro access token for deployment
+- `ASTRO_API_TOKEN`: Astro API token for deployment
 
 ## What This Test Validates
 

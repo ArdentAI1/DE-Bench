@@ -120,8 +120,8 @@ class AirflowManager:
         ]:
             raise ValueError(f"The following envars are not set: {missing_envars}")
 
-        if not os.getenv("ASTRO_ACCESS_TOKEN") and not os.getenv("ASTRO_API_TOKEN"):
-            raise ValueError("Either ASTRO_ACCESS_TOKEN or ASTRO_API_TOKEN must be set")
+        if not os.getenv("ASTRO_API_TOKEN"):
+            raise ValueError("ASTRO_API_TOKEN must be set")
 
         # Validate Astro CLI installation
         self._parse_astro_version()
@@ -254,9 +254,9 @@ class AirflowManager:
                 except (subprocess.TimeoutExpired, FileNotFoundError):
                     pass
 
-                astro_token = os.getenv("ASTRO_ACCESS_TOKEN")
+                astro_token = os.getenv("ASTRO_API_TOKEN")
                 if not astro_token:
-                    raise ValueError("ASTRO_ACCESS_TOKEN not found in .env file")
+                    raise ValueError("ASTRO_API_TOKEN not found in .env file")
 
                 print(f"Worker {os.getpid()}: Logging into Astro for test session")
                 run_and_validate_subprocess(
@@ -617,7 +617,7 @@ class AirflowManager:
         self,
         deployment_id: str,
         deployment_name: str,
-        astro_access_token: str,
+        astro_api_token: str,
         astro_workspace_id: str,
     ) -> str:
         """
@@ -627,7 +627,7 @@ class AirflowManager:
         Args:
             deployment_id: The ID of the deployment
             deployment_name: The name of the deployment
-            astro_access_token: The Astro access token
+            astro_api_token: The Astro API token
             astro_workspace_id: The Astro workspace ID
 
         Returns:
@@ -639,14 +639,18 @@ class AirflowManager:
         # while keeping names under the limit
         if self.resource_id:
             # Extract just the UUID part: "..._timestamp_uuid" -> "uuid"
-            secret_suffix = self.resource_id.split('_')[-1]
+            secret_suffix = self.resource_id.split("_")[-1]
             print(
                 f"Worker {os.getpid()}: Using shortened secret suffix '{secret_suffix}' "
                 f"from resource_id '{self.resource_id}'"
             )
         else:
             # Fallback: use last 8 chars of deployment name
-            secret_suffix = deployment_name.split('_')[-1] if '_' in deployment_name else deployment_name[-8:]
+            secret_suffix = (
+                deployment_name.split("_")[-1]
+                if "_" in deployment_name
+                else deployment_name[-8:]
+            )
             print(
                 f"Worker {os.getpid()}: Using deployment name suffix '{secret_suffix}' "
                 f"from deployment_name '{deployment_name}'"
@@ -656,7 +660,7 @@ class AirflowManager:
         gh_secrets = {
             f"ASTRO_DEPLOYMENT_ID_{secret_suffix}": deployment_id,
             f"ASTRO_DEPLOYMENT_NAME_{secret_suffix}": deployment_name,
-            f"ASTRO_ACCESS_TOKEN_{secret_suffix}": astro_access_token,
+            f"ASTRO_API_TOKEN_{secret_suffix}": astro_api_token,
             f"ASTRO_WORKSPACE_ID_{secret_suffix}": astro_workspace_id,
         }
 
@@ -669,9 +673,6 @@ class AirflowManager:
                     f"exceeds GitHub's {max_secret_length} character limit. "
                     f"Secret suffix: '{secret_suffix}'"
                 )
-
-        if os.getenv("ASTRO_API_TOKEN"):
-            gh_secrets.pop(f"ASTRO_ACCESS_TOKEN_{secret_suffix}")
 
         airflow_github_repo = os.getenv("AIRFLOW_REPO")
         g = Github(os.getenv("AIRFLOW_GITHUB_TOKEN"))
@@ -707,7 +708,9 @@ class AirflowManager:
                     f"Worker {os.getpid()}: GitHub secret {secret} created successfully."
                 )
 
-            print(f"Worker {os.getpid()}: Created {len(gh_secrets)} test-specific secrets with suffix '{secret_suffix}'")
+            print(
+                f"Worker {os.getpid()}: Created {len(gh_secrets)} test-specific secrets with suffix '{secret_suffix}'"
+            )
             return secret_suffix
         except Exception as e:
             print(
@@ -1055,8 +1058,12 @@ class AirflowManager:
                 for error in import_errors:
                     error_filename = error.get("filename", "")
                     # Check if the import error is related to our DAG
-                    if dag_id in error_filename or dag_id in error.get("stack_trace", ""):
-                        print(f"❌ DAG '{dag_id}' has import error: {error.get('stack_trace', 'Unknown error')}")
+                    if dag_id in error_filename or dag_id in error.get(
+                        "stack_trace", ""
+                    ):
+                        print(
+                            f"❌ DAG '{dag_id}' has import error: {error.get('stack_trace', 'Unknown error')}"
+                        )
                         return False
             except Exception as e:
                 print(f"⚠️ Warning: Could not check import errors: {e}")
@@ -1127,7 +1134,9 @@ class AirflowManager:
         except Exception as e:
             print(f"❌ Error listing DAGs: {e}")
 
-    def unpause_and_trigger_airflow_dag(self, dag_id: str, max_retries: Optional[int] = 5) -> Optional[str]:
+    def unpause_and_trigger_airflow_dag(
+        self, dag_id: str, max_retries: Optional[int] = 5
+    ) -> Optional[str]:
         """
         Unpause a DAG using the dag_id in Airflow via API call.
 
@@ -1458,7 +1467,9 @@ class AirflowManager:
 
         return []
 
-    def check_dag_task_instances(self, dag_id: str, dag_run_id: str, max_retries: Optional[int] = 5) -> bool:
+    def check_dag_task_instances(
+        self, dag_id: str, dag_run_id: str, max_retries: Optional[int] = 5
+    ) -> bool:
         """
         Check if all tasks in a DAG have been executed.
 
@@ -1681,9 +1692,7 @@ class AirflowManager:
         print(f"Worker {os.getpid()}: Starting airflow_resource for {resource_id}")
 
         # Create manager instance
-        manager = cls(
-            cache_manager=shared_cache_manager, resource_id=resource_id
-        )
+        manager = cls(cache_manager=shared_cache_manager, resource_id=resource_id)
 
         # Ensure Astro login
         manager._ensure_astro_login()
@@ -1726,12 +1735,13 @@ class AirflowManager:
             # secret_suffix = manager._check_and_update_gh_secrets(
             #     deployment_id=astro_deployment_id,
             #     deployment_name=astro_deployment_name,
-            #     astro_access_token=os.environ["ASTRO_ACCESS_TOKEN"],
+            #     astro_api_token=os.environ["ASTRO_API_TOKEN"],
             #     astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
             # )
             # Store the secret suffix for later use in build info
             # manager.secret_suffix = secret_suffix
             import hashlib
+
             hash_suffix = hashlib.sha256(astro_deployment_name.encode()).hexdigest()[:8]
             manager.secret_suffix = hash_suffix
 

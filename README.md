@@ -108,8 +108,7 @@ FINCH_ACCESS_TOKEN="YOUR_FINCH_ACCESS_TOKEN"
 
 # Astronomer Cloud Configuration
 ASTRO_WORKSPACE_ID="YOUR_ASTRO_WORKSPACE_ID"
-ASTRO_ACCESS_TOKEN="YOUR_ASTRO_ACCESS_TOKEN"
-ASTRO_API_TOKEN="YOUR_ASTRO_API_TOKEN"   # This can be used instead of the ASTRO_ACCESS_TOKEN
+ASTRO_API_TOKEN="YOUR_ASTRO_API_TOKEN"
 ASTRO_CLOUD_PROVIDER="aws"
 ASTRO_REGION="us-east-1"
 
@@ -360,7 +359,7 @@ supabase._sync.client.SupabaseException: Invalid API key
 ```
 subprocess.CalledProcessError: Command '['astro', 'login', '--token-login', 'eyJhbGciOiJSUzI1NiIs...']' returned non-zero exit status 1.
 ```
-**Solution:** Your `ASTRO_ACCESS_TOKEN` has expired. Generate a new token from your Astronomer account and update your `.env` file.
+**Solution:** Your `ASTRO_API_TOKEN` has expired or is invalid. Generate a new API token from your Astronomer account (see https://www.astronomer.io/docs/astro/automation-authentication) and update your `.env` file.
 
 ### **Database Connection Errors**
 ```
