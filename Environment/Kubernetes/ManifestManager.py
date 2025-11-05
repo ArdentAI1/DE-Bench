@@ -34,17 +34,20 @@ metadata:
   name: NAMESPACE_VALUE
   namespace: NAMESPACE_VALUE
   labels:
-    user-id: "NAMESPACE_VALUE"
+    app: airflow
 spec:
-  activeDeadlineSeconds: 43200
+  backoffLimit: 4
+  activeDeadlineSeconds: 3600
   template:
     metadata:
       labels:
-        user-id: "NAMESPACE_VALUE"
+        app: airflow
     spec:
+      restartPolicy: OnFailure
       containers:
-      - name: custom-container
+      - name: airflow
         image: CONTAINER_NAME
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: airflow-web
@@ -52,7 +55,6 @@ spec:
         - name: IS_SANDBOX
           value: "1"
       restartPolicy: Never
-  backoffLimit: 4
 
 ---
 apiVersion: v1
