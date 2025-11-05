@@ -3,8 +3,17 @@ Kubernetes Manifest Manager - Generate and/or apply Kubernetes manifests
 """
 
 import argparse
+import os
+import sys
 import time
+
+from dotenv import load_dotenv
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
+
+load_dotenv()
+
 
 def profile(number_of_instances: int, container: str):
     """
@@ -119,8 +128,8 @@ def main():
         default="airflowstates-cudfbgfvekd7f0at.azurecr.io/airflow2-session-auth:base",
     )
     generate_apply_parser.add_argument(
-        "--save",
-        "-s",
+        "--output",
+        "-o",
         type=str,
         help="Optional: save the generated manifest to this file path",
         default=None,
@@ -180,10 +189,10 @@ def main():
         )
 
         # Optionally save the manifest
-        if args.save:
-            with open(args.save, "w") as f:
+        if args.output:
+            with open(args.output, "w") as f:
                 f.write(manifest)
-            print(f"Manifest saved to: {args.save}")
+            print(f"Manifest saved to: {args.output}")
 
         manager.apply_manifest(manifest)
         print(f"\nManifest applied successfully for namespace: {args.namespace}")
