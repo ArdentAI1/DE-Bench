@@ -63,7 +63,7 @@ metadata:
   name: NAMESPACE_VALUE-service
   namespace: NAMESPACE_VALUE
   labels:
-    user-id: "NAMESPACE_VALUE"
+    app: airflow
 spec:
   type: LoadBalancer
   ports:
@@ -72,7 +72,7 @@ spec:
     protocol: TCP
     name: airflow-web
   selector:
-    user-id: "NAMESPACE_VALUE"
+    app: airflow
 """
 
     def __init__(self, provider: str = "AZURE"):
