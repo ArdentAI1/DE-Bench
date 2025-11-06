@@ -33,16 +33,7 @@ def profile(number_of_instances: int, container: str):
         f"Initialized KubernetesManifestManager in {time.time() - start_time:.2f} seconds"
     )
     for ns in namespaces:
-        # see if the namespace ends with an even number
-        ns_split = ns.split("-")
-        last_number = int(ns_split[-1])
-        if last_number % 2 == 0:
-            manifest = k8s_manager.generate_manifest(
-                namespace=ns,
-                container="airflowstates-cudfbgfvekd7f0at.azurecr.io/hello-world-fail:base",
-            )
-        else:
-            manifest = k8s_manager.generate_manifest(namespace=ns, container=container)
+        manifest = k8s_manager.generate_manifest(namespace=ns, container=container)
         print(f"Generated manifest in {time.time() - start_time:.2f} seconds")
         file_path = f"{ns}-manifest.yml"
         with open(file_path, "w") as f:
