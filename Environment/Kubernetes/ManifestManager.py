@@ -55,7 +55,6 @@ spec:
         env:
         - name: IS_SANDBOX
           value: "1"
-      restartPolicy: Never
 
 ---
 apiVersion: v1
@@ -403,12 +402,3 @@ spec:
             print(f"⚠️ Error deleting repository from ACR: {e}")
             return False
         return True
-
-
-if __name__ == "__main__":
-    k8s_manager = KubernetesManifestManager(provider="AZURE")
-    test = k8s_manager.delete_repo_from_acr(acr_name=os.getenv("AZURE_ACR_NAME"), repo_name="hello-universe-pipeline-test-1762410349-c5b15c20")
-    if test:
-        print(f"✅ Successfully deleted repository hello-universe-pipeline-test-1762410349-c5b15c20 from ACR {os.getenv('AZURE_ACR_NAME')}")
-    else:
-        print(f"❌ Failed to delete repository hello-universe-pipeline-test-1762410349-c5b15c20 from ACR {os.getenv('AZURE_ACR_NAME')}")
