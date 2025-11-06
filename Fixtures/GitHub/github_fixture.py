@@ -6,8 +6,9 @@ Handles GitHub repository operations via GitHubManager.
 import os
 import time
 import uuid
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, Union
 from typing_extensions import TypedDict
+from pathlib import Path
 
 from Fixtures.base_fixture import DEBenchFixture
 from Fixtures.GitHub.github_manager import GitHubManager
@@ -17,6 +18,7 @@ class GitHubResourceConfig(TypedDict):
     resource_id: str
     create_branch: Optional[bool]
     build_info: Optional[Dict[str, str]]
+    state_archive_path: Optional[Union[str, Path]] = None
 
 
 class GitHubResourceData(TypedDict):
@@ -97,12 +99,15 @@ class GitHubFixture(
             create_branch = config.get("create_branch", True)
             build_info = config.get("build_info")
 
+            state_archive_path = config.get("state_archive_path")
+
             github_manager = GitHubManager(
                 access_token=access_token,
                 repo_url=repo_url,
                 test_name=resource_id,
                 create_branch=create_branch,
                 build_info=build_info,
+                state_archive_path=state_archive_path,
             )
 
             # Clear the main dags folder as part of setup
