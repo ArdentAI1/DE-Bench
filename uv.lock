@@ -70,6 +70,19 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-containerregistry"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/70/0b/0bf7fd78e8dd45d53d57d6fdca5ab0d23bd9094ea70fe2d4701c6f6cda0a/azure-containerregistry-1.2.0.zip", hash = "sha256:4acd32821d086553eabd5ddfecbb21fb915b5d13ef8375d15afcb2c80bdc96a3", size = 159643, upload-time = "2023-07-11T17:47:19.599Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/74/c4821d3643dd32d6f35c02358b17a0f8635f43050190d89956ee8e92e395/azure_containerregistry-1.2.0-py3-none-any.whl", hash = "sha256:7ba5b84911f1b381cec290b22747a679b98ddbf536fae7923124743f5ed97e6c", size = 101180, upload-time = "2023-07-11T17:47:21.584Z" },
+]
+
+[[package]]
 name = "azure-core"
 version = "1.35.0"
 source = { registry = "https://pypi.org/simple" }
@@ -464,6 +477,7 @@ dependencies = [
     { name = "asn1crypto" },
     { name = "attrs" },
     { name = "azure-common" },
+    { name = "azure-containerregistry" },
     { name = "azure-core" },
     { name = "azure-identity" },
     { name = "azure-mgmt-containerservice" },
@@ -586,6 +600,7 @@ requires-dist = [
     { name = "asn1crypto", specifier = "==1.5.1" },
     { name = "attrs", specifier = "==25.1.0" },
     { name = "azure-common", specifier = "==1.1.28" },
+    { name = "azure-containerregistry", specifier = ">=1.2.0" },
     { name = "azure-core", specifier = "==1.35.0" },
     { name = "azure-identity", specifier = "==1.24.0" },
     { name = "azure-mgmt-containerservice", specifier = "==39.1.0" },

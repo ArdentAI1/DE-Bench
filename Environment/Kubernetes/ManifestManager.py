@@ -10,6 +10,7 @@ from typing import Optional
 import yaml
 from azure.identity import ClientSecretCredential
 from azure.mgmt.containerservice import ContainerServiceClient
+from azure.containerregistry import ContainerRegistryClient
 from dotenv import load_dotenv
 from kubernetes import client as k8s_client_sdk
 from kubernetes import config as k8s_config
@@ -100,6 +101,32 @@ spec:
             raise EnvironmentError("Failed to create Azure client")
 
         return azure_client
+
+    def get_acr_client(self):
+        """Get the Azure Container Registry client"""
+        azure_credential = ClientSecretCredential(
+            client_id=os.getenv("AZURE_CLIENT_ID"),
+            client_secret=os.getenv("AZURE_CLIENT_SECRET"),
+            tenant_id=os.getenv("AZURE_TENANT_ID"),
+        )
+
+        # Get the ACR endpoint URL (should be like https://yourregistry.azurecr.io)
+        acr_name = os.getenv("AZURE_ACR_NAME")
+        if not acr_name:
+            raise EnvironmentError("AZURE_ACR_NAME environment variable is required")
+        
+        # Construct the endpoint URL
+        endpoint = f"https://{acr_name}"
+        
+        acr_client = ContainerRegistryClient(
+            endpoint=endpoint,
+            credential=azure_credential
+        )
+
+        if not acr_client:
+            raise EnvironmentError("Failed to create Azure Container Registry client")
+
+        return acr_client
 
     def _ensure_api_attributes_set(self):
         """
@@ -362,19 +389,26 @@ spec:
         """
         Delete a repository from the ACR
 
-        :param str acr_name: The name of the ACR
+        :param str acr_name: The name of the ACR (not used directly, taken from env var)
         :param str repo_name: The name of the repository to delete
         :return: True if deleted, False if repository didn't exist
         :rtype: bool
         """
-        self._ensure_api_attributes_set()
         try:
-            self.cloud_provider_client.container_registries.delete_repository(
-                resource_group_name=os.getenv("AZURE_RESOURCE_GROUP"),
-                registry_name=acr_name,
-                repository_name=repo_name,
-            )
+            acr_client = self.get_acr_client()
+            # Delete the repository using the ContainerRegistryClient
+            acr_client.delete_repository(repository=repo_name)
+            print(f"✅ Successfully deleted repository {repo_name} from ACR {acr_name}")
         except Exception as e:
             print(f"⚠️ Error deleting repository from ACR: {e}")
             return False
         return True
+
+
+if __name__ == "__main__":
+    k8s_manager = KubernetesManifestManager(provider="AZURE")
+    test = k8s_manager.delete_repo_from_acr(acr_name=os.getenv("AZURE_ACR_NAME"), repo_name="hello-universe-pipeline-test-1762410349-c5b15c20")
+    if test:
+        print(f"✅ Successfully deleted repository hello-universe-pipeline-test-1762410349-c5b15c20 from ACR {os.getenv('AZURE_ACR_NAME')}")
+    else:
+        print(f"❌ Failed to delete repository hello-universe-pipeline-test-1762410349-c5b15c20 from ACR {os.getenv('AZURE_ACR_NAME')}")
