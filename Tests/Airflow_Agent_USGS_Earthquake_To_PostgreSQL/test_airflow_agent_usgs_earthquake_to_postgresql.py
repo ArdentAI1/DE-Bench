@@ -101,13 +101,6 @@ def create_model_inputs(
     task_description = task_description.replace("BRANCH_NAME", branch_name)
     task_description = task_description.replace("PR_NAME", pr_title)
 
-    # Set up GitHub secrets for Astro access
-    github_manager.check_and_update_gh_secrets(
-        secrets={
-            "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
-        }
-    )
-
     print(f"🔧 Generated dynamic branch name: {branch_name}", flush=True)
     print(f"🔧 Generated dynamic PR title: {pr_title}", flush=True)
 
@@ -204,15 +197,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0][
-                "Result_Message"
-            ] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0]["Result_Message"] = (
+                "❌ AI Agent task execution failed or returned no result"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0][
-            "Result_Message"
-        ] = "✅ AI Agent completed task execution successfully"
+        test_steps[0]["Result_Message"] = (
+            "✅ AI Agent completed task execution successfully"
+        )
 
         # Get fixtures for Airflow, PostgreSQL, and GitHub
         airflow_fixture = (
@@ -283,13 +276,18 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1][
-            "Result_Message"
-        ] = f"✅ Git branch '{branch_name}' created successfully"
+        test_steps[1]["Result_Message"] = (
+            f"✅ Git branch '{branch_name}' created successfully"
+        )
 
         # Capture agent's code snapshot for observability (after branch verification)
-        print(f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True)
-        print(f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch", flush=True)
+        print(
+            f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True
+        )
+        print(
+            f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch",
+            flush=True,
+        )
         try:
             agent_code_snapshot = github_manager.get_multiple_file_contents_from_branch(
                 branch_name=branch_name,
@@ -321,8 +319,9 @@ def validate_test(model_result, fixtures=None):
                 }
             )
             print(
-                f"📋 Agent code snapshot added to test metadata for immediate availability"
-            , flush=True)
+                f"📋 Agent code snapshot added to test metadata for immediate availability",
+                flush=True,
+            )
 
         except Exception as e:
             print(f"⚠️ Failed to capture agent code snapshot: {e}", flush=True)
@@ -358,9 +357,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2][
-            "Result_Message"
-        ] = f"✅ PR '{pr_title}' created and merged successfully"
+        test_steps[2]["Result_Message"] = (
+            f"✅ PR '{pr_title}' created and merged successfully"
+        )
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -369,16 +368,16 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action timed out (status: {action_status['status']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -389,15 +388,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4][
-                "Result_Message"
-            ] = "❌ Airflow instance did not redeploy successfully"
+            test_steps[4]["Result_Message"] = (
+                "❌ Airflow instance did not redeploy successfully"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4][
-            "Result_Message"
-        ] = "✅ Airflow redeployed successfully after GitHub action"
+        test_steps[4]["Result_Message"] = (
+            "✅ Airflow redeployed successfully after GitHub action"
+        )
 
         # DAG existence check
         dag_name = "usgs_earthquake_dag"
@@ -408,9 +407,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5][
-                "Result_Message"
-            ] = f"❌ DAG '{dag_name}' not found in Airflow"
+            test_steps[5]["Result_Message"] = (
+                f"❌ DAG '{dag_name}' not found in Airflow"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG execution
@@ -425,9 +424,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[6]["status"] = "passed"
-        test_steps[6][
-            "Result_Message"
-        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        test_steps[6]["Result_Message"] = (
+            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        )
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -444,8 +443,9 @@ def validate_test(model_result, fixtures=None):
                 print(
                     f"📸 Agent code snapshot added to comprehensive DAG info: "
                     f"{agent_code_snapshot['summary']['total_files']} files, "
-                    f"{agent_code_snapshot['summary']['total_size_bytes']} bytes"
-                , flush=True)
+                    f"{agent_code_snapshot['summary']['total_size_bytes']} bytes",
+                    flush=True,
+                )
             else:
                 print("⚠️ Agent code snapshot not available", flush=True)
 
@@ -456,11 +456,15 @@ def validate_test(model_result, fixtures=None):
                 print(
                     f"📄 DAG source code captured ({len(dag_source['source_code'])}, flush=True characters)"
                 )
-                print(f"📄 Source code preview: {dag_source['source_code'][:200]}...", flush=True)
+                print(
+                    f"📄 Source code preview: {dag_source['source_code'][:200]}...",
+                    flush=True,
+                )
             else:
                 print(
-                    "⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files"
-                , flush=True)
+                    "⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files",
+                    flush=True,
+                )
 
             if import_errors:
                 print(f"❌ Found {len(import_errors)}, flush=True import errors")
@@ -508,7 +512,9 @@ def validate_test(model_result, fixtures=None):
 
         # Step 8: API Integration Validation (through task logs)
         try:
-            print("🔍 Retrieving task logs to verify USGS API integration...", flush=True)
+            print(
+                "🔍 Retrieving task logs to verify USGS API integration...", flush=True
+            )
             logs = airflow_instance.get_task_instance_logs(
                 dag_id=dag_name,
                 dag_run_id=dag_run_id,
@@ -517,20 +523,20 @@ def validate_test(model_result, fixtures=None):
 
             if "earthquake.usgs.gov" in logs or "geojson" in logs or "features" in logs:
                 test_steps[7]["status"] = "passed"
-                test_steps[7][
-                    "Result_Message"
-                ] = "✅ USGS API integration validated: API calls found in logs"
+                test_steps[7]["Result_Message"] = (
+                    "✅ USGS API integration validated: API calls found in logs"
+                )
             else:
                 test_steps[7]["status"] = "failed"
-                test_steps[7][
-                    "Result_Message"
-                ] = "❌ No evidence of USGS API integration in task logs"
+                test_steps[7]["Result_Message"] = (
+                    "❌ No evidence of USGS API integration in task logs"
+                )
 
         except Exception as e:
             test_steps[7]["status"] = "failed"
-            test_steps[7][
-                "Result_Message"
-            ] = f"❌ Error validating API integration: {str(e)}"
+            test_steps[7]["Result_Message"] = (
+                f"❌ Error validating API integration: {str(e)}"
+            )
 
         # Step 9 & 10: PostgreSQL Database Validation
         try:
@@ -570,9 +576,9 @@ def validate_test(model_result, fixtures=None):
 
             if earthquake_table:
                 test_steps[8]["status"] = "passed"
-                test_steps[8][
-                    "Result_Message"
-                ] = f"✅ Earthquake table '{earthquake_table}' created successfully"
+                test_steps[8]["Result_Message"] = (
+                    f"✅ Earthquake table '{earthquake_table}' created successfully"
+                )
 
                 # Step 10: Check if data was stored
                 cur.execute(f"SELECT COUNT(*) FROM {earthquake_table}")
@@ -580,23 +586,23 @@ def validate_test(model_result, fixtures=None):
 
                 if data_count > 0:
                     test_steps[9]["status"] = "passed"
-                    test_steps[9][
-                        "Result_Message"
-                    ] = f"✅ Earthquake data stored successfully: {data_count} records"
+                    test_steps[9]["Result_Message"] = (
+                        f"✅ Earthquake data stored successfully: {data_count} records"
+                    )
                 else:
                     test_steps[9]["status"] = "failed"
-                    test_steps[9][
-                        "Result_Message"
-                    ] = f"❌ No earthquake data found in table '{earthquake_table}'"
+                    test_steps[9]["Result_Message"] = (
+                        f"❌ No earthquake data found in table '{earthquake_table}'"
+                    )
             else:
                 test_steps[8]["status"] = "failed"
-                test_steps[8][
-                    "Result_Message"
-                ] = "❌ No earthquake data table found in database"
+                test_steps[8]["Result_Message"] = (
+                    "❌ No earthquake data table found in database"
+                )
                 test_steps[9]["status"] = "failed"
-                test_steps[9][
-                    "Result_Message"
-                ] = "❌ Cannot validate data storage - table not found"
+                test_steps[9]["Result_Message"] = (
+                    "❌ Cannot validate data storage - table not found"
+                )
 
             cur.close()
             conn.close()

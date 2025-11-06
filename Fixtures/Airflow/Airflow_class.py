@@ -104,7 +104,7 @@ class AirflowManager:
     def _validate_environment(self, require_astro: bool = True):
         """
         Validate required environment variables and installations.
-        
+
         Args:
             require_astro: If False, skip Astro-specific validation (for Kubernetes mode)
         """
@@ -124,7 +124,7 @@ class AirflowManager:
                 "DE_BENCH_AKS_RESOURCE_GROUP",
                 "USE_KUBERNETES_AIRFLOW",
             ]
-        
+
         else:
             required_envars = [
                 "ASTRO_WORKSPACE_ID",
@@ -296,9 +296,9 @@ class AirflowManager:
                 except (subprocess.TimeoutExpired, FileNotFoundError):
                     pass
 
-                astro_token = os.getenv("ASTRO_ACCESS_TOKEN")
+                astro_token = os.getenv("ASTRO_API_TOKEN")
                 if not astro_token:
-                    raise ValueError("ASTRO_ACCESS_TOKEN not found in .env file")
+                    raise ValueError("ASTRO_API_TOKEN not found in .env file")
 
                 print(f"Worker {os.getpid()}: Logging into Astro for test session")
                 run_and_validate_subprocess(
@@ -992,8 +992,12 @@ class AirflowManager:
                 for error in import_errors:
                     error_filename = error.get("filename", "")
                     # Check if the import error is related to our DAG
-                    if dag_id in error_filename or dag_id in error.get("stack_trace", ""):
-                        print(f"❌ DAG '{dag_id}' has import error: {error.get('stack_trace', 'Unknown error')}")
+                    if dag_id in error_filename or dag_id in error.get(
+                        "stack_trace", ""
+                    ):
+                        print(
+                            f"❌ DAG '{dag_id}' has import error: {error.get('stack_trace', 'Unknown error')}"
+                        )
                         return False
             except Exception as e:
                 print(f"⚠️ Warning: Could not check import errors: {e}")
@@ -1064,7 +1068,9 @@ class AirflowManager:
         except Exception as e:
             print(f"❌ Error listing DAGs: {e}")
 
-    def unpause_and_trigger_airflow_dag(self, dag_id: str, max_retries: Optional[int] = 5) -> Optional[str]:
+    def unpause_and_trigger_airflow_dag(
+        self, dag_id: str, max_retries: Optional[int] = 5
+    ) -> Optional[str]:
         """
         Unpause a DAG using the dag_id in Airflow via API call.
 
@@ -1395,7 +1401,9 @@ class AirflowManager:
 
         return []
 
-    def check_dag_task_instances(self, dag_id: str, dag_run_id: str, max_retries: Optional[int] = 5) -> bool:
+    def check_dag_task_instances(
+        self, dag_id: str, dag_run_id: str, max_retries: Optional[int] = 5
+    ) -> bool:
         """
         Check if all tasks in a DAG have been executed.
 
@@ -1618,9 +1626,7 @@ class AirflowManager:
         print(f"Worker {os.getpid()}: Starting airflow_resource for {resource_id}")
 
         # Create manager instance
-        manager = cls(
-            cache_manager=shared_cache_manager, resource_id=resource_id
-        )
+        manager = cls(cache_manager=shared_cache_manager, resource_id=resource_id)
 
         # Ensure Astro login
         manager._ensure_astro_login()
@@ -1660,6 +1666,7 @@ class AirflowManager:
             manager.test_resources.append((astro_deployment_name, shared_cache_manager))
 
             import hashlib
+
             hash_suffix = hashlib.sha256(astro_deployment_name.encode()).hexdigest()[:8]
             manager.secret_suffix = hash_suffix
 

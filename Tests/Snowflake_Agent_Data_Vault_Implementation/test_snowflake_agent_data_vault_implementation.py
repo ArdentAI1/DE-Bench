@@ -95,10 +95,6 @@ def create_model_inputs(
     task_description = task_description.replace("BRANCH_NAME", branch_name)
     task_description = task_description.replace("PR_NAME", pr_title)
 
-    github_manager.check_and_update_gh_secrets(
-        secrets={"ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"]}
-    )
-
     print(f"🔧 Generated branch: {branch_name}", flush=True)
     print(f"🔧 Generated PR: {pr_title}", flush=True)
 
@@ -114,16 +110,66 @@ def validate_test(model_result, fixtures=None):
     Validates Data Vault 2.0 implementation.
     """
     test_steps = [
-        {"name": "Agent Task Execution", "description": "AI Agent executes task", "status": "running", "Result_Message": "Checking agent execution..."},
-        {"name": "Git Branch Creation", "description": "Verify branch created", "status": "running", "Result_Message": "Checking branch..."},
-        {"name": "PR Creation and Merge", "description": "Verify PR merged", "status": "running", "Result_Message": "Checking PR..."},
-        {"name": "GitHub Action Completion", "description": "Verify GitHub action", "status": "running", "Result_Message": "Checking action..."},
-        {"name": "Airflow Redeployment", "description": "Verify Airflow redeployed", "status": "running", "Result_Message": "Checking Airflow..."},
-        {"name": "DAG Creation", "description": "Verify DAG exists", "status": "running", "Result_Message": "Checking DAG..."},
-        {"name": "Hub Tables Validation", "description": "Verify Hub tables created", "status": "running", "Result_Message": "Checking Hubs..."},
-        {"name": "Link Tables Validation", "description": "Verify Link tables created", "status": "running", "Result_Message": "Checking Links..."},
-        {"name": "Satellite Tables Validation", "description": "Verify Satellite tables", "status": "running", "Result_Message": "Checking Satellites..."},
-        {"name": "DAG Execution", "description": "Verify DAG runs successfully", "status": "running", "Result_Message": "Running DAG..."},
+        {
+            "name": "Agent Task Execution",
+            "description": "AI Agent executes task",
+            "status": "running",
+            "Result_Message": "Checking agent execution...",
+        },
+        {
+            "name": "Git Branch Creation",
+            "description": "Verify branch created",
+            "status": "running",
+            "Result_Message": "Checking branch...",
+        },
+        {
+            "name": "PR Creation and Merge",
+            "description": "Verify PR merged",
+            "status": "running",
+            "Result_Message": "Checking PR...",
+        },
+        {
+            "name": "GitHub Action Completion",
+            "description": "Verify GitHub action",
+            "status": "running",
+            "Result_Message": "Checking action...",
+        },
+        {
+            "name": "Airflow Redeployment",
+            "description": "Verify Airflow redeployed",
+            "status": "running",
+            "Result_Message": "Checking Airflow...",
+        },
+        {
+            "name": "DAG Creation",
+            "description": "Verify DAG exists",
+            "status": "running",
+            "Result_Message": "Checking DAG...",
+        },
+        {
+            "name": "Hub Tables Validation",
+            "description": "Verify Hub tables created",
+            "status": "running",
+            "Result_Message": "Checking Hubs...",
+        },
+        {
+            "name": "Link Tables Validation",
+            "description": "Verify Link tables created",
+            "status": "running",
+            "Result_Message": "Checking Links...",
+        },
+        {
+            "name": "Satellite Tables Validation",
+            "description": "Verify Satellite tables",
+            "status": "running",
+            "Result_Message": "Checking Satellites...",
+        },
+        {
+            "name": "DAG Execution",
+            "description": "Verify DAG runs successfully",
+            "status": "running",
+            "Result_Message": "Running DAG...",
+        },
     ]
 
     try:
@@ -136,9 +182,30 @@ def validate_test(model_result, fixtures=None):
         test_steps[0]["Result_Message"] = "✅ Agent completed successfully"
 
         # Get fixtures
-        airflow_fixture = next((f for f in fixtures if f.get_resource_type() == "airflow_resource"), None) if fixtures else None
-        snowflake_fixture = next((f for f in fixtures if f.get_resource_type() == "snowflake_resource"), None) if fixtures else None
-        github_fixture = next((f for f in fixtures if f.get_resource_type() == "github_resource"), None) if fixtures else None
+        airflow_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "airflow_resource"),
+                None,
+            )
+            if fixtures
+            else None
+        )
+        snowflake_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "snowflake_resource"),
+                None,
+            )
+            if fixtures
+            else None
+        )
+        github_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "github_resource"),
+                None,
+            )
+            if fixtures
+            else None
+        )
 
         if not all([airflow_fixture, snowflake_fixture, github_fixture]):
             raise Exception("Required fixtures not found")
@@ -157,22 +224,32 @@ def validate_test(model_result, fixtures=None):
 
         # GitHub workflow (steps 2-5)
         time.sleep(10)
-        branch_exists, test_steps[1] = github_manager.verify_branch_exists(branch_name, test_steps[1])
+        branch_exists, test_steps[1] = github_manager.verify_branch_exists(
+            branch_name, test_steps[1]
+        )
         if not branch_exists:
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         test_steps[1]["status"] = "passed"
         test_steps[1]["Result_Message"] = f"✅ Branch '{branch_name}' created"
 
         pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
-            pr_title=pr_title, test_step=test_steps[2], commit_title=pr_title, merge_method="squash",
-            build_info={"deploymentId": airflow_resource_data["deployment_id"], "deploymentName": airflow_resource_data["deployment_name"]}
+            pr_title=pr_title,
+            test_step=test_steps[2],
+            commit_title=pr_title,
+            merge_method="squash",
+            build_info={
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+            },
         )
         if not pr_exists:
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         test_steps[2]["status"] = "passed"
         test_steps[2]["Result_Message"] = f"✅ PR merged"
 
-        action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
+        action_status = github_manager.check_if_action_is_complete(
+            pr_title=pr_title, return_details=True
+        )
         if not action_status["completed"] or not action_status["success"]:
             test_steps[3]["status"] = "failed"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
@@ -208,34 +285,48 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Check Hub tables
-            snowflake_cur.execute(f"SHOW TABLES IN SCHEMA {database_name}.{schema_name}")
+            snowflake_cur.execute(
+                f"SHOW TABLES IN SCHEMA {database_name}.{schema_name}"
+            )
             all_tables = [row[1] for row in snowflake_cur.fetchall()]
-            hub_tables = [t for t in all_tables if t.upper().startswith('HUB_')]
-            
+            hub_tables = [t for t in all_tables if t.upper().startswith("HUB_")]
+
             if len(hub_tables) >= 2:
                 test_steps[6]["status"] = "passed"
-                test_steps[6]["Result_Message"] = f"✅ Found {len(hub_tables)} Hub tables: {hub_tables}"
+                test_steps[6]["Result_Message"] = (
+                    f"✅ Found {len(hub_tables)} Hub tables: {hub_tables}"
+                )
             else:
                 test_steps[6]["status"] = "partial"
-                test_steps[6]["Result_Message"] = f"⚠️ Only {len(hub_tables)} Hub table(s) found"
+                test_steps[6]["Result_Message"] = (
+                    f"⚠️ Only {len(hub_tables)} Hub table(s) found"
+                )
 
             # Check Link tables
-            link_tables = [t for t in all_tables if t.upper().startswith('LINK_')]
+            link_tables = [t for t in all_tables if t.upper().startswith("LINK_")]
             if len(link_tables) >= 1:
                 test_steps[7]["status"] = "passed"
-                test_steps[7]["Result_Message"] = f"✅ Found {len(link_tables)} Link tables: {link_tables}"
+                test_steps[7]["Result_Message"] = (
+                    f"✅ Found {len(link_tables)} Link tables: {link_tables}"
+                )
             else:
                 test_steps[7]["status"] = "partial"
-                test_steps[7]["Result_Message"] = f"⚠️ Only {len(link_tables)} Link table(s) found"
+                test_steps[7]["Result_Message"] = (
+                    f"⚠️ Only {len(link_tables)} Link table(s) found"
+                )
 
             # Check Satellite tables
-            sat_tables = [t for t in all_tables if t.upper().startswith('SAT_')]
+            sat_tables = [t for t in all_tables if t.upper().startswith("SAT_")]
             if len(sat_tables) >= 2:
                 test_steps[8]["status"] = "passed"
-                test_steps[8]["Result_Message"] = f"✅ Found {len(sat_tables)} Satellite tables: {sat_tables}"
+                test_steps[8]["Result_Message"] = (
+                    f"✅ Found {len(sat_tables)} Satellite tables: {sat_tables}"
+                )
             else:
                 test_steps[8]["status"] = "partial"
-                test_steps[8]["Result_Message"] = f"⚠️ Only {len(sat_tables)} Satellite table(s) found"
+                test_steps[8]["Result_Message"] = (
+                    f"⚠️ Only {len(sat_tables)} Satellite table(s) found"
+                )
 
         finally:
             snowflake_cur.close()
@@ -250,7 +341,9 @@ def validate_test(model_result, fixtures=None):
                 test_steps[9]["Result_Message"] = f"✅ DAG executed successfully"
             except:
                 test_steps[9]["status"] = "partial"
-                test_steps[9]["Result_Message"] = "⚠️ DAG triggered but execution incomplete"
+                test_steps[9]["Result_Message"] = (
+                    "⚠️ DAG triggered but execution incomplete"
+                )
         else:
             test_steps[9]["status"] = "failed"
             test_steps[9]["Result_Message"] = "❌ Failed to trigger DAG"

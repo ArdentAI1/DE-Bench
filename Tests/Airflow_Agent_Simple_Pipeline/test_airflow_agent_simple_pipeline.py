@@ -87,13 +87,6 @@ def create_model_inputs(
     task_description = task_description.replace("BRANCH_NAME", branch_name)
     task_description = task_description.replace("PR_NAME", pr_title)
 
-    # Set up GitHub secrets for Astro access
-    github_manager.check_and_update_gh_secrets(
-        secrets={
-            "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
-        }
-    )
-
     print(f"🔧 Generated dynamic branch name: {branch_name}", flush=True)
     print(f"🔧 Generated dynamic PR title: {pr_title}", flush=True)
 
@@ -177,15 +170,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0][
-                "Result_Message"
-            ] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0]["Result_Message"] = (
+                "❌ AI Agent task execution failed or returned no result"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0][
-            "Result_Message"
-        ] = "✅ AI Agent completed task execution successfully"
+        test_steps[0]["Result_Message"] = (
+            "✅ AI Agent completed task execution successfully"
+        )
 
         # Get fixtures for Airflow and GitHub
         airflow_fixture = None
@@ -244,9 +237,9 @@ def validate_test(model_result, fixtures=None):
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
             test_steps[1]["status"] = "passed"
-            test_steps[1][
-                "Result_Message"
-            ] = f"✅ Git branch '{branch_name}' created successfully"
+            test_steps[1]["Result_Message"] = (
+                f"✅ Git branch '{branch_name}' created successfully"
+            )
 
         except Exception as e:
             test_steps[1]["status"] = "failed"
@@ -254,46 +247,62 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Capture agent's code snapshot for observability (after branch verification)
-        print(f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True)
-        print(f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch", flush=True)
+        print(
+            f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True
+        )
+        print(
+            f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch",
+            flush=True,
+        )
         try:
             agent_code_snapshot = github_manager.get_multiple_file_contents_from_branch(
                 branch_name=branch_name,
                 paths_to_capture=[
                     "dags/",  # All DAG files created by the agent
                     "requirements.txt",  # Root requirements file
-                    "Requirements/requirements.txt"  # Alternative requirements location
-                ]
+                    "Requirements/requirements.txt",  # Alternative requirements location
+                ],
             )
-            print(f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True")
-            print(f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
-                  f"({agent_code_snapshot['summary']['total_size_bytes']} bytes, flush=True)")
-            
+            print(
+                f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True"
+            )
+            print(
+                f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
+                f"({agent_code_snapshot['summary']['total_size_bytes']} bytes, flush=True)"
+            )
+
             # Store snapshot in base test metadata immediately (incremental capture)
-            test_steps.append({
-                "name": "Agent Code Snapshot Capture",
-                "description": "Capture exact code created by agent for debugging",
-                "status": "passed",
-                "Result_Message": f"✅ Captured {agent_code_snapshot['summary']['total_files']} files "
-                                f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
-                "agent_code_snapshot": agent_code_snapshot,
-                "capture_timestamp": agent_code_snapshot["capture_timestamp"],
-                "branch_captured": branch_name
-            })
-            print(f"📋 Agent code snapshot added to test metadata for immediate availability", flush=True)
-            
+            test_steps.append(
+                {
+                    "name": "Agent Code Snapshot Capture",
+                    "description": "Capture exact code created by agent for debugging",
+                    "status": "passed",
+                    "Result_Message": f"✅ Captured {agent_code_snapshot['summary']['total_files']} files "
+                    f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
+                    "agent_code_snapshot": agent_code_snapshot,
+                    "capture_timestamp": agent_code_snapshot["capture_timestamp"],
+                    "branch_captured": branch_name,
+                }
+            )
+            print(
+                f"📋 Agent code snapshot added to test metadata for immediate availability",
+                flush=True,
+            )
+
         except Exception as e:
             print(f"⚠️ Failed to capture agent code snapshot: {e}", flush=True)
             agent_code_snapshot = None
             # Still add a test step to show the attempt
-            test_steps.append({
-                "name": "Agent Code Snapshot Capture", 
-                "description": "Capture exact code created by agent for debugging",
-                "status": "failed",
-                "Result_Message": f"❌ Failed to capture code snapshot: {str(e)}",
-                "agent_code_snapshot": None,
-                "capture_error": str(e)
-            })
+            test_steps.append(
+                {
+                    "name": "Agent Code Snapshot Capture",
+                    "description": "Capture exact code created by agent for debugging",
+                    "status": "failed",
+                    "Result_Message": f"❌ Failed to capture code snapshot: {str(e)}",
+                    "agent_code_snapshot": None,
+                    "capture_error": str(e),
+                }
+            )
 
         # Step 3: Check if PR was created and merge it
         print(f"🔍 Checking for PR: {pr_title}", flush=True)
@@ -306,7 +315,7 @@ def validate_test(model_result, fixtures=None):
                 build_info={
                     "deploymentId": airflow_resource_data["deployment_id"],
                     "deploymentName": airflow_resource_data["deployment_name"],
-                "secretSuffix": airflow_resource_data["secret_suffix"],
+                    "secretSuffix": airflow_resource_data["secret_suffix"],
                 },
             )
 
@@ -316,45 +325,55 @@ def validate_test(model_result, fixtures=None):
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
             test_steps[2]["status"] = "passed"
-            test_steps[2][
-                "Result_Message"
-            ] = f"✅ PR '{pr_title}' created and merged successfully"
+            test_steps[2]["Result_Message"] = (
+                f"✅ PR '{pr_title}' created and merged successfully"
+            )
 
         except Exception as e:
             test_steps[2]["status"] = "failed"
-            test_steps[2][
-                "Result_Message"
-            ] = f"❌ Error with PR creation/merge: {str(e)}"
+            test_steps[2]["Result_Message"] = (
+                f"❌ Error with PR creation/merge: {str(e)}"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 4: Check GitHub action status with failure details
         print(f"🔍 Waiting for GitHub action to complete...", flush=True)
         try:
-            action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
-            
+            action_status = github_manager.check_if_action_is_complete(
+                pr_title=pr_title, return_details=True
+            )
+
             if not action_status["completed"]:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"❌ GitHub action timed out (status: {action_status['status']})"
+                test_steps[3]["Result_Message"] = (
+                    f"❌ GitHub action timed out (status: {action_status['status']})"
+                )
                 test_steps[3]["action_status"] = action_status
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
             elif not action_status["success"]:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+                test_steps[3]["Result_Message"] = (
+                    f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+                )
                 test_steps[3]["action_status"] = action_status
                 # CI failure details are already included in action_status["ci_failure_details"]
                 if "ci_failure_details" in action_status:
-                    print(f"📋 CI failure details captured: {len(action_status['ci_failure_details'].get('jobs', []), flush=True)} jobs analyzed")
+                    print(
+                        f"📋 CI failure details captured: {len(action_status['ci_failure_details'].get('jobs', []), flush=True)} jobs analyzed"
+                    )
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
             else:
                 test_steps[3]["status"] = "passed"
-                test_steps[3]["Result_Message"] = "✅ GitHub action completed successfully"
+                test_steps[3]["Result_Message"] = (
+                    "✅ GitHub action completed successfully"
+                )
                 test_steps[3]["action_status"] = action_status
 
         except Exception as e:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ Error checking GitHub action: {str(e)}"
+            test_steps[3]["Result_Message"] = (
+                f"❌ Error checking GitHub action: {str(e)}"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 5: Verify Airflow redeployment
@@ -362,21 +381,21 @@ def validate_test(model_result, fixtures=None):
         try:
             if not airflow_instance.wait_for_airflow_to_be_ready():
                 test_steps[4]["status"] = "failed"
-                test_steps[4][
-                    "Result_Message"
-                ] = "❌ Airflow instance did not redeploy successfully"
+                test_steps[4]["Result_Message"] = (
+                    "❌ Airflow instance did not redeploy successfully"
+                )
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
             test_steps[4]["status"] = "passed"
-            test_steps[4][
-                "Result_Message"
-            ] = "✅ Airflow redeployed successfully after GitHub action"
+            test_steps[4]["Result_Message"] = (
+                "✅ Airflow redeployed successfully after GitHub action"
+            )
 
         except Exception as e:
             test_steps[4]["status"] = "failed"
-            test_steps[4][
-                "Result_Message"
-            ] = f"❌ Error verifying Airflow redeployment: {str(e)}"
+            test_steps[4]["Result_Message"] = (
+                f"❌ Error verifying Airflow redeployment: {str(e)}"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 6: Verify that hello_world_dag was created
@@ -387,21 +406,21 @@ def validate_test(model_result, fixtures=None):
             # Use airflow_instance method to check if DAG exists
             if airflow_instance.verify_airflow_dag_exists(dag_name):
                 test_steps[5]["status"] = "passed"
-                test_steps[5][
-                    "Result_Message"
-                ] = f"✅ DAG '{dag_name}' found in Airflow"
+                test_steps[5]["Result_Message"] = (
+                    f"✅ DAG '{dag_name}' found in Airflow"
+                )
             else:
                 test_steps[5]["status"] = "failed"
-                test_steps[5][
-                    "Result_Message"
-                ] = f"❌ DAG '{dag_name}' not found in Airflow"
+                test_steps[5]["Result_Message"] = (
+                    f"❌ DAG '{dag_name}' not found in Airflow"
+                )
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         except Exception as e:
             test_steps[5]["status"] = "failed"
-            test_steps[5][
-                "Result_Message"
-            ] = f"❌ Error checking DAG existence: {str(e)}"
+            test_steps[5]["Result_Message"] = (
+                f"❌ Error checking DAG existence: {str(e)}"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 7: Trigger DAG and wait for successful execution
@@ -422,75 +441,100 @@ def validate_test(model_result, fixtures=None):
             airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
 
             test_steps[6]["status"] = "passed"
-            test_steps[6][
-                "Result_Message"
-            ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+            test_steps[6]["Result_Message"] = (
+                f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+            )
 
             # Capture comprehensive DAG information for debugging
-            print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
+            print(
+                "📊 Capturing comprehensive DAG information for debugging...",
+                flush=True,
+            )
             try:
                 comprehensive_dag_info = airflow_instance.get_comprehensive_dag_info(
-                    dag_id=dag_name, 
-                    dag_run_id=dag_run_id, 
-                    github_manager=github_manager
+                    dag_id=dag_name,
+                    dag_run_id=dag_run_id,
+                    github_manager=github_manager,
                 )
-                
+
                 # Add agent code snapshot to comprehensive DAG info (captured earlier)
                 if agent_code_snapshot:
                     comprehensive_dag_info["agent_code_snapshot"] = agent_code_snapshot
-                    print(f"📸 Agent code snapshot added to comprehensive DAG info: "
-                          f"{agent_code_snapshot['summary']['total_files']} files, "
-                          f"{agent_code_snapshot['summary']['total_size_bytes']} bytes", flush=True)
+                    print(
+                        f"📸 Agent code snapshot added to comprehensive DAG info: "
+                        f"{agent_code_snapshot['summary']['total_files']} files, "
+                        f"{agent_code_snapshot['summary']['total_size_bytes']} bytes",
+                        flush=True,
+                    )
                 else:
                     print("⚠️ Agent code snapshot not available", flush=True)
-                
+
                 # Log key information for debugging
                 dag_source = comprehensive_dag_info.get("dag_source", {})
                 if dag_source.get("source_code"):
-                    print(f"📄 DAG source code captured ({len(dag_source['source_code'])}, flush=True characters)")
-                    print(f"📄 Source code preview: {dag_source['source_code'][:200]}...", flush=True)
+                    print(
+                        f"📄 DAG source code captured ({len(dag_source['source_code'])}, flush=True characters)"
+                    )
+                    print(
+                        f"📄 Source code preview: {dag_source['source_code'][:200]}...",
+                        flush=True,
+                    )
                 else:
-                    print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files", flush=True)
-                    
+                    print(
+                        "⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files",
+                        flush=True,
+                    )
+
                 import_errors = comprehensive_dag_info.get("import_errors", [])
                 if import_errors:
                     print(f"❌ Found {len(import_errors)}, flush=True import errors")
                     for error in import_errors:
-                        print(f"   - {error.get('filename', 'Unknown')}, flush=True: {error.get('stack_trace', 'No details')}")
+                        print(
+                            f"   - {error.get('filename', 'Unknown')}, flush=True: {error.get('stack_trace', 'No details')}"
+                        )
                 else:
                     print("✅ No DAG import errors found", flush=True)
-                
+
                 # Add comprehensive DAG info to test steps for Braintrust logging
-                test_steps.append({
-                    "name": "DAG Information Capture",
-                    "description": "Capture comprehensive DAG information for debugging",
-                    "status": "passed",
-                    "Result_Message": "✅ Comprehensive DAG information captured successfully",
-                    "comprehensive_dag_info": comprehensive_dag_info,
-                    # Also add key info at top level for easier access in Braintrust
-                    "dag_source_code": dag_source.get("source_code"),
-                    "dag_file_path": dag_source.get("file_path"),
-                    "dag_import_errors": import_errors,
-                    "task_logs_summary": {
-                        task_id: {
-                            "state": task_info.get("state"),
-                            "duration": task_info.get("duration"),
-                            "log_length": len(task_info.get("logs", ""))
-                        } for task_id, task_info in comprehensive_dag_info.get("task_logs", {}).items()
+                test_steps.append(
+                    {
+                        "name": "DAG Information Capture",
+                        "description": "Capture comprehensive DAG information for debugging",
+                        "status": "passed",
+                        "Result_Message": "✅ Comprehensive DAG information captured successfully",
+                        "comprehensive_dag_info": comprehensive_dag_info,
+                        # Also add key info at top level for easier access in Braintrust
+                        "dag_source_code": dag_source.get("source_code"),
+                        "dag_file_path": dag_source.get("file_path"),
+                        "dag_import_errors": import_errors,
+                        "task_logs_summary": {
+                            task_id: {
+                                "state": task_info.get("state"),
+                                "duration": task_info.get("duration"),
+                                "log_length": len(task_info.get("logs", "")),
+                            }
+                            for task_id, task_info in comprehensive_dag_info.get(
+                                "task_logs", {}
+                            ).items()
+                        },
                     }
-                })
-                    
+                )
+
             except Exception as e:
                 print(f"⚠️ Could not capture comprehensive DAG info: {e}", flush=True)
-                test_steps.append({
-                    "name": "DAG Information Capture",
-                    "description": "Capture comprehensive DAG information for debugging",
-                    "status": "failed",
-                    "Result_Message": f"❌ Failed to capture DAG information: {str(e)}"
-                })
+                test_steps.append(
+                    {
+                        "name": "DAG Information Capture",
+                        "description": "Capture comprehensive DAG information for debugging",
+                        "status": "failed",
+                        "Result_Message": f"❌ Failed to capture DAG information: {str(e)}",
+                    }
+                )
 
             # Step 8: Verify Hello World output in task logs
-            print("🔍 Retrieving task logs to verify 'Hello World' output...", flush=True)
+            print(
+                "🔍 Retrieving task logs to verify 'Hello World' output...", flush=True
+            )
             try:
                 logs = airflow_instance.get_task_instance_logs(
                     dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello"
@@ -502,26 +546,26 @@ def validate_test(model_result, fixtures=None):
 
                 if "Hello World" in logs:
                     test_steps[7]["status"] = "passed"
-                    test_steps[7][
-                        "Result_Message"
-                    ] = "✅ 'Hello World' found in task logs - DAG executed correctly"
+                    test_steps[7]["Result_Message"] = (
+                        "✅ 'Hello World' found in task logs - DAG executed correctly"
+                    )
                 else:
                     test_steps[7]["status"] = "failed"
-                    test_steps[7][
-                        "Result_Message"
-                    ] = "❌ 'Hello World' not found in task logs"
+                    test_steps[7]["Result_Message"] = (
+                        "❌ 'Hello World' not found in task logs"
+                    )
 
             except Exception as e:
                 test_steps[7]["status"] = "failed"
-                test_steps[7][
-                    "Result_Message"
-                ] = f"❌ Error retrieving task logs: {str(e)}"
+                test_steps[7]["Result_Message"] = (
+                    f"❌ Error retrieving task logs: {str(e)}"
+                )
 
         except Exception as e:
             test_steps[6]["status"] = "failed"
-            test_steps[6][
-                "Result_Message"
-            ] = f"❌ Error triggering/monitoring DAG: {str(e)}"
+            test_steps[6]["Result_Message"] = (
+                f"❌ Error triggering/monitoring DAG: {str(e)}"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
     except Exception as e:

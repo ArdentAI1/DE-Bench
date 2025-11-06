@@ -96,11 +96,6 @@ def create_model_inputs(
 
     # Add merge step to user input
     task_description = github_manager.add_merge_step_to_user_input(task_description)
-    github_manager.check_and_update_gh_secrets(
-        secrets={
-            "ASTRO_ACCESS_TOKEN": os.environ["ASTRO_ACCESS_TOKEN"],
-        }
-    )
 
     print(f"🔧 Generated dynamic branch name: {branch_name}", flush=True)
     print(f"🔧 Generated dynamic PR title: {pr_title}", flush=True)
@@ -198,15 +193,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0][
-                "Result_Message"
-            ] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0]["Result_Message"] = (
+                "❌ AI Agent task execution failed or returned no result"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0][
-            "Result_Message"
-        ] = "✅ AI Agent completed task execution successfully"
+        test_steps[0]["Result_Message"] = (
+            "✅ AI Agent completed task execution successfully"
+        )
 
         # Get fixtures for Airflow, PostgreSQL, and GitHub
         airflow_fixture = (
@@ -279,51 +274,67 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1][
-            "Result_Message"
-        ] = f"✅ Git branch '{branch_name}' created successfully"
+        test_steps[1]["Result_Message"] = (
+            f"✅ Git branch '{branch_name}' created successfully"
+        )
 
         # Capture agent's code snapshot for observability (after branch verification)
-        print(f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True)
-        print(f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch", flush=True)
+        print(
+            f"📸 Capturing agent code snapshot from branch: {branch_name}", flush=True
+        )
+        print(
+            f"🔍 DEBUG: About to call get_multiple_file_contents_from_branch",
+            flush=True,
+        )
         try:
             agent_code_snapshot = github_manager.get_multiple_file_contents_from_branch(
                 branch_name=branch_name,
                 paths_to_capture=[
                     "dags/",  # All DAG files created by the agent
                     "requirements.txt",  # Root requirements file
-                    "Requirements/requirements.txt"  # Alternative requirements location
-                ]
+                    "Requirements/requirements.txt",  # Alternative requirements location
+                ],
             )
-            print(f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True")
-            print(f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
-                  f"({agent_code_snapshot['summary']['total_size_bytes']} bytes, flush=True)")
-            
+            print(
+                f"🔍 DEBUG: Successfully received agent_code_snapshot with type: {type(agent_code_snapshot)}, flush=True"
+            )
+            print(
+                f"✅ Agent code snapshot captured: {agent_code_snapshot['summary']['total_files']} files "
+                f"({agent_code_snapshot['summary']['total_size_bytes']} bytes, flush=True)"
+            )
+
             # Store snapshot in base test metadata immediately (incremental capture)
-            test_steps.append({
-                "name": "Agent Code Snapshot Capture",
-                "description": "Capture exact code created by agent for debugging",
-                "status": "passed",
-                "Result_Message": f"✅ Captured {agent_code_snapshot['summary']['total_files']} files "
-                                f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
-                "agent_code_snapshot": agent_code_snapshot,
-                "capture_timestamp": agent_code_snapshot["capture_timestamp"],
-                "branch_captured": branch_name
-            })
-            print(f"📋 Agent code snapshot added to test metadata for immediate availability", flush=True)
-            
+            test_steps.append(
+                {
+                    "name": "Agent Code Snapshot Capture",
+                    "description": "Capture exact code created by agent for debugging",
+                    "status": "passed",
+                    "Result_Message": f"✅ Captured {agent_code_snapshot['summary']['total_files']} files "
+                    f"({agent_code_snapshot['summary']['total_size_bytes']} bytes) from branch {branch_name}",
+                    "agent_code_snapshot": agent_code_snapshot,
+                    "capture_timestamp": agent_code_snapshot["capture_timestamp"],
+                    "branch_captured": branch_name,
+                }
+            )
+            print(
+                f"📋 Agent code snapshot added to test metadata for immediate availability",
+                flush=True,
+            )
+
         except Exception as e:
             print(f"⚠️ Failed to capture agent code snapshot: {e}", flush=True)
             agent_code_snapshot = None
             # Still add a test step to show the attempt
-            test_steps.append({
-                "name": "Agent Code Snapshot Capture", 
-                "description": "Capture exact code created by agent for debugging",
-                "status": "failed",
-                "Result_Message": f"❌ Failed to capture code snapshot: {str(e)}",
-                "agent_code_snapshot": None,
-                "capture_error": str(e)
-            })
+            test_steps.append(
+                {
+                    "name": "Agent Code Snapshot Capture",
+                    "description": "Capture exact code created by agent for debugging",
+                    "status": "failed",
+                    "Result_Message": f"❌ Failed to capture code snapshot: {str(e)}",
+                    "agent_code_snapshot": None,
+                    "capture_error": str(e),
+                }
+            )
 
         # PR creation and merge
         pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
@@ -344,21 +355,27 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2][
-            "Result_Message"
-        ] = f"✅ PR '{pr_title}' created and merged successfully"
+        test_steps[2]["Result_Message"] = (
+            f"✅ PR '{pr_title}' created and merged successfully"
+        )
 
         # GitHub action completion with CI failure details
-        action_status = github_manager.check_if_action_is_complete(pr_title=pr_title, return_details=True)
-        
+        action_status = github_manager.check_if_action_is_complete(
+            pr_title=pr_title, return_details=True
+        )
+
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = f"❌ GitHub action timed out (status: {action_status['status']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action timed out (status: {action_status['status']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -369,15 +386,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4][
-                "Result_Message"
-            ] = "❌ Airflow instance did not redeploy successfully"
+            test_steps[4]["Result_Message"] = (
+                "❌ Airflow instance did not redeploy successfully"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4][
-            "Result_Message"
-        ] = "✅ Airflow redeployed successfully after GitHub action"
+        test_steps[4]["Result_Message"] = (
+            "✅ Airflow redeployed successfully after GitHub action"
+        )
 
         # DAG existence check
         dag_name = "tesla_stock_dag"
@@ -388,9 +405,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5][
-                "Result_Message"
-            ] = f"❌ DAG '{dag_name}' not found in Airflow"
+            test_steps[5]["Result_Message"] = (
+                f"❌ DAG '{dag_name}' not found in Airflow"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG task validation - check if it has the fetch_tesla_data task
@@ -400,14 +417,14 @@ def validate_test(model_result, fixtures=None):
 
             if "fetch_tesla_data" in task_ids:
                 test_steps[6]["status"] = "passed"
-                test_steps[6][
-                    "Result_Message"
-                ] = f"✅ Found 'fetch_tesla_data' task in DAG (tasks: {', '.join(task_ids)})"
+                test_steps[6]["Result_Message"] = (
+                    f"✅ Found 'fetch_tesla_data' task in DAG (tasks: {', '.join(task_ids)})"
+                )
             else:
                 test_steps[6]["status"] = "failed"
-                test_steps[6][
-                    "Result_Message"
-                ] = f"❌ Task 'fetch_tesla_data' not found. Available tasks: {', '.join(task_ids)}"
+                test_steps[6]["Result_Message"] = (
+                    f"❌ Task 'fetch_tesla_data' not found. Available tasks: {', '.join(task_ids)}"
+                )
         except Exception as e:
             test_steps[6]["status"] = "failed"
             test_steps[6]["Result_Message"] = f"❌ Error checking DAG tasks: {str(e)}"
@@ -424,9 +441,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[7]["status"] = "passed"
-        test_steps[7][
-            "Result_Message"
-        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        test_steps[7]["Result_Message"] = (
+            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        )
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -440,9 +457,12 @@ def validate_test(model_result, fixtures=None):
             # Add agent code snapshot to comprehensive DAG info (captured earlier)
             if agent_code_snapshot:
                 comprehensive_dag_info["agent_code_snapshot"] = agent_code_snapshot
-                print(f"📸 Agent code snapshot added to comprehensive DAG info: "
-                      f"{agent_code_snapshot['summary']['total_files']} files, "
-                      f"{agent_code_snapshot['summary']['total_size_bytes']} bytes", flush=True)
+                print(
+                    f"📸 Agent code snapshot added to comprehensive DAG info: "
+                    f"{agent_code_snapshot['summary']['total_files']} files, "
+                    f"{agent_code_snapshot['summary']['total_size_bytes']} bytes",
+                    flush=True,
+                )
             else:
                 print("⚠️ Agent code snapshot not available", flush=True)
 
@@ -454,10 +474,14 @@ def validate_test(model_result, fixtures=None):
                     f"📄 DAG source code captured ({len(dag_source['source_code'])}, flush=True characters)"
                 )
                 print(
-                    f"📄 Source code preview: {dag_source['source_code'][:200]}..."
-                , flush=True)
+                    f"📄 Source code preview: {dag_source['source_code'][:200]}...",
+                    flush=True,
+                )
             else:
-                print("⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files", flush=True)
+                print(
+                    "⚠️ DAG source code not available from Airflow - check agent_code_snapshot for actual files",
+                    flush=True,
+                )
 
             if import_errors:
                 print(f"❌ Found {len(import_errors)}, flush=True import errors")
@@ -485,7 +509,9 @@ def validate_test(model_result, fixtures=None):
                             "duration": task_info.get("duration"),
                             "log_length": len(task_info.get("logs", "")),
                         }
-                        for task_id, task_info in comprehensive_dag_info.get("task_logs", {}).items()
+                        for task_id, task_info in comprehensive_dag_info.get(
+                            "task_logs", {}
+                        ).items()
                     },
                 }
             )
@@ -503,7 +529,9 @@ def validate_test(model_result, fixtures=None):
 
         # Step 9: YFinance Integration Validation (through task logs)
         try:
-            print("🔍 Retrieving task logs to verify yfinance integration...", flush=True)
+            print(
+                "🔍 Retrieving task logs to verify yfinance integration...", flush=True
+            )
             logs = airflow_instance.get_task_instance_logs(
                 dag_id=dag_name, dag_run_id=dag_run_id, task_id="fetch_tesla_data"
             )
@@ -515,20 +543,20 @@ def validate_test(model_result, fixtures=None):
                 or "Ticker" in logs
             ):
                 test_steps[8]["status"] = "passed"
-                test_steps[8][
-                    "Result_Message"
-                ] = "✅ YFinance integration validated: yfinance/Tesla references found in logs"
+                test_steps[8]["Result_Message"] = (
+                    "✅ YFinance integration validated: yfinance/Tesla references found in logs"
+                )
             else:
                 test_steps[8]["status"] = "failed"
-                test_steps[8][
-                    "Result_Message"
-                ] = "❌ No evidence of yfinance integration in task logs"
+                test_steps[8]["Result_Message"] = (
+                    "❌ No evidence of yfinance integration in task logs"
+                )
 
         except Exception as e:
             test_steps[8]["status"] = "failed"
-            test_steps[8][
-                "Result_Message"
-            ] = f"❌ Error validating yfinance integration: {str(e)}"
+            test_steps[8]["Result_Message"] = (
+                f"❌ Error validating yfinance integration: {str(e)}"
+            )
 
         # Step 10: PostgreSQL Database Validation
         try:
@@ -574,25 +602,25 @@ def validate_test(model_result, fixtures=None):
 
                     if len(columns_found) >= 4:  # At least 4 of the expected columns
                         test_steps[9]["status"] = "passed"
-                        test_steps[9][
-                            "Result_Message"
-                        ] = f"✅ Tesla stock data validated: {tesla_count} records with columns: {', '.join(columns_found)}"
+                        test_steps[9]["Result_Message"] = (
+                            f"✅ Tesla stock data validated: {tesla_count} records with columns: {', '.join(columns_found)}"
+                        )
                     else:
                         test_steps[9]["status"] = "failed"
-                        test_steps[9][
-                            "Result_Message"
-                        ] = f"❌ Tesla stock table exists but missing expected columns. Found: {', '.join(columns)}"
+                        test_steps[9]["Result_Message"] = (
+                            f"❌ Tesla stock table exists but missing expected columns. Found: {', '.join(columns)}"
+                        )
                 else:
                     test_steps[9]["status"] = "failed"
-                    test_steps[9][
-                        "Result_Message"
-                    ] = "❌ Tesla stock table exists but has no data"
+                    test_steps[9]["Result_Message"] = (
+                        "❌ Tesla stock table exists but has no data"
+                    )
 
             except psycopg2.Error as e:
                 test_steps[9]["status"] = "failed"
-                test_steps[9][
-                    "Result_Message"
-                ] = f"❌ Tesla stock table validation error: {str(e)}"
+                test_steps[9]["Result_Message"] = (
+                    f"❌ Tesla stock table validation error: {str(e)}"
+                )
 
             cur.close()
             conn.close()

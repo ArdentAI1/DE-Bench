@@ -123,9 +123,9 @@ class AirflowFixture(
         # switch to the correct workspace
         # self._switch_to_correct_workspace()  # COMMENTED OUT - causing concurrent CLI conflicts
 
-        # make sure either ASTRO_ACCESS_TOKEN or ASTRO_API_TOKEN is set
-        if not os.getenv("ASTRO_ACCESS_TOKEN") and not os.getenv("ASTRO_API_TOKEN"):
-            raise ValueError("Either ASTRO_ACCESS_TOKEN or ASTRO_API_TOKEN must be set")
+        # make sure ASTRO_API_TOKEN is set
+        if not os.getenv("ASTRO_API_TOKEN"):
+            raise ValueError("ASTRO_API_TOKEN must be set")
 
         # 1. Ensure Astro login
         print("🔐 Ensuring Astro CLI login...")
