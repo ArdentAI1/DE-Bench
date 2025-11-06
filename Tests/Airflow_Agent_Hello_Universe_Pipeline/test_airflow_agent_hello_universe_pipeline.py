@@ -491,7 +491,7 @@ def validate_test(model_result, fixtures=None):
         print("🔍 Retrieving task logs to verify Hello Universe output...", flush=True)
         try:
             logs = airflow_instance.get_task_instance_logs(
-                dag_id=dag_name, dag_run_id=dag_run_id, task_id="hello_universe_task"
+                dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello"
             )
             print(
                 f"📝 Task logs retrieved. Log content length: {len(logs)}, flush=True characters"
