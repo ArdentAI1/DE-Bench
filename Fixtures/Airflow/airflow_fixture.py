@@ -160,17 +160,6 @@ class AirflowFixture(
 
         print("🧹 Cleaning up Airflow session-level resources...")
 
-        if session_data.get("use_kubernetes", False):
-            # Need to delete the namespace
-            from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
-
-            k8s_manager = KubernetesManifestManager(provider="AZURE")
-            
-            if not k8s_manager.delete_namespace(namespace=session_data.get("k8s_namespace")):
-                print(f"❌ Failed to delete namespace {session_data.get('k8s_namespace')}")
-                raise RuntimeError(f"Failed to delete namespace {session_data.get('k8s_namespace')}")
-            print(f"✅ Kubernetes namespace {session_data.get('k8s_namespace')} deleted successfully")
-
         # The cache manager and deployments will be cleaned up naturally
         # since they're managed by the Astronomer platform
         print("✅ Airflow session cleanup complete")
@@ -483,6 +472,15 @@ class AirflowFixture(
 
         except Exception as e:
             print(f"⚠️ Error during Kubernetes cleanup: {e}")
+
+        try:
+            # Delete the repository from the ACR
+            if hasattr(self, "_k8s_manager") and self._k8s_manager:
+                self._k8s_manager.delete_repo_from_acr(acr_name=os.getenv("AZURE_ACR_NAME"), repo_name=resource_id)
+                print(f"✅ Deleted repository from ACR: {resource_id}")
+
+        except Exception as e:
+            print(f"⚠️ Error during ACR cleanup: {e}")
 
         # Clean up temporary directory
         test_dir = resource_data.get("test_dir")
