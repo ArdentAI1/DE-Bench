@@ -326,18 +326,21 @@ class AirflowFixture(
 
         # Initialize Kubernetes manifest manager
         k8s_manager = KubernetesManifestManager(provider="AZURE")
-
+        total_start_time = time.time()
+        start_time = time.time()
         # Deploy Airflow to Kubernetes
         print(f"🚀 Deploying Airflow to Kubernetes...")
         k8s_manager.generate_and_apply_manifest(
             namespace=namespace,
             container=container_image
         )
+        print(f"🚀 Kubernetes manifest deployment took {time.time() - start_time:.2f}s")
 
         # Get the external IP from the LoadBalancer service
+        start_time = time.time()
         print(f"🔍 Waiting for external IP from LoadBalancer...")
         external_ip = k8s_manager.get_service_external_ip(namespace=namespace)
-
+        print(f"🚀 External IP retrieval took {time.time() - start_time:.2f}s")
         if not external_ip:
             raise RuntimeError(
                 f"Failed to get external IP for namespace {namespace} after deployment"
@@ -346,10 +349,11 @@ class AirflowFixture(
         print(f"✅ External IP obtained: {external_ip}")
 
         # Verify pod health
+        start_time = time.time()
         print(f"🏥 Verifying Airflow pod health...")
         if not k8s_manager.verify_pod_health(external_ip=external_ip, port=8080):
             print(f"⚠️ Pod health check failed, but continuing...")
-
+        print(f"🚀 Pod health check took {time.time() - start_time:.2f}s")
         # Construct Airflow URLs using external IP
         base_url = f"http://{external_ip}:8080"
         api_url = f"{base_url}/api/v1"
@@ -361,6 +365,7 @@ class AirflowFixture(
         # NOTE: airflow_instance should be an AirflowManager or compatible API client
         # that can interact with the Kubernetes-deployed Airflow instance.
         # We create an AirflowManager instance pointing to the Kubernetes deployment URL.
+        start_time = time.time()
         try:
             # Create an AirflowManager instance pointing to the K8s deployment
             # Skip Astro validation since we're using Kubernetes
@@ -383,7 +388,8 @@ class AirflowFixture(
             raise RuntimeError(
                 f"Failed to create AirflowManager instance for Kubernetes deployment: {e}"
             ) from e
-
+        print(f"🚀 AirflowManager instance creation took {time.time() - start_time:.2f}s")
+        print(f"🚀 Total Kubernetes Airflow deployment took {time.time() - total_start_time:.2f}s")
         creation_end = time.time()
         print(
             f"✅ Kubernetes Airflow deployment took {creation_end - creation_start:.2f}s"
