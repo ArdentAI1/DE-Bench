@@ -357,3 +357,24 @@ spec:
         except requests.RequestException as e:
             print(f"Error connecting to pod at {url}: {e}")
             return False
+
+    def delete_repo_from_acr(self, acr_name: str, repo_name: str) -> bool:
+        """
+        Delete a repository from the ACR
+
+        :param str acr_name: The name of the ACR
+        :param str repo_name: The name of the repository to delete
+        :return: True if deleted, False if repository didn't exist
+        :rtype: bool
+        """
+        self._ensure_api_attributes_set()
+        try:
+            self.cloud_provider_client.container_registries.delete_repository(
+                resource_group_name=os.getenv("AZURE_RESOURCE_GROUP"),
+                registry_name=acr_name,
+                repository_name=repo_name,
+            )
+        except Exception as e:
+            print(f"⚠️ Error deleting repository from ACR: {e}")
+            return False
+        return True
