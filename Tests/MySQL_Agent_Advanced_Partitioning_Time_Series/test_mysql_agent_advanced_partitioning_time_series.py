@@ -17,7 +17,9 @@ module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
 
-def get_month_start(months_ago: int, hour: Optional[int] = 0, minute: Optional[int] = 0) -> datetime.datetime:
+def get_month_start(
+    months_ago: int, hour: Optional[int] = 0, minute: Optional[int] = 0
+) -> datetime.datetime:
     """
     Get the first day of the target month
 
@@ -35,7 +37,13 @@ def get_month_start(months_ago: int, hour: Optional[int] = 0, minute: Optional[i
         year -= 1
     return datetime.datetime(year, month, 1, hour, minute, 0)
 
-def get_month_mid(months_ago: int, day: Optional[int] = 15, hour: Optional[int] = 12, minute: Optional[int] = 0) -> datetime.datetime:
+
+def get_month_mid(
+    months_ago: int,
+    day: Optional[int] = 15,
+    hour: Optional[int] = 12,
+    minute: Optional[int] = 0,
+) -> datetime.datetime:
     """
     Get the middle day of the target month
 
@@ -80,7 +88,11 @@ def get_fixtures() -> List[DEBenchFixture]:
                                 "primary_key": True,
                             },
                             {"name": "sensor_id", "type": "INT", "not_null": True},
-                            {"name": "reading_timestamp", "type": "DATETIME", "not_null": True},
+                            {
+                                "name": "reading_timestamp",
+                                "type": "DATETIME",
+                                "not_null": True,
+                            },
                             {"name": "temperature", "type": "DECIMAL(5,2)"},
                             {"name": "humidity", "type": "DECIMAL(5,2)"},
                             {"name": "pressure", "type": "DECIMAL(8,2)"},
@@ -92,67 +104,464 @@ def get_fixtures() -> List[DEBenchFixture]:
                             # This block generates timestamps for current month and previous months
                             # to simulate time-series data for partitioning
                             # Current Month Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(0, 8, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 22.5, "humidity": 65.2, "pressure": 1013.25, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(0, 8, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 23.1, "humidity": 62.8, "pressure": 1012.80, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(0, 8, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 21.8, "humidity": 68.5, "pressure": 1014.10, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 101, "reading_timestamp": get_month_mid(0, 15, 14, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 25.2, "humidity": 58.3, "pressure": 1015.45, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_mid(0, 15, 14, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 24.8, "humidity": 60.1, "pressure": 1014.90, "location": "Building_A_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(0, 8, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 22.5,
+                                "humidity": 65.2,
+                                "pressure": 1013.25,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(0, 8, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 23.1,
+                                "humidity": 62.8,
+                                "pressure": 1012.80,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(0, 8, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 21.8,
+                                "humidity": 68.5,
+                                "pressure": 1014.10,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_mid(
+                                    0, 15, 14, 30
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 25.2,
+                                "humidity": 58.3,
+                                "pressure": 1015.45,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_mid(
+                                    0, 15, 14, 30
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 24.8,
+                                "humidity": 60.1,
+                                "pressure": 1014.90,
+                                "location": "Building_A_Floor_2",
+                            },
                             # Previous Month Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(1, 9, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 19.5, "humidity": 72.1, "pressure": 1016.20, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(1, 9, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 20.2, "humidity": 69.8, "pressure": 1015.75, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(1, 9, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 18.9, "humidity": 75.2, "pressure": 1017.30, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 104, "reading_timestamp": get_month_mid(1, 15, 16, 45).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 17.3, "humidity": 78.5, "pressure": 1018.10, "location": "Building_C_Floor_1"},
-                            {"sensor_id": 105, "reading_timestamp": get_month_mid(1, 15, 16, 45).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 18.1, "humidity": 76.2, "pressure": 1017.85, "location": "Building_C_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(1, 9, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 19.5,
+                                "humidity": 72.1,
+                                "pressure": 1016.20,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(1, 9, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 20.2,
+                                "humidity": 69.8,
+                                "pressure": 1015.75,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(1, 9, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 18.9,
+                                "humidity": 75.2,
+                                "pressure": 1017.30,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 104,
+                                "reading_timestamp": get_month_mid(
+                                    1, 15, 16, 45
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 17.3,
+                                "humidity": 78.5,
+                                "pressure": 1018.10,
+                                "location": "Building_C_Floor_1",
+                            },
+                            {
+                                "sensor_id": 105,
+                                "reading_timestamp": get_month_mid(
+                                    1, 15, 16, 45
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 18.1,
+                                "humidity": 76.2,
+                                "pressure": 1017.85,
+                                "location": "Building_C_Floor_2",
+                            },
                             # Two Months Ago Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(2, 10, 15).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 15.8, "humidity": 82.3, "pressure": 1019.45, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(2, 10, 15).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 16.5, "humidity": 80.1, "pressure": 1018.90, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(2, 10, 15).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 14.9, "humidity": 84.7, "pressure": 1020.20, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 104, "reading_timestamp": get_month_mid(2, 15, 12, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 13.2, "humidity": 87.1, "pressure": 1021.15, "location": "Building_C_Floor_1"},
-                            {"sensor_id": 105, "reading_timestamp": get_month_mid(2, 15, 12, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 14.0, "humidity": 85.8, "pressure": 1020.75, "location": "Building_C_Floor_2"},
-
-                            # Three Months Ago Data  
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(3, 7, 20).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 12.5, "humidity": 89.2, "pressure": 1022.30, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(3, 7, 20).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 13.1, "humidity": 87.5, "pressure": 1021.85, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(3, 7, 20).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 11.8, "humidity": 91.3, "pressure": 1023.10, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 106, "reading_timestamp": get_month_mid(3, 15, 15, 40).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 10.9, "humidity": 93.1, "pressure": 1024.25, "location": "Building_D_Floor_1"},
-                            {"sensor_id": 107, "reading_timestamp": get_month_mid(3, 15, 15, 40).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 11.6, "humidity": 91.8, "pressure": 1023.75, "location": "Building_D_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(
+                                    2, 10, 15
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 15.8,
+                                "humidity": 82.3,
+                                "pressure": 1019.45,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(
+                                    2, 10, 15
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 16.5,
+                                "humidity": 80.1,
+                                "pressure": 1018.90,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(
+                                    2, 10, 15
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 14.9,
+                                "humidity": 84.7,
+                                "pressure": 1020.20,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 104,
+                                "reading_timestamp": get_month_mid(
+                                    2, 15, 12, 30
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 13.2,
+                                "humidity": 87.1,
+                                "pressure": 1021.15,
+                                "location": "Building_C_Floor_1",
+                            },
+                            {
+                                "sensor_id": 105,
+                                "reading_timestamp": get_month_mid(
+                                    2, 15, 12, 30
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 14.0,
+                                "humidity": 85.8,
+                                "pressure": 1020.75,
+                                "location": "Building_C_Floor_2",
+                            },
+                            # Three Months Ago Data
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(3, 7, 20).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 12.5,
+                                "humidity": 89.2,
+                                "pressure": 1022.30,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(3, 7, 20).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 13.1,
+                                "humidity": 87.5,
+                                "pressure": 1021.85,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(3, 7, 20).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 11.8,
+                                "humidity": 91.3,
+                                "pressure": 1023.10,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 106,
+                                "reading_timestamp": get_month_mid(
+                                    3, 15, 15, 40
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 10.9,
+                                "humidity": 93.1,
+                                "pressure": 1024.25,
+                                "location": "Building_D_Floor_1",
+                            },
+                            {
+                                "sensor_id": 107,
+                                "reading_timestamp": get_month_mid(
+                                    3, 15, 15, 40
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 11.6,
+                                "humidity": 91.8,
+                                "pressure": 1023.75,
+                                "location": "Building_D_Floor_2",
+                            },
                             # Four Months Ago Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(4, 6, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 11.5, "humidity": 92.2, "pressure": 1024.45, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(4, 6, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 12.1, "humidity": 90.5, "pressure": 1023.90, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(4, 6, 30).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 10.8, "humidity": 94.3, "pressure": 1025.20, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 108, "reading_timestamp": get_month_mid(4, 15, 18, 50).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 9.9, "humidity": 96.1, "pressure": 1026.15, "location": "Building_E_Floor_1"},
-                            {"sensor_id": 109, "reading_timestamp": get_month_mid(4, 15, 18, 50).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 10.6, "humidity": 94.8, "pressure": 1025.75, "location": "Building_E_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(4, 6, 30).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 11.5,
+                                "humidity": 92.2,
+                                "pressure": 1024.45,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(4, 6, 30).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 12.1,
+                                "humidity": 90.5,
+                                "pressure": 1023.90,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(4, 6, 30).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 10.8,
+                                "humidity": 94.3,
+                                "pressure": 1025.20,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 108,
+                                "reading_timestamp": get_month_mid(
+                                    4, 15, 18, 50
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 9.9,
+                                "humidity": 96.1,
+                                "pressure": 1026.15,
+                                "location": "Building_E_Floor_1",
+                            },
+                            {
+                                "sensor_id": 109,
+                                "reading_timestamp": get_month_mid(
+                                    4, 15, 18, 50
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 10.6,
+                                "humidity": 94.8,
+                                "pressure": 1025.75,
+                                "location": "Building_E_Floor_2",
+                            },
                             # Five Months Ago Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(5, 5, 45).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 10.5, "humidity": 93.3, "pressure": 1025.55, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(5, 5, 45).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 11.1, "humidity": 91.6, "pressure": 1025.00, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(5, 5, 45).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 9.8, "humidity": 95.4, "pressure": 1026.30, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 110, "reading_timestamp": get_month_mid(5, 15, 20, 25).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 8.9, "humidity": 97.2, "pressure": 1027.25, "location": "Building_F_Floor_1"},
-                            {"sensor_id": 111, "reading_timestamp": get_month_mid(5, 15, 20, 25).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 9.6, "humidity": 95.9, "pressure": 1026.75, "location": "Building_F_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(5, 5, 45).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 10.5,
+                                "humidity": 93.3,
+                                "pressure": 1025.55,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(5, 5, 45).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 11.1,
+                                "humidity": 91.6,
+                                "pressure": 1025.00,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(5, 5, 45).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 9.8,
+                                "humidity": 95.4,
+                                "pressure": 1026.30,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 110,
+                                "reading_timestamp": get_month_mid(
+                                    5, 15, 20, 25
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 8.9,
+                                "humidity": 97.2,
+                                "pressure": 1027.25,
+                                "location": "Building_F_Floor_1",
+                            },
+                            {
+                                "sensor_id": 111,
+                                "reading_timestamp": get_month_mid(
+                                    5, 15, 20, 25
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 9.6,
+                                "humidity": 95.9,
+                                "pressure": 1026.75,
+                                "location": "Building_F_Floor_2",
+                            },
                             # Six Months Ago Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(6, 4, 50).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 9.5, "humidity": 94.4, "pressure": 1027.45, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(6, 4, 50).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 10.1, "humidity": 92.7, "pressure": 1026.90, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(6, 4, 50).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 8.8, "humidity": 96.5, "pressure": 1028.20, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 112, "reading_timestamp": get_month_mid(6, 15, 22, 10).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 7.9, "humidity": 98.3, "pressure": 1029.15, "location": "Building_G_Floor_1"},
-                            {"sensor_id": 113, "reading_timestamp": get_month_mid(6, 15, 22, 10).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 8.6, "humidity": 97.0, "pressure": 1028.75, "location": "Building_G_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(6, 4, 50).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 9.5,
+                                "humidity": 94.4,
+                                "pressure": 1027.45,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(6, 4, 50).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 10.1,
+                                "humidity": 92.7,
+                                "pressure": 1026.90,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(6, 4, 50).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 8.8,
+                                "humidity": 96.5,
+                                "pressure": 1028.20,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 112,
+                                "reading_timestamp": get_month_mid(
+                                    6, 15, 22, 10
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 7.9,
+                                "humidity": 98.3,
+                                "pressure": 1029.15,
+                                "location": "Building_G_Floor_1",
+                            },
+                            {
+                                "sensor_id": 113,
+                                "reading_timestamp": get_month_mid(
+                                    6, 15, 22, 10
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 8.6,
+                                "humidity": 97.0,
+                                "pressure": 1028.75,
+                                "location": "Building_G_Floor_2",
+                            },
                             # Seven Months Ago Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(7, 3, 55).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 8.5, "humidity": 95.5, "pressure": 1029.45, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(7, 3, 55).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 9.1, "humidity": 93.8, "pressure": 1028.90, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(7, 3, 55).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 7.8, "humidity": 97.6, "pressure": 1030.20, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 114, "reading_timestamp": get_month_mid(7, 15, 23, 40).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 6.9, "humidity": 99.4, "pressure": 1031.15, "location": "Building_H_Floor_1"},
-                            {"sensor_id": 115, "reading_timestamp": get_month_mid(7, 15, 23, 40).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 7.6, "humidity": 98.1, "pressure": 1030.75, "location": "Building_H_Floor_2"},
-
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(7, 3, 55).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 8.5,
+                                "humidity": 95.5,
+                                "pressure": 1029.45,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(7, 3, 55).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 9.1,
+                                "humidity": 93.8,
+                                "pressure": 1028.90,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(7, 3, 55).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 7.8,
+                                "humidity": 97.6,
+                                "pressure": 1030.20,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 114,
+                                "reading_timestamp": get_month_mid(
+                                    7, 15, 23, 40
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 6.9,
+                                "humidity": 99.4,
+                                "pressure": 1031.15,
+                                "location": "Building_H_Floor_1",
+                            },
+                            {
+                                "sensor_id": 115,
+                                "reading_timestamp": get_month_mid(
+                                    7, 15, 23, 40
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 7.6,
+                                "humidity": 98.1,
+                                "pressure": 1030.75,
+                                "location": "Building_H_Floor_2",
+                            },
                             # Eight Months Ago Data
-                            {"sensor_id": 101, "reading_timestamp": get_month_start(8, 3, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 7.5, "humidity": 96.5, "pressure": 1031.45, "location": "Building_A_Floor_1"},
-                            {"sensor_id": 102, "reading_timestamp": get_month_start(8, 3, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 8.1, "humidity": 94.8, "pressure": 1030.90, "location": "Building_A_Floor_2"},
-                            {"sensor_id": 103, "reading_timestamp": get_month_start(8, 3, 0).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 6.8, "humidity": 98.6, "pressure": 1032.20, "location": "Building_B_Floor_1"},
-                            {"sensor_id": 116, "reading_timestamp": get_month_mid(8, 15, 23, 59).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 5.9, "humidity": 100.4, "pressure": 1033.15, "location": "Building_I_Floor_1"},
-                            {"sensor_id": 117, "reading_timestamp": get_month_mid(8, 15, 23, 59).strftime("%Y-%m-%d %H:%M:%S"), "temperature": 6.6, "humidity": 99.1, "pressure": 1032.75, "location": "Building_I_Floor_2"},
+                            {
+                                "sensor_id": 101,
+                                "reading_timestamp": get_month_start(8, 3, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 7.5,
+                                "humidity": 96.5,
+                                "pressure": 1031.45,
+                                "location": "Building_A_Floor_1",
+                            },
+                            {
+                                "sensor_id": 102,
+                                "reading_timestamp": get_month_start(8, 3, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 8.1,
+                                "humidity": 94.8,
+                                "pressure": 1030.90,
+                                "location": "Building_A_Floor_2",
+                            },
+                            {
+                                "sensor_id": 103,
+                                "reading_timestamp": get_month_start(8, 3, 0).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "temperature": 6.8,
+                                "humidity": 98.6,
+                                "pressure": 1032.20,
+                                "location": "Building_B_Floor_1",
+                            },
+                            {
+                                "sensor_id": 116,
+                                "reading_timestamp": get_month_mid(
+                                    8, 15, 23, 59
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 5.9,
+                                "humidity": 100.4,
+                                "pressure": 1033.15,
+                                "location": "Building_I_Floor_1",
+                            },
+                            {
+                                "sensor_id": 117,
+                                "reading_timestamp": get_month_mid(
+                                    8, 15, 23, 59
+                                ).strftime("%Y-%m-%d %H:%M:%S"),
+                                "temperature": 6.6,
+                                "humidity": 99.1,
+                                "pressure": 1032.75,
+                                "location": "Building_I_Floor_2",
+                            },
                         ],
                     }
                 ],
@@ -278,34 +687,44 @@ def validate_test(model_result, fixtures=None):
                 return {"score": 0.2, "metadata": {"test_steps": test_steps}}
 
             # Check if table is partitioned
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.partitions 
                 WHERE table_schema = %s 
                 AND table_name = 'sensor_readings' 
                 AND partition_name IS NOT NULL
-            """, (db_name,))
-            
+            """,
+                (db_name,),
+            )
+
             partition_count = db_cursor.fetchone()[0]
 
             if partition_count > 0:
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = f"✅ Partitioned sensor_readings table found with {partition_count} partitions"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ Partitioned sensor_readings table found with {partition_count} partitions"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = "❌ sensor_readings table exists but is not partitioned"
+                test_steps[1][
+                    "Result_Message"
+                ] = "❌ sensor_readings table exists but is not partitioned"
                 return {"score": 0.2, "metadata": {"test_steps": test_steps}}
 
             # Step 3: Validate partition structure
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT partition_name, partition_expression, partition_description
                 FROM information_schema.partitions 
                 WHERE table_schema = %s 
                 AND table_name = 'sensor_readings'
                 AND partition_name IS NOT NULL
                 ORDER BY partition_ordinal_position
-            """, (db_name,))
-            
+            """,
+                (db_name,),
+            )
+
             partitions = db_cursor.fetchall()
 
             if len(partitions) >= 3:  # At least 3-4 months of partitions
@@ -317,7 +736,9 @@ def validate_test(model_result, fixtures=None):
                 )
             else:
                 test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = f"❌ Insufficient partitions: only {len(partitions)} found, expected at least 3"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"❌ Insufficient partitions: only {len(partitions)} found, expected at least 3"
 
             # Step 4: Validate data distribution
             db_cursor.execute("SELECT COUNT(*) FROM sensor_readings")
@@ -325,7 +746,8 @@ def validate_test(model_result, fixtures=None):
 
             if total_records >= 20:  # At least the initial sensor data (20 records)
                 # Check data distribution across partitions
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT 
                         p.partition_name,
                         p.table_rows
@@ -335,8 +757,10 @@ def validate_test(model_result, fixtures=None):
                     AND p.partition_name IS NOT NULL
                     AND p.table_rows > 0
                     ORDER BY p.partition_ordinal_position
-                """, (db_name,))
-                
+                """,
+                    (db_name,),
+                )
+
                 partitions_with_data = db_cursor.fetchall()
 
                 if len(partitions_with_data) >= 2:  # Data in multiple partitions
@@ -353,7 +777,9 @@ def validate_test(model_result, fixtures=None):
                     )
             else:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"❌ Insufficient sample data: only {total_records} records"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"❌ Insufficient sample data: only {total_records} records"
 
             # Step 5: Check for performance optimizations
             optimizations_found = 0
@@ -362,33 +788,39 @@ def validate_test(model_result, fixtures=None):
             # Check for indexes
             db_cursor.execute("SHOW INDEX FROM sensor_readings")
             indexes = db_cursor.fetchall()
-            index_names = [idx[2] for idx in indexes if idx[2] != 'PRIMARY']
-            
+            index_names = [idx[2] for idx in indexes if idx[2] != "PRIMARY"]
+
             if index_names:
                 optimizations_found += 1
                 optimization_details.append(f"{len(index_names)} indexes")
 
             # Check for stored procedures (partition management)
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.routines 
                 WHERE routine_schema = %s 
                 AND routine_type = 'PROCEDURE'
-            """, (db_name,))
-            
+            """,
+                (db_name,),
+            )
+
             procedure_count = db_cursor.fetchone()[0]
             if procedure_count > 0:
                 optimizations_found += 1
                 optimization_details.append(f"{procedure_count} stored procedures")
 
             # Check for additional tables (summary/aggregation tables)
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.tables 
                 WHERE table_schema = %s 
                 AND table_name != 'sensor_readings'
-            """, (db_name,))
-            
+            """,
+                (db_name,),
+            )
+
             additional_tables = db_cursor.fetchone()[0]
             if additional_tables > 0:
                 optimizations_found += 1
@@ -396,14 +828,16 @@ def validate_test(model_result, fixtures=None):
 
             if optimizations_found >= 2:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = (
-                    f"✅ Performance optimizations implemented: {', '.join(optimization_details)}"
-                )
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ Performance optimizations implemented: {', '.join(optimization_details)}"
             else:
-                test_steps[4]["status"] = "failed" if optimizations_found == 0 else "passed"
-                test_steps[4]["Result_Message"] = (
-                    f"{'❌' if optimizations_found == 0 else '✅'} Limited optimizations: {', '.join(optimization_details) if optimization_details else 'none found'}"
+                test_steps[4]["status"] = (
+                    "failed" if optimizations_found == 0 else "passed"
                 )
+                test_steps[4][
+                    "Result_Message"
+                ] = f"{'❌' if optimizations_found == 0 else '✅'} Limited optimizations: {', '.join(optimization_details) if optimization_details else 'none found'}"
 
         finally:
             db_cursor.close()

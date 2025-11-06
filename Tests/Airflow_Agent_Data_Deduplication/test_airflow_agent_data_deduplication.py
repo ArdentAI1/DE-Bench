@@ -197,15 +197,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = (
-                "❌ AI Agent task execution failed or returned no result"
-            )
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = (
-            "✅ AI Agent completed task execution successfully"
-        )
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Get fixtures for Airflow, PostgreSQL, and GitHub
         airflow_fixture = (
@@ -276,9 +276,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1]["Result_Message"] = (
-            f"✅ Git branch '{branch_name}' created successfully"
-        )
+        test_steps[1][
+            "Result_Message"
+        ] = f"✅ Git branch '{branch_name}' created successfully"
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -357,9 +357,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2]["Result_Message"] = (
-            f"✅ PR '{pr_title}' created and merged successfully"
-        )
+        test_steps[2][
+            "Result_Message"
+        ] = f"✅ PR '{pr_title}' created and merged successfully"
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -368,16 +368,16 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action timed out (status: {action_status['status']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -388,15 +388,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4]["Result_Message"] = (
-                "❌ Airflow instance did not redeploy successfully"
-            )
+            test_steps[4][
+                "Result_Message"
+            ] = "❌ Airflow instance did not redeploy successfully"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4]["Result_Message"] = (
-            "✅ Airflow redeployed successfully after GitHub action"
-        )
+        test_steps[4][
+            "Result_Message"
+        ] = "✅ Airflow redeployed successfully after GitHub action"
 
         # DAG existence check
         dag_name = "user_deduplication_dag"
@@ -407,9 +407,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5]["Result_Message"] = (
-                f"❌ DAG '{dag_name}' not found in Airflow"
-            )
+            test_steps[5][
+                "Result_Message"
+            ] = f"❌ DAG '{dag_name}' not found in Airflow"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG task validation - check if it has the deduplicate_users task
@@ -419,14 +419,14 @@ def validate_test(model_result, fixtures=None):
 
             if "deduplicate_users" in task_ids:
                 test_steps[6]["status"] = "passed"
-                test_steps[6]["Result_Message"] = (
-                    f"✅ Found 'deduplicate_users' task in DAG (tasks: {', '.join(task_ids)})"
-                )
+                test_steps[6][
+                    "Result_Message"
+                ] = f"✅ Found 'deduplicate_users' task in DAG (tasks: {', '.join(task_ids)})"
             else:
                 test_steps[6]["status"] = "failed"
-                test_steps[6]["Result_Message"] = (
-                    f"❌ Task 'deduplicate_users' not found. Available tasks: {', '.join(task_ids)}"
-                )
+                test_steps[6][
+                    "Result_Message"
+                ] = f"❌ Task 'deduplicate_users' not found. Available tasks: {', '.join(task_ids)}"
         except Exception as e:
             test_steps[6]["status"] = "failed"
             test_steps[6]["Result_Message"] = f"❌ Error checking DAG tasks: {str(e)}"
@@ -443,9 +443,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[7]["status"] = "passed"
-        test_steps[7]["Result_Message"] = (
-            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
-        )
+        test_steps[7][
+            "Result_Message"
+        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -552,20 +552,20 @@ def validate_test(model_result, fixtures=None):
 
             if deduplicated_count > 0:
                 test_steps[8]["status"] = "passed"
-                test_steps[8]["Result_Message"] = (
-                    f"✅ Deduplication table created with {deduplicated_count} records"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = f"✅ Deduplication table created with {deduplicated_count} records"
             else:
                 test_steps[8]["status"] = "failed"
-                test_steps[8]["Result_Message"] = (
-                    "❌ deduplicated_users table exists but has no data"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = "❌ deduplicated_users table exists but has no data"
 
         except psycopg2.Error as e:
             test_steps[8]["status"] = "failed"
-            test_steps[8]["Result_Message"] = (
-                f"❌ deduplicated_users table validation error: {str(e)}"
-            )
+            test_steps[8][
+                "Result_Message"
+            ] = f"❌ deduplicated_users table validation error: {str(e)}"
 
         # Step 10: Validate data deduplication logic
         try:
@@ -580,20 +580,20 @@ def validate_test(model_result, fixtures=None):
 
             if deduplicated_count <= original_count and deduplicated_count > 0:
                 test_steps[9]["status"] = "passed"
-                test_steps[9]["Result_Message"] = (
-                    f"✅ Data deduplication validated: {original_count} → {deduplicated_count} records"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = f"✅ Data deduplication validated: {original_count} → {deduplicated_count} records"
             else:
                 test_steps[9]["status"] = "failed"
-                test_steps[9]["Result_Message"] = (
-                    f"❌ Deduplication failed: {original_count} → {deduplicated_count} records"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = f"❌ Deduplication failed: {original_count} → {deduplicated_count} records"
 
         except psycopg2.Error as e:
             test_steps[9]["status"] = "failed"
-            test_steps[9]["Result_Message"] = (
-                f"❌ Data deduplication validation error: {str(e)}"
-            )
+            test_steps[9][
+                "Result_Message"
+            ] = f"❌ Data deduplication validation error: {str(e)}"
 
         cur.close()
         conn.close()

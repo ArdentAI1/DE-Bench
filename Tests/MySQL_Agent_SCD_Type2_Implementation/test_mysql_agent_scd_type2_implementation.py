@@ -53,9 +53,21 @@ def get_fixtures() -> List[DEBenchFixture]:
                                 "name": "subscription_plan",
                                 "type": "ENUM('BASIC', 'PREMIUM', 'ENTERPRISE')",
                             },
-                            {"name": "effective_start_date", "type": "DATE", "not_null": True},
-                            {"name": "effective_end_date", "type": "DATE", "default": "'9999-12-31'"},
-                            {"name": "is_current", "type": "BOOLEAN", "default": "TRUE"},
+                            {
+                                "name": "effective_start_date",
+                                "type": "DATE",
+                                "not_null": True,
+                            },
+                            {
+                                "name": "effective_end_date",
+                                "type": "DATE",
+                                "default": "'9999-12-31'",
+                            },
+                            {
+                                "name": "is_current",
+                                "type": "BOOLEAN",
+                                "default": "TRUE",
+                            },
                             {
                                 "name": "created_timestamp",
                                 "type": "TIMESTAMP",
@@ -267,28 +279,41 @@ def validate_test(model_result, fixtures=None):
             columns = {row[0]: row[1] for row in db_cursor.fetchall()}
 
             scd2_required_columns = [
-                'customer_key', 'customer_id', 'effective_start_date', 
-                'effective_end_date', 'is_current'
+                "customer_key",
+                "customer_id",
+                "effective_start_date",
+                "effective_end_date",
+                "is_current",
             ]
-            business_columns = ['first_name', 'last_name', 'email']
-            
-            missing_scd2_columns = [col for col in scd2_required_columns if col not in columns]
-            missing_business_columns = [col for col in business_columns if col not in columns]
+            business_columns = ["first_name", "last_name", "email"]
+
+            missing_scd2_columns = [
+                col for col in scd2_required_columns if col not in columns
+            ]
+            missing_business_columns = [
+                col for col in business_columns if col not in columns
+            ]
 
             if not missing_scd2_columns and not missing_business_columns:
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = f"✅ SCD2 table structure validated: {len(columns)} columns including all SCD2 fields"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ SCD2 table structure validated: {len(columns)} columns including all SCD2 fields"
             else:
                 test_steps[1]["status"] = "failed"
                 missing_all = missing_scd2_columns + missing_business_columns
-                test_steps[1]["Result_Message"] = f"❌ Missing required columns: {missing_all}"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ Missing required columns: {missing_all}"
                 return {"score": 0.2, "metadata": {"test_steps": test_steps}}
 
             # Step 3: Validate initial customer data
             db_cursor.execute("SELECT COUNT(*) FROM customers_scd2")
             total_records = db_cursor.fetchone()[0]
 
-            db_cursor.execute("SELECT COUNT(*) FROM customers_scd2 WHERE is_current = TRUE")
+            db_cursor.execute(
+                "SELECT COUNT(*) FROM customers_scd2 WHERE is_current = TRUE"
+            )
             current_records = db_cursor.fetchone()[0]
 
             db_cursor.execute("SELECT COUNT(DISTINCT customer_id) FROM customers_scd2")
@@ -309,7 +334,8 @@ def validate_test(model_result, fixtures=None):
 
             # Step 4: Check for historical tracking evidence
             # Look for customers with multiple records (indicating SCD2 processing)
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT customer_id, COUNT(*) as record_count,
                        SUM(CASE WHEN is_current = TRUE THEN 1 ELSE 0 END) as current_count,
                        SUM(CASE WHEN is_current = FALSE THEN 1 ELSE 0 END) as historical_count
@@ -318,8 +344,9 @@ def validate_test(model_result, fixtures=None):
                 HAVING COUNT(*) > 1
                 ORDER BY record_count DESC
                 LIMIT 5
-            """)
-            
+            """
+            )
+
             customers_with_history = db_cursor.fetchall()
 
             if customers_with_history and len(customers_with_history) > 0:
@@ -331,19 +358,25 @@ def validate_test(model_result, fixtures=None):
                 )
             else:
                 # Check if we have proper SCD2 structure even without processed updates
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT COUNT(*) 
                     FROM customers_scd2 
                     WHERE effective_end_date != '9999-12-31' OR is_current = FALSE
-                """)
+                """
+                )
                 processed_records = db_cursor.fetchone()[0]
-                
+
                 if processed_records > 0:
                     test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = f"✅ SCD2 processing evidence found: {processed_records} processed records"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"✅ SCD2 processing evidence found: {processed_records} processed records"
                 else:
                     test_steps[3]["status"] = "failed"
-                    test_steps[3]["Result_Message"] = "❌ No evidence of SCD2 processing - all records appear to be initial inserts"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = "❌ No evidence of SCD2 processing - all records appear to be initial inserts"
 
             # Step 5: Check for SCD2 processing infrastructure
             infrastructure_components = []
@@ -354,41 +387,49 @@ def validate_test(model_result, fixtures=None):
                 infrastructure_components.append("staging table")
 
             # Check for stored procedures
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.routines 
                 WHERE routine_schema = %s 
                 AND routine_type = 'PROCEDURE'
-            """, (db_name,))
-            
+            """,
+                (db_name,),
+            )
+
             procedure_count = db_cursor.fetchone()[0]
             if procedure_count > 0:
                 infrastructure_components.append(f"{procedure_count} stored procedures")
 
             # Check for views
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.views 
                 WHERE table_schema = %s
-            """, (db_name,))
-            
+            """,
+                (db_name,),
+            )
+
             view_count = db_cursor.fetchone()[0]
             if view_count > 0:
                 infrastructure_components.append(f"{view_count} views")
 
             if len(infrastructure_components) >= 2:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = (
-                    f"✅ SCD2 infrastructure implemented: {', '.join(infrastructure_components)}"
-                )
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ SCD2 infrastructure implemented: {', '.join(infrastructure_components)}"
             elif len(infrastructure_components) >= 1:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = (
-                    f"✅ Basic SCD2 infrastructure: {', '.join(infrastructure_components)}"
-                )
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ Basic SCD2 infrastructure: {', '.join(infrastructure_components)}"
             else:
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = "❌ No SCD2 processing infrastructure found"
+                test_steps[4][
+                    "Result_Message"
+                ] = "❌ No SCD2 processing infrastructure found"
 
         finally:
             db_cursor.close()

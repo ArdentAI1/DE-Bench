@@ -112,11 +112,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = "✅ AI Agent completed task execution successfully"
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Use fixture to get Snowflake connection for validation
         snowflake_fixture = None
@@ -143,134 +147,195 @@ def validate_test(model_result, fixtures=None):
             schema_name = resource_data.get("schema")
 
             # Step 2: Validate production database has sufficient sample data
-            cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CUSTOMERS")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CUSTOMERS"
+            )
             customer_count = cursor.fetchone()[0]
 
-            cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.PRODUCTS")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {database_name}.{schema_name}.PRODUCTS"
+            )
             product_count = cursor.fetchone()[0]
 
-            cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.TRANSACTIONS")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {database_name}.{schema_name}.TRANSACTIONS"
+            )
             transaction_count = cursor.fetchone()[0]
 
-            if customer_count >= 100 and product_count >= 10 and transaction_count >= 100:
+            if (
+                customer_count >= 100
+                and product_count >= 10
+                and transaction_count >= 100
+            ):
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = f"✅ Production data validated: {customer_count} customers, {product_count} products, {transaction_count} transactions"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ Production data validated: {customer_count} customers, {product_count} products, {transaction_count} transactions"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ Insufficient production data: {customer_count} customers, {product_count} products, {transaction_count} transactions"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ Insufficient production data: {customer_count} customers, {product_count} products, {transaction_count} transactions"
 
             # Step 3: Check for clone database creation
             cursor.execute("SHOW DATABASES")
             all_databases = cursor.fetchall()
-            
-            database_names = [db[1] for db in all_databases]  # Database name is in second column
+
+            database_names = [
+                db[1] for db in all_databases
+            ]  # Database name is in second column
             clone_databases = []
-            
+
             for db_name in database_names:
-                if any(env in db_name.upper() for env in ['DEV', 'TEST', 'STAGING', 'CLONE']):
+                if any(
+                    env in db_name.upper()
+                    for env in ["DEV", "TEST", "STAGING", "CLONE"]
+                ):
                     clone_databases.append(db_name)
 
             # Also check for clone-related objects or procedures
             clone_procedures = []
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT procedure_name
                     FROM {database_name}.information_schema.procedures
                     WHERE procedure_schema = '{schema_name}'
                     AND (UPPER(procedure_name) LIKE '%CLONE%' OR UPPER(procedure_name) LIKE '%REFRESH%')
-                """)
+                """
+                )
                 clone_procedures = cursor.fetchall()
             except Exception:
                 # Fallback to SHOW PROCEDURES
                 try:
-                    cursor.execute(f"SHOW PROCEDURES IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW PROCEDURES IN SCHEMA {database_name}.{schema_name}"
+                    )
                     all_procedures = cursor.fetchall()
-                    clone_procedures = [proc for proc in all_procedures 
-                                      if any(keyword in proc[0].upper() 
-                                            for keyword in ['CLONE', 'REFRESH'])]
+                    clone_procedures = [
+                        proc
+                        for proc in all_procedures
+                        if any(
+                            keyword in proc[0].upper()
+                            for keyword in ["CLONE", "REFRESH"]
+                        )
+                    ]
                 except Exception:
                     clone_procedures = []
 
             if clone_databases or clone_procedures:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ Clone infrastructure found: {len(clone_databases)} clone databases, {len(clone_procedures)} clone procedures"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Clone infrastructure found: {len(clone_databases)} clone databases, {len(clone_procedures)} clone procedures"
             else:
                 test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = "❌ No evidence of clone database creation or clone management"
+                test_steps[2][
+                    "Result_Message"
+                ] = "❌ No evidence of clone database creation or clone management"
 
             # Step 4: Test data isolation by checking for CLONE_METADATA table or similar tracking
             try:
-                cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CLONE_METADATA")
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CLONE_METADATA"
+                )
                 clone_metadata_count = cursor.fetchone()[0]
-                
+
                 try:
-                    cursor.execute(f"""
+                    cursor.execute(
+                        f"""
                         SELECT column_name 
                         FROM {database_name}.information_schema.columns 
                         WHERE table_schema = '{schema_name}' AND table_name = 'CLONE_METADATA'
-                    """)
+                    """
+                    )
                     metadata_columns = [row[0] for row in cursor.fetchall()]
                 except Exception:
                     # Fallback to DESCRIBE TABLE
                     try:
-                        cursor.execute(f"DESCRIBE TABLE {database_name}.{schema_name}.CLONE_METADATA")
+                        cursor.execute(
+                            f"DESCRIBE TABLE {database_name}.{schema_name}.CLONE_METADATA"
+                        )
                         desc_results = cursor.fetchall()
                         metadata_columns = [row[0] for row in desc_results]
                     except Exception:
                         metadata_columns = []
-                
-                expected_metadata_cols = ['CLONE_NAME', 'SOURCE_DATABASE', 'CREATED_AT']
-                has_metadata_structure = all(col in metadata_columns for col in expected_metadata_cols)
-                
+
+                expected_metadata_cols = ["CLONE_NAME", "SOURCE_DATABASE", "CREATED_AT"]
+                has_metadata_structure = all(
+                    col in metadata_columns for col in expected_metadata_cols
+                )
+
                 if has_metadata_structure:
                     test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = f"✅ Clone tracking implemented with metadata table containing {len(metadata_columns)} columns"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"✅ Clone tracking implemented with metadata table containing {len(metadata_columns)} columns"
                 else:
                     test_steps[3]["status"] = "failed"
-                    test_steps[3]["Result_Message"] = f"❌ Clone metadata table missing or incomplete structure"
-                    
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"❌ Clone metadata table missing or incomplete structure"
+
             except Exception:
                 # If CLONE_METADATA doesn't exist, check for other evidence of isolation testing
                 summary_views = []
                 try:
-                    cursor.execute(f"""
+                    cursor.execute(
+                        f"""
                         SELECT view_name 
                         FROM {database_name}.information_schema.views
                         WHERE table_schema = '{schema_name}'
                         AND (UPPER(view_name) LIKE '%SUMMARY%' OR UPPER(view_name) LIKE '%BUSINESS%')
-                    """)
+                    """
+                    )
                     summary_views = cursor.fetchall()
                 except Exception:
                     # Fallback to SHOW VIEWS
                     try:
-                        cursor.execute(f"SHOW VIEWS IN SCHEMA {database_name}.{schema_name}")
+                        cursor.execute(
+                            f"SHOW VIEWS IN SCHEMA {database_name}.{schema_name}"
+                        )
                         all_views = cursor.fetchall()
-                        summary_views = [view for view in all_views 
-                                       if any(keyword in view[0].upper() 
-                                             for keyword in ['SUMMARY', 'BUSINESS'])]
+                        summary_views = [
+                            view
+                            for view in all_views
+                            if any(
+                                keyword in view[0].upper()
+                                for keyword in ["SUMMARY", "BUSINESS"]
+                            )
+                        ]
                     except Exception:
                         summary_views = []
-                
+
                 if summary_views:
                     test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = f"✅ Data isolation testing setup with {len(summary_views)} comparison views"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"✅ Data isolation testing setup with {len(summary_views)} comparison views"
                 else:
                     test_steps[3]["status"] = "failed"
-                    test_steps[3]["Result_Message"] = "❌ No evidence of data isolation testing or comparison mechanisms"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = "❌ No evidence of data isolation testing or comparison mechanisms"
 
             # Step 5: Check for clone management implementation
             # Look for stored procedures, functions, or scripts for clone lifecycle management
             total_procedures = 0
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*)
                     FROM {database_name}.information_schema.procedures
                     WHERE procedure_schema = '{schema_name}'
-                """)
+                """
+                )
                 total_procedures = cursor.fetchone()[0]
             except Exception:
                 try:
-                    cursor.execute(f"SHOW PROCEDURES IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW PROCEDURES IN SCHEMA {database_name}.{schema_name}"
+                    )
                     procedures = cursor.fetchall()
                     total_procedures = len(procedures)
                 except Exception:
@@ -278,15 +343,19 @@ def validate_test(model_result, fixtures=None):
 
             total_functions = 0
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*)
                     FROM {database_name}.information_schema.functions
                     WHERE function_schema = '{schema_name}'
-                """)
+                """
+                )
                 total_functions = cursor.fetchone()[0]
             except Exception:
                 try:
-                    cursor.execute(f"SHOW FUNCTIONS IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW FUNCTIONS IN SCHEMA {database_name}.{schema_name}"
+                    )
                     functions = cursor.fetchall()
                     total_functions = len(functions)
                 except Exception:
@@ -295,29 +364,42 @@ def validate_test(model_result, fixtures=None):
             # Check for tables that might support clone management
             management_tables = []
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT table_name
                     FROM {database_name}.information_schema.tables
                     WHERE table_schema = '{schema_name}'
                     AND (UPPER(table_name) LIKE '%CLONE%' OR UPPER(table_name) LIKE '%METADATA%' OR UPPER(table_name) LIKE '%MANAGEMENT%')
-                """)
+                """
+                )
                 management_tables = cursor.fetchall()
             except Exception:
                 try:
-                    cursor.execute(f"SHOW TABLES IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW TABLES IN SCHEMA {database_name}.{schema_name}"
+                    )
                     all_tables = cursor.fetchall()
-                    management_tables = [table for table in all_tables 
-                                       if any(keyword in table[1].upper() 
-                                             for keyword in ['CLONE', 'METADATA', 'MANAGEMENT'])]
+                    management_tables = [
+                        table
+                        for table in all_tables
+                        if any(
+                            keyword in table[1].upper()
+                            for keyword in ["CLONE", "METADATA", "MANAGEMENT"]
+                        )
+                    ]
                 except Exception:
                     management_tables = []
 
             if total_procedures > 0 or total_functions > 0 or management_tables:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ Clone management infrastructure: {total_procedures} procedures, {total_functions} functions, {len(management_tables)} management tables"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ Clone management infrastructure: {total_procedures} procedures, {total_functions} functions, {len(management_tables)} management tables"
             else:
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = "❌ No clone management infrastructure found (procedures, functions, or management tables)"
+                test_steps[4][
+                    "Result_Message"
+                ] = "❌ No clone management infrastructure found (procedures, functions, or management tables)"
 
         finally:
             cursor.close()
@@ -331,8 +413,10 @@ def validate_test(model_result, fixtures=None):
                 step["Result_Message"] = f"❌ Validation error: {str(e)}"
 
     # Calculate score as the fraction of steps that passed
-    score = sum(1 for step in test_steps if step["status"] == "passed") / len(test_steps)
-    
+    score = sum(1 for step in test_steps if step["status"] == "passed") / len(
+        test_steps
+    )
+
     return {
         "score": score,
         "metadata": {"test_steps": test_steps},

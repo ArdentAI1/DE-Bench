@@ -201,8 +201,9 @@ def validate_test(model_result, fixtures=None):
                 # Test completed successfully
                 overall_success = True
                 print(
-                    "✅ Add Record to PostgreSQL Agent test passed - record inserted correctly"
-                , flush=True)
+                    "✅ Add Record to PostgreSQL Agent test passed - record inserted correctly",
+                    flush=True,
+                )
             else:
                 raise Exception(
                     f"Unexpected record count. Expected 4, got {total_count}"

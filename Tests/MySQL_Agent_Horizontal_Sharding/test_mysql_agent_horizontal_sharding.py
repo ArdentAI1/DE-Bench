@@ -36,53 +36,93 @@ def get_fixtures() -> List[DEBenchFixture]:
                     {
                         "name": "tenants",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "name", "type": "VARCHAR(100)", "not_null": True},
                             {"name": "plan_type", "type": "VARCHAR(50)"},
-                            {"name": "created_at", "type": "TIMESTAMP", "default": "CURRENT_TIMESTAMP"},
+                            {
+                                "name": "created_at",
+                                "type": "TIMESTAMP",
+                                "default": "CURRENT_TIMESTAMP",
+                            },
                             {"name": "active", "type": "BOOLEAN", "default": "TRUE"},
                         ],
                         "data": [
-                            {"name": f"Tenant_{i}", "plan_type": "premium" if i % 3 == 0 else "standard", "active": True}
+                            {
+                                "name": f"Tenant_{i}",
+                                "plan_type": "premium" if i % 3 == 0 else "standard",
+                                "active": True,
+                            }
                             for i in range(1, 21)  # 20 tenants
                         ],
                     },
                     {
                         "name": "users",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "tenant_id", "type": "INT", "not_null": True},
                             {"name": "email", "type": "VARCHAR(255)", "not_null": True},
                             {"name": "name", "type": "VARCHAR(100)"},
                             {"name": "role", "type": "VARCHAR(50)"},
-                            {"name": "created_at", "type": "TIMESTAMP", "default": "CURRENT_TIMESTAMP"},
+                            {
+                                "name": "created_at",
+                                "type": "TIMESTAMP",
+                                "default": "CURRENT_TIMESTAMP",
+                            },
                         ],
                         "data": [
-                            {"tenant_id": ((i-1) % 20) + 1, "email": f"user{i}@tenant{((i-1) % 20) + 1}.com", 
-                             "name": f"User {i}", "role": "member"}
+                            {
+                                "tenant_id": ((i - 1) % 20) + 1,
+                                "email": f"user{i}@tenant{((i-1) % 20) + 1}.com",
+                                "name": f"User {i}",
+                                "role": "member",
+                            }
                             for i in range(1, 101)  # 100 users across tenants
                         ],
                     },
                     {
                         "name": "projects",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "tenant_id", "type": "INT", "not_null": True},
                             {"name": "name", "type": "VARCHAR(255)", "not_null": True},
                             {"name": "status", "type": "VARCHAR(50)"},
                             {"name": "created_by", "type": "INT"},
-                            {"name": "updated_at", "type": "TIMESTAMP", "default": "CURRENT_TIMESTAMP"},
+                            {
+                                "name": "updated_at",
+                                "type": "TIMESTAMP",
+                                "default": "CURRENT_TIMESTAMP",
+                            },
                         ],
                         "data": [
-                            {"tenant_id": ((i-1) % 20) + 1, "name": f"Project {i}", 
-                             "status": "active", "created_by": i}
+                            {
+                                "tenant_id": ((i - 1) % 20) + 1,
+                                "name": f"Project {i}",
+                                "status": "active",
+                                "created_by": i,
+                            }
                             for i in range(1, 51)  # 50 projects
                         ],
                     },
                     {
                         "name": "tasks",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "project_id", "type": "INT", "not_null": True},
                             {"name": "title", "type": "VARCHAR(255)", "not_null": True},
                             {"name": "description", "type": "TEXT"},
@@ -91,9 +131,14 @@ def get_fixtures() -> List[DEBenchFixture]:
                             {"name": "due_date", "type": "DATE"},
                         ],
                         "data": [
-                            {"project_id": ((i-1) % 50) + 1, "title": f"Task {i}", 
-                             "description": f"Task description {i}", "status": "pending", 
-                             "assigned_to": ((i-1) % 100) + 1, "due_date": "2024-12-31"}
+                            {
+                                "project_id": ((i - 1) % 50) + 1,
+                                "title": f"Task {i}",
+                                "description": f"Task description {i}",
+                                "status": "pending",
+                                "assigned_to": ((i - 1) % 100) + 1,
+                                "due_date": "2024-12-31",
+                            }
                             for i in range(1, 151)  # 150 tasks
                         ],
                     },
@@ -186,9 +231,13 @@ def validate_test(model_result, fixtures=None):
         test_steps[0]["Result_Message"] = "✅ AI Agent completed successfully"
 
         # Get MySQL fixture
-        mysql_fixture = next(
-            (f for f in fixtures if f.get_resource_type() == "mysql_resource"), None
-        ) if fixtures else None
+        mysql_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "mysql_resource"), None
+            )
+            if fixtures
+            else None
+        )
 
         if not mysql_fixture:
             raise Exception("MySQL fixture not found")
@@ -210,7 +259,14 @@ def validate_test(model_result, fixtures=None):
             all_tables = [table[0].lower() for table in db_cursor.fetchall()]
 
             # Look for routing-related tables (flexible naming)
-            routing_tables = [t for t in all_tables if any(keyword in t for keyword in ['shard', 'routing', 'map', 'registry', 'tenant'])]
+            routing_tables = [
+                t
+                for t in all_tables
+                if any(
+                    keyword in t
+                    for keyword in ["shard", "routing", "map", "registry", "tenant"]
+                )
+            ]
 
             # Check shard_map table (preferred name)
             db_cursor.execute("SHOW TABLES LIKE 'shard_map'")
@@ -231,141 +287,186 @@ def validate_test(model_result, fixtures=None):
 
                 if mapping_count >= 15 and shard_count >= 4:
                     test_steps[1]["status"] = "passed"
-                    test_steps[1]["Result_Message"] = f"✅ Routing database created: {mapping_count} tenant mappings, {shard_count} shards registered"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"✅ Routing database created: {mapping_count} tenant mappings, {shard_count} shards registered"
                 else:
                     test_steps[1]["status"] = "partial"
-                    test_steps[1]["Result_Message"] = f"⚠️ Routing tables exist but incomplete: {mapping_count} mappings, {shard_count} shards"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"⚠️ Routing tables exist but incomplete: {mapping_count} mappings, {shard_count} shards"
             elif len(routing_tables) >= 1:
                 # Alternative routing implementation detected
                 test_steps[1]["status"] = "partial"
-                test_steps[1]["Result_Message"] = f"⚠️ Alternative routing detected (tables: {', '.join(routing_tables[:3])}), expected shard_map/shard_registry"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"⚠️ Alternative routing detected (tables: {', '.join(routing_tables[:3])}), expected shard_map/shard_registry"
             else:
                 test_steps[1]["status"] = "failed"
                 test_steps[1]["Result_Message"] = "❌ Routing database tables not found"
 
             # Step 3: Verify shard creation (check for databases or schemas named shard_*)
             print("🔍 Checking for shards...", flush=True)
-            
+
             # Check for databases or schemas with shard naming
             db_cursor.execute("SHOW DATABASES LIKE 'shard_%'")
             shard_databases = db_cursor.fetchall()
-            
+
             # Also check for schemas within current database
             db_cursor.execute("SHOW TABLES LIKE '%shard%'")
             shard_related_tables = db_cursor.fetchall()
-            
-            total_shards = len(shard_databases) + (1 if len(shard_related_tables) > 0 else 0)
-            
+
+            total_shards = len(shard_databases) + (
+                1 if len(shard_related_tables) > 0 else 0
+            )
+
             if total_shards >= 4:
                 test_steps[2]["status"] = "passed"
                 test_steps[2]["Result_Message"] = f"✅ {total_shards} shards detected"
             elif total_shards >= 2:
                 test_steps[2]["status"] = "partial"
-                test_steps[2]["Result_Message"] = f"⚠️ Only {total_shards} shards found, expected 4"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"⚠️ Only {total_shards} shards found, expected 4"
             else:
                 test_steps[2]["status"] = "failed"
                 test_steps[2]["Result_Message"] = "❌ Shards not properly created"
 
             # Step 4: Verify data distribution
             print("🔍 Checking data distribution...", flush=True)
-            
+
             if has_shard_map:
                 # Check distribution from shard_map
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT shard_id, COUNT(*) as tenant_count
                     FROM shard_map
                     GROUP BY shard_id
                     ORDER BY shard_id
-                """)
+                """
+                )
                 distribution = db_cursor.fetchall()
-                
+
                 if len(distribution) >= 2:
                     counts = [row[1] for row in distribution]
                     min_count = min(counts)
                     max_count = max(counts)
                     variance = max_count - min_count
-                    
+
                     # Check if distribution is reasonably balanced (within 50% variance)
                     avg_count = sum(counts) / len(counts)
                     is_balanced = variance <= avg_count * 0.5
-                    
+
                     test_steps[3]["status"] = "passed" if is_balanced else "partial"
-                    test_steps[3]["Result_Message"] = f"{'✅' if is_balanced else '⚠️'} Data distributed across {len(distribution)} shards: {dict(distribution)}"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"{'✅' if is_balanced else '⚠️'} Data distributed across {len(distribution)} shards: {dict(distribution)}"
                 else:
                     test_steps[3]["status"] = "failed"
-                    test_steps[3]["Result_Message"] = "❌ Insufficient data distribution"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = "❌ Insufficient data distribution"
             else:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = "❌ Cannot validate distribution without shard_map"
+                test_steps[3][
+                    "Result_Message"
+                ] = "❌ Cannot validate distribution without shard_map"
 
             # Step 5: Verify query routing functions
             try:
                 print("🔍 Checking query routing functions...", flush=True)
 
                 # Check for routing functions
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT ROUTINE_NAME
                     FROM information_schema.ROUTINES
                     WHERE ROUTINE_SCHEMA = %s
                     AND (ROUTINE_NAME LIKE '%shard%' OR ROUTINE_NAME LIKE '%route%')
                     AND ROUTINE_TYPE = 'FUNCTION'
-                """, (db_name,))
+                """,
+                    (db_name,),
+                )
                 routing_functions = db_cursor.fetchall()
 
                 if len(routing_functions) >= 1:
                     test_steps[4]["status"] = "passed"
-                    test_steps[4]["Result_Message"] = f"✅ Routing functions implemented: {', '.join([f[0] for f in routing_functions])}"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = f"✅ Routing functions implemented: {', '.join([f[0] for f in routing_functions])}"
                 else:
                     test_steps[4]["status"] = "partial"
-                    test_steps[4]["Result_Message"] = "⚠️ No routing functions found (may use alternative routing method)"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = "⚠️ No routing functions found (may use alternative routing method)"
             except Exception as e:
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = f"❌ Error checking routing functions: {str(e)}"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"❌ Error checking routing functions: {str(e)}"
 
             # Step 6: Verify rebalancing procedure
             try:
                 print("🔍 Checking rebalancing procedures...", flush=True)
 
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT ROUTINE_NAME
                     FROM information_schema.ROUTINES
                     WHERE ROUTINE_SCHEMA = %s
                     AND (ROUTINE_NAME LIKE '%move%tenant%' OR ROUTINE_NAME LIKE '%rebalance%' OR ROUTINE_NAME LIKE '%migrate%')
                     AND ROUTINE_TYPE = 'PROCEDURE'
-                """, (db_name,))
+                """,
+                    (db_name,),
+                )
                 rebalancing_procedures = db_cursor.fetchall()
 
                 if len(rebalancing_procedures) >= 1:
                     test_steps[5]["status"] = "passed"
-                    test_steps[5]["Result_Message"] = f"✅ Rebalancing procedures implemented: {', '.join([p[0] for p in rebalancing_procedures])}"
+                    test_steps[5][
+                        "Result_Message"
+                    ] = f"✅ Rebalancing procedures implemented: {', '.join([p[0] for p in rebalancing_procedures])}"
                 else:
                     test_steps[5]["status"] = "partial"
-                    test_steps[5]["Result_Message"] = "⚠️ No rebalancing procedures found (optional feature)"
+                    test_steps[5][
+                        "Result_Message"
+                    ] = "⚠️ No rebalancing procedures found (optional feature)"
             except Exception as e:
                 test_steps[5]["status"] = "failed"
-                test_steps[5]["Result_Message"] = f"❌ Error checking rebalancing procedures: {str(e)}"
+                test_steps[5][
+                    "Result_Message"
+                ] = f"❌ Error checking rebalancing procedures: {str(e)}"
 
             # Step 7: Verify monitoring views
             try:
                 print("🔍 Checking monitoring views...", flush=True)
 
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT TABLE_NAME
                     FROM information_schema.VIEWS
                     WHERE TABLE_SCHEMA = %s
                     AND (TABLE_NAME LIKE '%distribution%' OR TABLE_NAME LIKE '%capacity%' OR TABLE_NAME LIKE '%shard%')
-                """, (db_name,))
+                """,
+                    (db_name,),
+                )
                 monitoring_views = db_cursor.fetchall()
 
                 if len(monitoring_views) >= 1:
                     test_steps[6]["status"] = "passed"
-                    test_steps[6]["Result_Message"] = f"✅ Monitoring views created: {', '.join([v[0] for v in monitoring_views])}"
+                    test_steps[6][
+                        "Result_Message"
+                    ] = f"✅ Monitoring views created: {', '.join([v[0] for v in monitoring_views])}"
                 else:
                     test_steps[6]["status"] = "partial"
-                    test_steps[6]["Result_Message"] = "⚠️ No monitoring views found (recommended but optional)"
+                    test_steps[6][
+                        "Result_Message"
+                    ] = "⚠️ No monitoring views found (recommended but optional)"
             except Exception as e:
                 test_steps[6]["status"] = "failed"
-                test_steps[6]["Result_Message"] = f"❌ Error checking monitoring views: {str(e)}"
+                test_steps[6][
+                    "Result_Message"
+                ] = f"❌ Error checking monitoring views: {str(e)}"
 
         finally:
             db_cursor.close()
@@ -378,10 +479,16 @@ def validate_test(model_result, fixtures=None):
                 step["Result_Message"] = f"❌ Validation error: {str(e)}"
 
     # Calculate score with partial credit (passed=1.0, partial=0.5, failed=0.0)
-    score_sum = sum([
-        1.0 if step["status"] == "passed" else (0.5 if step["status"] == "partial" else 0.0)
-        for step in test_steps
-    ])
+    score_sum = sum(
+        [
+            (
+                1.0
+                if step["status"] == "passed"
+                else (0.5 if step["status"] == "partial" else 0.0)
+            )
+            for step in test_steps
+        ]
+    )
     score = score_sum / len(test_steps)
 
     return {

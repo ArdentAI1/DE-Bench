@@ -209,15 +209,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = (
-                "❌ AI Agent task execution failed or returned no result"
-            )
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = (
-            "✅ AI Agent completed task execution successfully"
-        )
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Get fixtures for Airflow, PostgreSQL, Snowflake, and GitHub
         airflow_fixture = (
@@ -304,9 +304,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1]["Result_Message"] = (
-            f"✅ Git branch '{branch_name}' created successfully"
-        )
+        test_steps[1][
+            "Result_Message"
+        ] = f"✅ Git branch '{branch_name}' created successfully"
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -385,9 +385,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2]["Result_Message"] = (
-            f"✅ PR '{pr_title}' created and merged successfully"
-        )
+        test_steps[2][
+            "Result_Message"
+        ] = f"✅ PR '{pr_title}' created and merged successfully"
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -396,16 +396,16 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action timed out (status: {action_status['status']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -416,15 +416,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4]["Result_Message"] = (
-                "❌ Airflow instance did not redeploy successfully"
-            )
+            test_steps[4][
+                "Result_Message"
+            ] = "❌ Airflow instance did not redeploy successfully"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4]["Result_Message"] = (
-            "✅ Airflow redeployed successfully after GitHub action"
-        )
+        test_steps[4][
+            "Result_Message"
+        ] = "✅ Airflow redeployed successfully after GitHub action"
 
         # DAG existence check
         dag_name = "schema_drift_alerting_etl"
@@ -435,9 +435,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5]["Result_Message"] = (
-                f"❌ DAG '{dag_name}' not found in Airflow"
-            )
+            test_steps[5][
+                "Result_Message"
+            ] = f"❌ DAG '{dag_name}' not found in Airflow"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG execution
@@ -452,9 +452,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[6]["status"] = "passed"
-        test_steps[6]["Result_Message"] = (
-            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
-        )
+        test_steps[6][
+            "Result_Message"
+        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -579,23 +579,23 @@ def validate_test(model_result, fixtures=None):
 
             if step_defs_count > 0 and step_runs_count > 0:
                 test_steps[7]["status"] = "passed"
-                test_steps[7]["Result_Message"] = (
-                    f"✅ PostgreSQL source data validated: {step_defs_count} step definitions, {step_runs_count} step runs"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"✅ PostgreSQL source data validated: {step_defs_count} step definitions, {step_runs_count} step runs"
             else:
                 test_steps[7]["status"] = "failed"
-                test_steps[7]["Result_Message"] = (
-                    f"❌ Insufficient source data: {step_defs_count} step definitions, {step_runs_count} step runs"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"❌ Insufficient source data: {step_defs_count} step definitions, {step_runs_count} step runs"
 
             postgres_cur.close()
             postgres_conn.close()
 
         except Exception as e:
             test_steps[7]["status"] = "failed"
-            test_steps[7]["Result_Message"] = (
-                f"❌ PostgreSQL validation error: {str(e)}"
-            )
+            test_steps[7][
+                "Result_Message"
+            ] = f"❌ PostgreSQL validation error: {str(e)}"
 
         # Step 9 & 10: Snowflake Target Data Validation
         try:
@@ -620,44 +620,46 @@ def validate_test(model_result, fixtures=None):
 
             if drift_events_count >= 0:  # Table exists even if no records
                 test_steps[8]["status"] = "passed"
-                test_steps[8]["Result_Message"] = (
-                    f"✅ Snowflake schema_drift_events table created with {drift_events_count} records"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = f"✅ Snowflake schema_drift_events table created with {drift_events_count} records"
 
                 # Step 10: Validate schema drift detection logic
                 if drift_events_count > 0:
                     # Check for required columns in drift events
-                    snowflake_cur.execute("""
+                    snowflake_cur.execute(
+                        """
                         SELECT drift_detected, drift_type, severity_level 
                         FROM schema_drift_events 
                         LIMIT 1
-                    """)
+                    """
+                    )
                     sample_record = snowflake_cur.fetchone()
 
                     if sample_record:
                         test_steps[9]["status"] = "passed"
-                        test_steps[9]["Result_Message"] = (
-                            f"✅ Schema drift detection validated: found drift events with proper structure"
-                        )
+                        test_steps[9][
+                            "Result_Message"
+                        ] = f"✅ Schema drift detection validated: found drift events with proper structure"
                     else:
                         test_steps[9]["status"] = "failed"
-                        test_steps[9]["Result_Message"] = (
-                            "❌ Schema drift events exist but lack proper structure"
-                        )
+                        test_steps[9][
+                            "Result_Message"
+                        ] = "❌ Schema drift events exist but lack proper structure"
                 else:
                     test_steps[9]["status"] = "passed"
-                    test_steps[9]["Result_Message"] = (
-                        "✅ Schema drift detection completed (no drift detected - which is valid)"
-                    )
+                    test_steps[9][
+                        "Result_Message"
+                    ] = "✅ Schema drift detection completed (no drift detected - which is valid)"
             else:
                 test_steps[8]["status"] = "failed"
-                test_steps[8]["Result_Message"] = (
-                    "❌ Snowflake schema_drift_events table not found"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = "❌ Snowflake schema_drift_events table not found"
                 test_steps[9]["status"] = "failed"
-                test_steps[9]["Result_Message"] = (
-                    "❌ Cannot validate drift detection - table not found"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = "❌ Cannot validate drift detection - table not found"
 
             snowflake_cur.close()
             snowflake_conn.close()

@@ -216,15 +216,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = (
-                "❌ AI Agent task execution failed or returned no result"
-            )
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = (
-            "✅ AI Agent completed task execution successfully"
-        )
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Get fixtures for Airflow, PostgreSQL, and GitHub
         airflow_fixture = None
@@ -297,9 +297,9 @@ def validate_test(model_result, fixtures=None):
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
             test_steps[1]["status"] = "passed"
-            test_steps[1]["Result_Message"] = (
-                f"✅ Git branch '{branch_name}' created successfully"
-            )
+            test_steps[1][
+                "Result_Message"
+            ] = f"✅ Git branch '{branch_name}' created successfully"
 
             # Capture agent's code snapshot for observability (after branch verification)
             print(
@@ -386,15 +386,15 @@ def validate_test(model_result, fixtures=None):
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
             test_steps[2]["status"] = "passed"
-            test_steps[2]["Result_Message"] = (
-                f"✅ PR '{pr_title}' created and merged successfully"
-            )
+            test_steps[2][
+                "Result_Message"
+            ] = f"✅ PR '{pr_title}' created and merged successfully"
 
         except Exception as e:
             test_steps[2]["status"] = "failed"
-            test_steps[2]["Result_Message"] = (
-                f"❌ Error with PR creation/merge: {str(e)}"
-            )
+            test_steps[2][
+                "Result_Message"
+            ] = f"❌ Error with PR creation/merge: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 4: Check if GitHub action completed
@@ -406,30 +406,30 @@ def validate_test(model_result, fixtures=None):
 
             if not action_status["completed"]:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = (
-                    f"❌ GitHub action timed out (status: {action_status['status']})"
-                )
+                test_steps[3][
+                    "Result_Message"
+                ] = f"❌ GitHub action timed out (status: {action_status['status']})"
                 test_steps[3]["action_status"] = action_status
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
             elif not action_status["success"]:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = (
-                    f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
-                )
+                test_steps[3][
+                    "Result_Message"
+                ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
                 test_steps[3]["action_status"] = action_status
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
             else:
                 test_steps[3]["status"] = "passed"
-                test_steps[3]["Result_Message"] = (
-                    "✅ GitHub action completed successfully"
-                )
+                test_steps[3][
+                    "Result_Message"
+                ] = "✅ GitHub action completed successfully"
                 test_steps[3]["action_status"] = action_status
 
         except Exception as e:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ Error checking GitHub action: {str(e)}"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ Error checking GitHub action: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 5: Verify Airflow redeployment
@@ -437,21 +437,21 @@ def validate_test(model_result, fixtures=None):
         try:
             if not airflow_instance.wait_for_airflow_to_be_ready():
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = (
-                    "❌ Airflow instance did not redeploy successfully"
-                )
+                test_steps[4][
+                    "Result_Message"
+                ] = "❌ Airflow instance did not redeploy successfully"
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
             test_steps[4]["status"] = "passed"
-            test_steps[4]["Result_Message"] = (
-                "✅ Airflow redeployed successfully after GitHub action"
-            )
+            test_steps[4][
+                "Result_Message"
+            ] = "✅ Airflow redeployed successfully after GitHub action"
 
         except Exception as e:
             test_steps[4]["status"] = "failed"
-            test_steps[4]["Result_Message"] = (
-                f"❌ Error verifying Airflow redeployment: {str(e)}"
-            )
+            test_steps[4][
+                "Result_Message"
+            ] = f"❌ Error verifying Airflow redeployment: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 6: Verify that sales_fact_creation_dag was created
@@ -462,21 +462,21 @@ def validate_test(model_result, fixtures=None):
             # Use airflow_instance method to check if DAG exists
             if airflow_instance.verify_airflow_dag_exists(dag_name):
                 test_steps[5]["status"] = "passed"
-                test_steps[5]["Result_Message"] = (
-                    f"✅ DAG '{dag_name}' found in Airflow"
-                )
+                test_steps[5][
+                    "Result_Message"
+                ] = f"✅ DAG '{dag_name}' found in Airflow"
             else:
                 test_steps[5]["status"] = "failed"
-                test_steps[5]["Result_Message"] = (
-                    f"❌ DAG '{dag_name}' not found in Airflow"
-                )
+                test_steps[5][
+                    "Result_Message"
+                ] = f"❌ DAG '{dag_name}' not found in Airflow"
                 return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         except Exception as e:
             test_steps[5]["status"] = "failed"
-            test_steps[5]["Result_Message"] = (
-                f"❌ Error checking DAG existence: {str(e)}"
-            )
+            test_steps[5][
+                "Result_Message"
+            ] = f"❌ Error checking DAG existence: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Step 7: Trigger DAG and wait for successful execution
@@ -497,15 +497,15 @@ def validate_test(model_result, fixtures=None):
             airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
 
             test_steps[6]["status"] = "passed"
-            test_steps[6]["Result_Message"] = (
-                f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
-            )
+            test_steps[6][
+                "Result_Message"
+            ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
         except Exception as e:
             test_steps[6]["status"] = "failed"
-            test_steps[6]["Result_Message"] = (
-                f"❌ Error triggering/monitoring DAG: {str(e)}"
-            )
+            test_steps[6][
+                "Result_Message"
+            ] = f"❌ Error triggering/monitoring DAG: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
@@ -616,20 +616,20 @@ def validate_test(model_result, fixtures=None):
 
                 if row_count > 0:
                     test_steps[7]["status"] = "passed"
-                    test_steps[7]["Result_Message"] = (
-                        f"✅ Found {row_count} records in sales_fact table"
-                    )
+                    test_steps[7][
+                        "Result_Message"
+                    ] = f"✅ Found {row_count} records in sales_fact table"
                 else:
                     test_steps[7]["status"] = "failed"
-                    test_steps[7]["Result_Message"] = (
-                        "❌ sales_fact table exists but has no data"
-                    )
+                    test_steps[7][
+                        "Result_Message"
+                    ] = "❌ sales_fact table exists but has no data"
 
             except psycopg2.Error as e:
                 test_steps[7]["status"] = "failed"
-                test_steps[7]["Result_Message"] = (
-                    f"❌ sales_fact table does not exist or is inaccessible: {str(e)}"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"❌ sales_fact table does not exist or is inaccessible: {str(e)}"
 
             # Step 9: Validate table structure
             try:
@@ -662,25 +662,25 @@ def validate_test(model_result, fixtures=None):
 
                     if not missing_columns:
                         test_steps[8]["status"] = "passed"
-                        test_steps[8]["Result_Message"] = (
-                            f"✅ Table structure valid. Columns: {', '.join(actual_columns)}"
-                        )
+                        test_steps[8][
+                            "Result_Message"
+                        ] = f"✅ Table structure valid. Columns: {', '.join(actual_columns)}"
                     else:
                         test_steps[8]["status"] = "failed"
-                        test_steps[8]["Result_Message"] = (
-                            f"❌ Missing expected columns: {', '.join(missing_columns)}"
-                        )
+                        test_steps[8][
+                            "Result_Message"
+                        ] = f"❌ Missing expected columns: {', '.join(missing_columns)}"
                 else:
                     test_steps[8]["status"] = "failed"
-                    test_steps[8]["Result_Message"] = (
-                        "❌ Could not retrieve table structure"
-                    )
+                    test_steps[8][
+                        "Result_Message"
+                    ] = "❌ Could not retrieve table structure"
 
             except Exception as e:
                 test_steps[8]["status"] = "failed"
-                test_steps[8]["Result_Message"] = (
-                    f"❌ Error validating table structure: {str(e)}"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = f"❌ Error validating table structure: {str(e)}"
 
             # Step 10: Verify foreign key constraints
             try:
@@ -712,25 +712,25 @@ def validate_test(model_result, fixtures=None):
 
                     if not missing_fks:
                         test_steps[9]["status"] = "passed"
-                        test_steps[9]["Result_Message"] = (
-                            f"✅ Found {len(foreign_keys)} foreign key constraints: {', '.join(fk_columns)}"
-                        )
+                        test_steps[9][
+                            "Result_Message"
+                        ] = f"✅ Found {len(foreign_keys)} foreign key constraints: {', '.join(fk_columns)}"
                     else:
                         test_steps[9]["status"] = "failed"
-                        test_steps[9]["Result_Message"] = (
-                            f"❌ Missing foreign key constraints for: {', '.join(missing_fks)}"
-                        )
+                        test_steps[9][
+                            "Result_Message"
+                        ] = f"❌ Missing foreign key constraints for: {', '.join(missing_fks)}"
                 else:
                     test_steps[9]["status"] = "failed"
-                    test_steps[9]["Result_Message"] = (
-                        f"❌ Expected at least 3 foreign key constraints, found {len(foreign_keys)}"
-                    )
+                    test_steps[9][
+                        "Result_Message"
+                    ] = f"❌ Expected at least 3 foreign key constraints, found {len(foreign_keys)}"
 
             except Exception as e:
                 test_steps[9]["status"] = "failed"
-                test_steps[9]["Result_Message"] = (
-                    f"❌ Error checking foreign key constraints: {str(e)}"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = f"❌ Error checking foreign key constraints: {str(e)}"
 
             # Step 11: Verify data integrity
             try:
@@ -748,20 +748,20 @@ def validate_test(model_result, fixtures=None):
 
                 if orphaned_records == 0:
                     test_steps[10]["status"] = "passed"
-                    test_steps[10]["Result_Message"] = (
-                        "✅ All foreign key references are valid"
-                    )
+                    test_steps[10][
+                        "Result_Message"
+                    ] = "✅ All foreign key references are valid"
                 else:
                     test_steps[10]["status"] = "failed"
-                    test_steps[10]["Result_Message"] = (
-                        f"❌ Found {orphaned_records} records with invalid foreign key references"
-                    )
+                    test_steps[10][
+                        "Result_Message"
+                    ] = f"❌ Found {orphaned_records} records with invalid foreign key references"
 
             except Exception as e:
                 test_steps[10]["status"] = "failed"
-                test_steps[10]["Result_Message"] = (
-                    f"❌ Error validating data integrity: {str(e)}"
-                )
+                test_steps[10][
+                    "Result_Message"
+                ] = f"❌ Error validating data integrity: {str(e)}"
 
             # Step 12: Verify business logic
             try:
@@ -777,20 +777,20 @@ def validate_test(model_result, fixtures=None):
 
                 if invalid_totals == 0:
                     test_steps[11]["status"] = "passed"
-                    test_steps[11]["Result_Message"] = (
-                        "✅ Business logic validation passed: total_amount = quantity * unit_price"
-                    )
+                    test_steps[11][
+                        "Result_Message"
+                    ] = "✅ Business logic validation passed: total_amount = quantity * unit_price"
                 else:
                     test_steps[11]["status"] = "failed"
-                    test_steps[11]["Result_Message"] = (
-                        f"❌ Found {invalid_totals} records where total_amount doesn't equal quantity * unit_price"
-                    )
+                    test_steps[11][
+                        "Result_Message"
+                    ] = f"❌ Found {invalid_totals} records where total_amount doesn't equal quantity * unit_price"
 
             except Exception as e:
                 test_steps[11]["status"] = "failed"
-                test_steps[11]["Result_Message"] = (
-                    f"❌ Error validating business logic: {str(e)}"
-                )
+                test_steps[11][
+                    "Result_Message"
+                ] = f"❌ Error validating business logic: {str(e)}"
 
             # Close database connection
             cur.close()
@@ -801,9 +801,9 @@ def validate_test(model_result, fixtures=None):
             for i in range(7, 12):
                 if test_steps[i]["status"] == "running":
                     test_steps[i]["status"] = "failed"
-                    test_steps[i]["Result_Message"] = (
-                        f"❌ Database validation error: {str(e)}"
-                    )
+                    test_steps[i][
+                        "Result_Message"
+                    ] = f"❌ Database validation error: {str(e)}"
 
     except Exception as e:
         # Mark any unfinished steps as failed

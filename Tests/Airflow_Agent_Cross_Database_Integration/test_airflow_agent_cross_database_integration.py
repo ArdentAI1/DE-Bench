@@ -320,9 +320,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1]["Result_Message"] = (
-            f"✅ Git branch '{branch_name}' created successfully"
-        )
+        test_steps[1][
+            "Result_Message"
+        ] = f"✅ Git branch '{branch_name}' created successfully"
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -407,9 +407,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2]["Result_Message"] = (
-            f"✅ PR '{pr_title}' created and merged successfully"
-        )
+        test_steps[2][
+            "Result_Message"
+        ] = f"✅ PR '{pr_title}' created and merged successfully"
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -418,9 +418,9 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action timed out (status: {action_status['status']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
             test_steps[3]["action_status"] = action_status
             # Mark remaining steps as failed
             for step in test_steps:
@@ -430,9 +430,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
             test_steps[3]["action_status"] = action_status
             # CI details are automatically included in action_status["ci_details"]
             if "ci_details" in action_status:
@@ -459,9 +459,9 @@ def validate_test(model_result, fixtures=None):
 
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4]["Result_Message"] = (
-                "❌ Airflow instance did not redeploy successfully"
-            )
+            test_steps[4][
+                "Result_Message"
+            ] = "❌ Airflow instance did not redeploy successfully"
             # Mark remaining steps as failed
             for step in test_steps:
                 if step["status"] == "running":
@@ -470,9 +470,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4]["Result_Message"] = (
-            "✅ Airflow redeployed successfully after GitHub action"
-        )
+        test_steps[4][
+            "Result_Message"
+        ] = "✅ Airflow redeployed successfully after GitHub action"
 
         # Check DAG
         dag_name = "cross_database_analytics_pipeline"
@@ -483,9 +483,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5]["Result_Message"] = (
-                f"❌ DAG '{dag_name}' not found in Airflow"
-            )
+            test_steps[5][
+                "Result_Message"
+            ] = f"❌ DAG '{dag_name}' not found in Airflow"
             # Mark remaining steps as failed
             for step in test_steps:
                 if step["status"] == "running":
@@ -510,9 +510,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[6]["status"] = "passed"
-        test_steps[6]["Result_Message"] = (
-            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
-        )
+        test_steps[6][
+            "Result_Message"
+        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -623,14 +623,14 @@ def validate_test(model_result, fixtures=None):
 
             if len(staging_tables) >= 2:
                 test_steps[7]["status"] = "passed"
-                test_steps[7]["Result_Message"] = (
-                    f"✅ Found {len(staging_tables)} staging tables"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"✅ Found {len(staging_tables)} staging tables"
             else:
                 test_steps[7]["status"] = "partial"
-                test_steps[7]["Result_Message"] = (
-                    f"⚠️ Found {len(all_tables)} tables in Snowflake"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"⚠️ Found {len(all_tables)} tables in Snowflake"
 
             # Check for customer_360 or unified view
             customer_360_tables = [
@@ -648,19 +648,19 @@ def validate_test(model_result, fixtures=None):
 
                 if row_count > 0:
                     test_steps[8]["status"] = "passed"
-                    test_steps[8]["Result_Message"] = (
-                        f"✅ customer_360 view created with {row_count} customers"
-                    )
+                    test_steps[8][
+                        "Result_Message"
+                    ] = f"✅ customer_360 view created with {row_count} customers"
                 else:
                     test_steps[8]["status"] = "partial"
-                    test_steps[8]["Result_Message"] = (
-                        "⚠️ customer_360 table exists but has no data"
-                    )
+                    test_steps[8][
+                        "Result_Message"
+                    ] = "⚠️ customer_360 table exists but has no data"
             else:
                 test_steps[8]["status"] = "partial"
-                test_steps[8]["Result_Message"] = (
-                    f"⚠️ customer_360 table not found (found: {all_tables[:3]})"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = f"⚠️ customer_360 table not found (found: {all_tables[:3]})"
 
         finally:
             snowflake_cur.close()

@@ -198,15 +198,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = (
-                "❌ AI Agent task execution failed or returned no result"
-            )
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = (
-            "✅ AI Agent completed task execution successfully"
-        )
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Get fixtures for Airflow, PostgreSQL, and GitHub
         airflow_fixture = (
@@ -277,9 +277,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1]["Result_Message"] = (
-            f"✅ Git branch '{branch_name}' created successfully"
-        )
+        test_steps[1][
+            "Result_Message"
+        ] = f"✅ Git branch '{branch_name}' created successfully"
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -358,9 +358,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2]["Result_Message"] = (
-            f"✅ PR '{pr_title}' created and merged successfully"
-        )
+        test_steps[2][
+            "Result_Message"
+        ] = f"✅ PR '{pr_title}' created and merged successfully"
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -369,16 +369,16 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action timed out (status: {action_status['status']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3]["Result_Message"] = (
-                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
-            )
+            test_steps[3][
+                "Result_Message"
+            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -389,15 +389,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4]["Result_Message"] = (
-                "❌ Airflow instance did not redeploy successfully"
-            )
+            test_steps[4][
+                "Result_Message"
+            ] = "❌ Airflow instance did not redeploy successfully"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4]["Result_Message"] = (
-            "✅ Airflow redeployed successfully after GitHub action"
-        )
+        test_steps[4][
+            "Result_Message"
+        ] = "✅ Airflow redeployed successfully after GitHub action"
 
         # DAG existence check
         dag_name = "hil_ops_dashboard_etl"
@@ -408,9 +408,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5]["Result_Message"] = (
-                f"❌ DAG '{dag_name}' not found in Airflow"
-            )
+            test_steps[5][
+                "Result_Message"
+            ] = f"❌ DAG '{dag_name}' not found in Airflow"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG execution
@@ -425,9 +425,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[6]["status"] = "passed"
-        test_steps[6]["Result_Message"] = (
-            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
-        )
+        test_steps[6][
+            "Result_Message"
+        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -534,20 +534,20 @@ def validate_test(model_result, fixtures=None):
 
             if interventions_count > 0:
                 test_steps[7]["status"] = "passed"
-                test_steps[7]["Result_Message"] = (
-                    f"✅ Source interventions data validated: {interventions_count} interventions"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"✅ Source interventions data validated: {interventions_count} interventions"
             else:
                 test_steps[7]["status"] = "failed"
-                test_steps[7]["Result_Message"] = (
-                    "❌ No source data found in interventions table"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = "❌ No source data found in interventions table"
 
         except psycopg2.Error as e:
             test_steps[7]["status"] = "failed"
-            test_steps[7]["Result_Message"] = (
-                f"❌ Interventions table validation error: {str(e)}"
-            )
+            test_steps[7][
+                "Result_Message"
+            ] = f"❌ Interventions table validation error: {str(e)}"
 
         # Step 9: Check if ops_queue table was created
         try:
@@ -555,45 +555,47 @@ def validate_test(model_result, fixtures=None):
             ops_queue_count = cur.fetchone()[0]
 
             test_steps[8]["status"] = "passed"
-            test_steps[8]["Result_Message"] = (
-                f"✅ Ops queue table created with {ops_queue_count} records"
-            )
+            test_steps[8][
+                "Result_Message"
+            ] = f"✅ Ops queue table created with {ops_queue_count} records"
 
         except psycopg2.Error as e:
             test_steps[8]["status"] = "failed"
-            test_steps[8]["Result_Message"] = (
-                f"❌ Ops queue table validation error: {str(e)}"
-            )
+            test_steps[8][
+                "Result_Message"
+            ] = f"❌ Ops queue table validation error: {str(e)}"
 
         # Step 10: Check data categorization
         try:
             # Check if categorized data exists with proper intervention types
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT intervention_type, COUNT(*) 
                 FROM ops_queue 
                 WHERE intervention_type IN ('validation_error', 'step_error', 'external_api_fail')
                 GROUP BY intervention_type
-            """)
+            """
+            )
             categorization_results = cur.fetchall()
 
             if categorization_results:
                 categories = [row[0] for row in categorization_results]
                 total_categorized = sum([row[1] for row in categorization_results])
                 test_steps[9]["status"] = "passed"
-                test_steps[9]["Result_Message"] = (
-                    f"✅ Data categorization validated: {total_categorized} records across {len(categories)} categories"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = f"✅ Data categorization validated: {total_categorized} records across {len(categories)} categories"
             else:
                 test_steps[9]["status"] = "failed"
-                test_steps[9]["Result_Message"] = (
-                    "❌ No properly categorized interventions found"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = "❌ No properly categorized interventions found"
 
         except psycopg2.Error as e:
             test_steps[9]["status"] = "failed"
-            test_steps[9]["Result_Message"] = (
-                f"❌ Data categorization validation error: {str(e)}"
-            )
+            test_steps[9][
+                "Result_Message"
+            ] = f"❌ Data categorization validation error: {str(e)}"
 
         cur.close()
         conn.close()

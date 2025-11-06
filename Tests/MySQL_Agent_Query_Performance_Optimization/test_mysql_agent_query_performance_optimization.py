@@ -36,7 +36,11 @@ def get_fixtures() -> List[DEBenchFixture]:
                     {
                         "name": "customers",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "email", "type": "VARCHAR(255)", "not_null": True},
                             {"name": "name", "type": "VARCHAR(100)"},
                             {"name": "registration_date", "type": "DATE"},
@@ -44,15 +48,23 @@ def get_fixtures() -> List[DEBenchFixture]:
                         ],
                         # No index on email or registration_date intentionally
                         "data": [
-                            {"email": f"customer{i}@example.com", "name": f"Customer {i}", 
-                             "registration_date": "2024-01-01", "region": "US"}
+                            {
+                                "email": f"customer{i}@example.com",
+                                "name": f"Customer {i}",
+                                "registration_date": "2024-01-01",
+                                "region": "US",
+                            }
                             for i in range(1, 101)
                         ],
                     },
                     {
                         "name": "products",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "name", "type": "VARCHAR(255)", "not_null": True},
                             {"name": "category", "type": "VARCHAR(100)"},
                             {"name": "price", "type": "DECIMAL(10,2)"},
@@ -60,15 +72,23 @@ def get_fixtures() -> List[DEBenchFixture]:
                         ],
                         # No index on category or price intentionally
                         "data": [
-                            {"name": f"Product {i}", "category": f"Category {i % 10}", 
-                             "price": 10.00 + (i % 100), "cost": 5.00 + (i % 50)}
+                            {
+                                "name": f"Product {i}",
+                                "category": f"Category {i % 10}",
+                                "price": 10.00 + (i % 100),
+                                "cost": 5.00 + (i % 50),
+                            }
                             for i in range(1, 101)
                         ],
                     },
                     {
                         "name": "orders",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "customer_id", "type": "INT", "not_null": True},
                             {"name": "order_date", "type": "DATE", "not_null": True},
                             {"name": "total_amount", "type": "DECIMAL(10,2)"},
@@ -76,15 +96,23 @@ def get_fixtures() -> List[DEBenchFixture]:
                         ],
                         # No index on customer_id, order_date, or status intentionally
                         "data": [
-                            {"customer_id": (i % 100) + 1, "order_date": "2024-01-15", 
-                             "total_amount": 100.00 + (i % 500), "status": "completed" if i % 2 == 0 else "pending"}
+                            {
+                                "customer_id": (i % 100) + 1,
+                                "order_date": "2024-01-15",
+                                "total_amount": 100.00 + (i % 500),
+                                "status": "completed" if i % 2 == 0 else "pending",
+                            }
                             for i in range(1, 201)
                         ],
                     },
                     {
                         "name": "order_items",
                         "columns": [
-                            {"name": "id", "type": "INT AUTO_INCREMENT", "primary_key": True},
+                            {
+                                "name": "id",
+                                "type": "INT AUTO_INCREMENT",
+                                "primary_key": True,
+                            },
                             {"name": "order_id", "type": "INT", "not_null": True},
                             {"name": "product_id", "type": "INT", "not_null": True},
                             {"name": "quantity", "type": "INT"},
@@ -92,8 +120,12 @@ def get_fixtures() -> List[DEBenchFixture]:
                         ],
                         # No index on order_id or product_id intentionally
                         "data": [
-                            {"order_id": (i % 200) + 1, "product_id": (i % 100) + 1, 
-                             "quantity": i % 10 + 1, "unit_price": 10.00 + (i % 100)}
+                            {
+                                "order_id": (i % 200) + 1,
+                                "product_id": (i % 100) + 1,
+                                "quantity": i % 10 + 1,
+                                "unit_price": 10.00 + (i % 100),
+                            }
                             for i in range(1, 401)
                         ],
                     },
@@ -181,9 +213,13 @@ def validate_test(model_result, fixtures=None):
         test_steps[0]["Result_Message"] = "✅ AI Agent completed successfully"
 
         # Get MySQL fixture
-        mysql_fixture = next(
-            (f for f in fixtures if f.get_resource_type() == "mysql_resource"), None
-        ) if fixtures else None
+        mysql_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "mysql_resource"), None
+            )
+            if fixtures
+            else None
+        )
 
         if not mysql_fixture:
             raise Exception("MySQL fixture not found")
@@ -204,117 +240,157 @@ def validate_test(model_result, fixtures=None):
 
             # Step 3: Verify index creation
             print("🔍 Checking for new indexes...", flush=True)
-            
+
             # Check indexes on each table
             tables_to_check = ["customers", "products", "orders", "order_items"]
             total_new_indexes = 0
-            
+
             for table in tables_to_check:
                 db_cursor.execute(f"SHOW INDEX FROM {table}")
                 indexes = db_cursor.fetchall()
                 # Count non-primary key indexes
-                non_pk_indexes = [idx for idx in indexes if idx[2] != 'PRIMARY']
+                non_pk_indexes = [idx for idx in indexes if idx[2] != "PRIMARY"]
                 total_new_indexes += len(non_pk_indexes)
-            
+
             if total_new_indexes >= 4:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ {total_new_indexes} indexes created across tables"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ {total_new_indexes} indexes created across tables"
             else:
                 test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = f"❌ Only {total_new_indexes} indexes found, expected at least 4"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"❌ Only {total_new_indexes} indexes found, expected at least 4"
 
             # Step 4: Test query performance
             print("🔍 Testing query performance...", flush=True)
-            
+
             # Test a typical join query
             import time as time_module
+
             start_time = time_module.time()
-            
-            db_cursor.execute("""
+
+            db_cursor.execute(
+                """
                 SELECT c.name, COUNT(o.id) as order_count
                 FROM customers c
                 LEFT JOIN orders o ON c.id = o.customer_id
                 WHERE c.registration_date >= '2024-01-01'
                 GROUP BY c.id, c.name
                 LIMIT 10
-            """)
+            """
+            )
             results = db_cursor.fetchall()
-            
+
             end_time = time_module.time()
             query_time_ms = (end_time - start_time) * 1000
-            
+
             if query_time_ms < 1000:  # Less than 1 second
                 test_steps[3]["status"] = "passed"
-                test_steps[3]["Result_Message"] = f"✅ Query performance good: {query_time_ms:.2f}ms"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"✅ Query performance good: {query_time_ms:.2f}ms"
             else:
                 test_steps[3]["status"] = "partial"
-                test_steps[3]["Result_Message"] = f"⚠️ Query completed but slow: {query_time_ms:.2f}ms"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"⚠️ Query completed but slow: {query_time_ms:.2f}ms"
 
             # Step 5: Check FK indexes specifically
             print("🔍 Checking foreign key indexes...", flush=True)
-            
+
             fk_indexed = 0
-            
+
             # Check if customer_id in orders is indexed
-            db_cursor.execute("SHOW INDEX FROM orders WHERE Column_name = 'customer_id'")
+            db_cursor.execute(
+                "SHOW INDEX FROM orders WHERE Column_name = 'customer_id'"
+            )
             result = db_cursor.fetchall()  # Consume all results
             if result:
                 fk_indexed += 1
-            
+
             # Check if order_id in order_items is indexed
-            db_cursor.execute("SHOW INDEX FROM order_items WHERE Column_name = 'order_id'")
+            db_cursor.execute(
+                "SHOW INDEX FROM order_items WHERE Column_name = 'order_id'"
+            )
             result = db_cursor.fetchall()  # Consume all results
             if result:
                 fk_indexed += 1
-            
+
             # Check if product_id in order_items is indexed
-            db_cursor.execute("SHOW INDEX FROM order_items WHERE Column_name = 'product_id'")
+            db_cursor.execute(
+                "SHOW INDEX FROM order_items WHERE Column_name = 'product_id'"
+            )
             result = db_cursor.fetchall()  # Consume all results
             if result:
                 fk_indexed += 1
-            
+
             if fk_indexed >= 2:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ {fk_indexed} foreign key columns indexed"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ {fk_indexed} foreign key columns indexed"
             else:
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = f"❌ Only {fk_indexed} FK columns indexed, expected at least 2"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"❌ Only {fk_indexed} FK columns indexed, expected at least 2"
 
             # Step 6: Check index usage with EXPLAIN
             print("🔍 Checking index usage with EXPLAIN...", flush=True)
-            
+
             try:
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     EXPLAIN SELECT * FROM orders WHERE customer_id = 1
-                """)
+                """
+                )
                 explain_result = db_cursor.fetchall()
-                uses_index = any('index' in str(row).lower() or 'ref' in str(row).lower() for row in explain_result)
+                uses_index = any(
+                    "index" in str(row).lower() or "ref" in str(row).lower()
+                    for row in explain_result
+                )
             except Exception as e:
                 print(f"EXPLAIN query error: {e}", flush=True)
                 uses_index = False
-            
+
             if uses_index:
                 test_steps[5]["status"] = "passed"
-                test_steps[5]["Result_Message"] = "✅ Queries using indexes (verified with EXPLAIN)"
+                test_steps[5][
+                    "Result_Message"
+                ] = "✅ Queries using indexes (verified with EXPLAIN)"
             else:
                 test_steps[5]["status"] = "failed"
-                test_steps[5]["Result_Message"] = "❌ EXPLAIN shows table scans, indexes not being used"
+                test_steps[5][
+                    "Result_Message"
+                ] = "❌ EXPLAIN shows table scans, indexes not being used"
 
             # Step 7: Check for summary tables
             print("🔍 Looking for summary/aggregate tables...", flush=True)
-            
+
             try:
                 db_cursor.execute("SHOW TABLES")
                 all_tables = [row[0] for row in db_cursor.fetchall()]
-                
-                summary_tables = [t for t in all_tables if 'summary' in t.lower() or 'aggregate' in t.lower() or 'report' in t.lower()]
-                
+
+                summary_tables = [
+                    t
+                    for t in all_tables
+                    if "summary" in t.lower()
+                    or "aggregate" in t.lower()
+                    or "report" in t.lower()
+                ]
+
                 if len(summary_tables) > 0:
                     test_steps[6]["status"] = "passed"
-                    test_steps[6]["Result_Message"] = f"✅ Found {len(summary_tables)} summary table(s): {', '.join(summary_tables)}"
+                    test_steps[6][
+                        "Result_Message"
+                    ] = f"✅ Found {len(summary_tables)} summary table(s): {', '.join(summary_tables)}"
                 else:
                     test_steps[6]["status"] = "partial"
-                    test_steps[6]["Result_Message"] = "⚠️ No summary tables found (optional optimization)"
+                    test_steps[6][
+                        "Result_Message"
+                    ] = "⚠️ No summary tables found (optional optimization)"
             except Exception as e:
                 print(f"Summary table check error: {e}", flush=True)
                 test_steps[6]["status"] = "partial"

@@ -108,20 +108,31 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed or returned no result"
-            score = sum([step["status"] == "passed" for step in test_steps]) / len(test_steps)
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
+            score = sum([step["status"] == "passed" for step in test_steps]) / len(
+                test_steps
+            )
             return {
                 "score": score,
                 "metadata": {"test_steps": test_steps},
             }
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = "✅ AI Agent completed task execution successfully"
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Use fixture to get PostgreSQL connection for validation
-        postgres_fixture = next(
-            (f for f in fixtures if f.get_resource_type() == "postgres_resource"), None
-        ) if fixtures else None
+        postgres_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "postgres_resource"),
+                None,
+            )
+            if fixtures
+            else None
+        )
 
         if not postgres_fixture:
             raise Exception("PostgreSQL fixture not found")
@@ -140,104 +151,134 @@ def validate_test(model_result, fixtures=None):
 
         try:
             # Discover actual column names from schema
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'accounts'
                 AND column_name LIKE '%id%'
                 ORDER BY ordinal_position
                 LIMIT 1
-            """)
+            """
+            )
             accounts_pk_result = db_cursor.fetchone()
-            accounts_pk = accounts_pk_result[0] if accounts_pk_result else 'id'
+            accounts_pk = accounts_pk_result[0] if accounts_pk_result else "id"
 
             # Discover transaction table foreign keys
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'transactions'
                 AND column_name LIKE '%account%'
                 ORDER BY ordinal_position
-            """)
+            """
+            )
             transaction_fk_cols = [row[0] for row in db_cursor.fetchall()]
 
             # Identify from/to columns
-            from_account_col = next((col for col in transaction_fk_cols if 'from' in col.lower()), 'from_account_id')
-            to_account_col = next((col for col in transaction_fk_cols if 'to' in col.lower()), 'to_account_id')
+            from_account_col = next(
+                (col for col in transaction_fk_cols if "from" in col.lower()),
+                "from_account_id",
+            )
+            to_account_col = next(
+                (col for col in transaction_fk_cols if "to" in col.lower()),
+                "to_account_id",
+            )
 
             # Discover transaction id column
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'transactions'
                 AND (column_name LIKE '%transaction%id%' OR column_name = 'id')
                 ORDER BY ordinal_position
                 LIMIT 1
-            """)
+            """
+            )
             transaction_pk_result = db_cursor.fetchone()
-            transaction_pk = transaction_pk_result[0] if transaction_pk_result else 'transaction_id'
+            transaction_pk = (
+                transaction_pk_result[0] if transaction_pk_result else "transaction_id"
+            )
 
             # Step 2: Verify transaction processing
             print("🔍 Checking transaction processing...", flush=True)
-            
+
             # Check if transactions were created beyond the seed data
             db_cursor.execute("SELECT COUNT(*) FROM transactions")
             transaction_count = db_cursor.fetchone()[0]
-            
+
             # Check transaction status distribution
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT status, COUNT(*) 
                 FROM transactions 
                 GROUP BY status 
                 ORDER BY status
-            """)
+            """
+            )
             transaction_status = db_cursor.fetchall()
-            
+
             if transaction_count > 5:  # More than just seed transactions
                 # Look for different transaction types
-                db_cursor.execute("""
+                db_cursor.execute(
+                    """
                     SELECT transaction_type, COUNT(*) 
                     FROM transactions 
                     GROUP BY transaction_type
-                """)
+                """
+                )
                 transaction_types = db_cursor.fetchall()
-                
+
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = f"✅ Transaction processing active - {transaction_count} total transactions with types: {transaction_types}"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ Transaction processing active - {transaction_count} total transactions with types: {transaction_types}"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ No evidence of transaction processing - only {transaction_count} transactions found"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ No evidence of transaction processing - only {transaction_count} transactions found"
 
             # Step 3: Verify concurrency control mechanisms
             print("🔍 Testing concurrency control...", flush=True)
-            
+
             # Check for evidence of concurrent transaction handling
             # Look for transactions with retry counts (indicates deadlock handling)
             db_cursor.execute("SELECT COUNT(*) FROM transactions WHERE retry_count > 0")
             retry_transactions = db_cursor.fetchone()[0]
-            
+
             # Check for transaction locks (indicates proper locking strategy)
             db_cursor.execute("SELECT COUNT(*) FROM transaction_locks")
             active_locks = db_cursor.fetchone()[0]
-            
+
             # Check for optimistic locking usage (version field increments)
             db_cursor.execute("SELECT COUNT(*) FROM accounts WHERE version > 0")
             versioned_accounts = db_cursor.fetchone()[0]
-            
+
             concurrency_indicators = []
             if retry_transactions > 0:
-                concurrency_indicators.append(f"{retry_transactions} retry transactions")
+                concurrency_indicators.append(
+                    f"{retry_transactions} retry transactions"
+                )
             if active_locks > 0:
                 concurrency_indicators.append(f"{active_locks} transaction locks")
             if versioned_accounts > 0:
-                concurrency_indicators.append(f"{versioned_accounts} versioned accounts")
-            
+                concurrency_indicators.append(
+                    f"{versioned_accounts} versioned accounts"
+                )
+
             if len(concurrency_indicators) >= 1:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ Concurrency control mechanisms present: {', '.join(concurrency_indicators)}"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Concurrency control mechanisms present: {', '.join(concurrency_indicators)}"
             else:
                 test_steps[2]["status"] = "partial"
-                test_steps[2]["Result_Message"] = "⚠️ Limited evidence of concurrency control mechanisms"
+                test_steps[2][
+                    "Result_Message"
+                ] = "⚠️ Limited evidence of concurrency control mechanisms"
 
             # Step 4: Verify data consistency
             print("🔍 Checking data consistency...", flush=True)
@@ -248,7 +289,8 @@ def validate_test(model_result, fixtures=None):
                 negative_balances = db_cursor.fetchone()[0]
 
                 # Check balance consistency with transaction history
-                db_cursor.execute(f"""
+                db_cursor.execute(
+                    f"""
                     WITH account_totals AS (
                         SELECT a.{accounts_pk}, a.balance,
                                COALESCE(SUM(CASE WHEN t.{to_account_col} = a.{accounts_pk} THEN t.amount ELSE 0 END), 0) as credits,
@@ -261,25 +303,34 @@ def validate_test(model_result, fixtures=None):
                     SELECT {accounts_pk}, balance, credits, debits
                     FROM account_totals
                     WHERE ABS(balance - (credits - debits)) > 0.01
-                """)
+                """
+                )
                 inconsistent_balances = db_cursor.fetchall()
             except psycopg2.Error as e:
                 db_connection.rollback()
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"❌ Schema mismatch in data consistency check: {str(e)}"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"❌ Schema mismatch in data consistency check: {str(e)}"
                 negative_balances = -1  # Signal error occurred
                 inconsistent_balances = []
-            
+
             if negative_balances >= 0:  # Only check if query succeeded
                 if negative_balances == 0 and len(inconsistent_balances) == 0:
                     test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = "✅ Data consistency maintained - no negative balances or inconsistencies"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = "✅ Data consistency maintained - no negative balances or inconsistencies"
                 elif negative_balances == 0:
                     test_steps[3]["status"] = "partial"
-                    test_steps[3]["Result_Message"] = f"⚠️ No negative balances but {len(inconsistent_balances)} balance inconsistencies found"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"⚠️ No negative balances but {len(inconsistent_balances)} balance inconsistencies found"
                 else:
                     test_steps[3]["status"] = "failed"
-                    test_steps[3]["Result_Message"] = f"❌ Data consistency violated - {negative_balances} negative balances, {len(inconsistent_balances)} inconsistencies"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"❌ Data consistency violated - {negative_balances} negative balances, {len(inconsistent_balances)} inconsistencies"
 
             # Step 5: Verify audit trail compliance
             print("🔍 Checking audit trail compliance...", flush=True)
@@ -290,25 +341,31 @@ def validate_test(model_result, fixtures=None):
                 balance_history_count = db_cursor.fetchone()[0]
 
                 # Check if completed transactions have corresponding balance history
-                db_cursor.execute(f"""
+                db_cursor.execute(
+                    f"""
                     SELECT COUNT(*) FROM transactions t
                     WHERE t.status = 'COMPLETED'
                     AND NOT EXISTS (
                         SELECT 1 FROM balance_history bh
                         WHERE bh.{transaction_pk} = t.{transaction_pk}
                     )
-                """)
+                """
+                )
                 missing_audit_records = db_cursor.fetchone()[0]
             except psycopg2.Error as e:
                 db_connection.rollback()
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = f"❌ Schema mismatch in audit trail check: {str(e)}"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"❌ Schema mismatch in audit trail check: {str(e)}"
                 balance_history_count = 0
                 missing_audit_records = -1  # Signal error
-            
+
             # Check for idempotency key usage (prevents duplicate transactions)
             try:
-                db_cursor.execute("SELECT COUNT(DISTINCT idempotency_key) FROM transactions WHERE idempotency_key IS NOT NULL")
+                db_cursor.execute(
+                    "SELECT COUNT(DISTINCT idempotency_key) FROM transactions WHERE idempotency_key IS NOT NULL"
+                )
                 idempotent_transactions = db_cursor.fetchone()[0]
             except psycopg2.Error:
                 db_connection.rollback()
@@ -320,7 +377,9 @@ def validate_test(model_result, fixtures=None):
 
                 if balance_history_count >= transaction_count:
                     audit_score += 1
-                    audit_details.append(f"{balance_history_count} balance history records")
+                    audit_details.append(
+                        f"{balance_history_count} balance history records"
+                    )
 
                 if missing_audit_records == 0:
                     audit_score += 1
@@ -328,17 +387,25 @@ def validate_test(model_result, fixtures=None):
 
                 if idempotent_transactions > 0:
                     audit_score += 1
-                    audit_details.append(f"{idempotent_transactions} idempotent transactions")
+                    audit_details.append(
+                        f"{idempotent_transactions} idempotent transactions"
+                    )
 
                 if audit_score >= 2:
                     test_steps[4]["status"] = "passed"
-                    test_steps[4]["Result_Message"] = f"✅ Audit trail compliance met: {', '.join(audit_details)}"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = f"✅ Audit trail compliance met: {', '.join(audit_details)}"
                 elif audit_score >= 1:
                     test_steps[4]["status"] = "partial"
-                    test_steps[4]["Result_Message"] = f"⚠️ Partial audit compliance: {', '.join(audit_details)}"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = f"⚠️ Partial audit compliance: {', '.join(audit_details)}"
                 else:
                     test_steps[4]["status"] = "failed"
-                    test_steps[4]["Result_Message"] = "❌ Insufficient audit trail for compliance requirements"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = "❌ Insufficient audit trail for compliance requirements"
 
         finally:
             db_cursor.close()

@@ -189,7 +189,10 @@ def validate_test(model_result, fixtures=None):
                     test_steps[1][
                         "Result_Message"
                     ] = f"❌ Python script did not return 'hello world', got: {result}"
-                    print(f"❌ Python script validation: FAILED - returned {result}", flush=True)
+                    print(
+                        f"❌ Python script validation: FAILED - returned {result}",
+                        flush=True,
+                    )
 
         except Exception as e:
             test_steps[1]["status"] = "failed"
