@@ -24,13 +24,13 @@ test_uuid = uuid.uuid4().hex[:8]
 def get_fixtures() -> List[DEBenchFixture]:
     """
     Provides custom DEBenchFixture instances for Braintrust evaluation.
-    This Airflow test validates that AI can create and execute a Hello Universe DAG pipeline.
+    This Airflow test validates that AI can remediate an issue in a Hello World DAG.
     """
     from Fixtures.Airflow.airflow_fixture import AirflowFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
     # Initialize Airflow fixture with Kubernetes deployment
-    resource_id = f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}"
+    resource_id = f"hello_world_failure_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
         "use_kubernetes": True,  # Enable Kubernetes deployment
@@ -41,7 +41,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
         "resource_id": f"test_airflow_{resource_id}",
-        "state_archive_path": f"{root_dir}/Fixtures/Airflow/GitHub_States/empty-state.zip",
+        "state_archive_path": f"{root_dir}/Fixtures/Airflow/GitHub_States/hello-world-failure-state.zip",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -81,7 +81,7 @@ def create_model_inputs(
         raise Exception("GitHub manager not available")
 
     # Generate dynamic branch and PR names
-    pr_title = f"Add Hello Universe DAG {test_timestamp}_{test_uuid}"
+    pr_title = f"Fix Hello World DAG {test_timestamp}_{test_uuid}"
     branch_name = github_resource_data.get("resource_id")
 
     # Start with the original user input from Test_Configs
@@ -98,6 +98,7 @@ def create_model_inputs(
     print(f"🔧 Generated dynamic PR title: {pr_title}", flush=True)
 
     # Use the helper to automatically create config from all fixtures
+    print(f"{base_model_inputs=}")
     return {
         **base_model_inputs,
         "model_configs": create_config_from_fixtures(fixtures),
@@ -107,13 +108,11 @@ def create_model_inputs(
 
 def validate_test(model_result, fixtures=None):
     """
-    Validates that the AI agent successfully created and executed a Hello Universe DAG.
+    Validates that the AI agent successfully remediated the issue in the DAG.
 
     Expected behavior:
-    - DAG should be created with name "hello_universe_dag"
-    - DAG should have basic tasks for saying hello to the universe
-    - DAG should run successfully and complete execution
-    - Task logs should contain expected output
+    - DAG should be fixed and run successfully
+    - Task logs should contain the expected output
 
     Args:
         model_result: The result from the AI model execution
@@ -126,7 +125,7 @@ def validate_test(model_result, fixtures=None):
     test_steps = [
         {
             "name": "Agent Task Execution",
-            "description": "AI Agent executes task to create Hello Universe DAG",
+            "description": "AI Agent executes task to fix the DAG",
             "status": "running",
             "Result_Message": "Checking if AI agent executed the Airflow DAG creation task...",
         },
@@ -156,9 +155,9 @@ def validate_test(model_result, fixtures=None):
         },
         {
             "name": "DAG Creation Validation",
-            "description": "Verify that hello_universe_dag was created in Airflow",
+            "description": "Verify that the DAG was fixed and runs successfully",
             "status": "running",
-            "Result_Message": "Validating that Hello Universe DAG exists in Airflow...",
+            "Result_Message": "Validating that the DAG runs successfully...",
         },
         {
             "name": "DAG Execution and Monitoring",
@@ -167,10 +166,10 @@ def validate_test(model_result, fixtures=None):
             "Result_Message": "Triggering DAG and monitoring execution...",
         },
         {
-            "name": "Hello Universe Output Validation",
-            "description": "Verify that DAG outputs 'Hello Universe' message",
+            "name": "Hello World Output Validation",
+            "description": "Verify that DAG outputs 'Hello World' message",
             "status": "running",
-            "Result_Message": "Checking task logs for Hello Universe output...",
+            "Result_Message": "Checking task logs for Hello World output...",
         },
     ]
 
@@ -228,7 +227,7 @@ def validate_test(model_result, fixtures=None):
             raise Exception("GitHub manager not available")
 
         # Generate the same branch and PR names used in create_model_inputs
-        pr_title = f"Add Hello Universe DAG {test_timestamp}_{test_uuid}"
+        pr_title = f"Fix Hello World DAG {test_timestamp}_{test_uuid}"
         branch_name = github_resource_data.get("resource_id")
 
         # Step 2-6: GitHub and Airflow workflow
@@ -304,7 +303,7 @@ def validate_test(model_result, fixtures=None):
                     "capture_error": str(e),
                 }
             )
-        
+   
         if airflow_resource_data.get("k8s_namespace", None) is None:
             build_info = {
                 "deploymentId": airflow_resource_data["deployment_id"],
@@ -376,7 +375,7 @@ def validate_test(model_result, fixtures=None):
         ] = "✅ Airflow redeployed successfully after GitHub action"
 
         # DAG existence check
-        dag_name = "hello_universe_dag"
+        dag_name = "hello_world_dag"
         print(f"🔍 Checking for DAG: {dag_name} in Airflow at {base_url}", flush=True)
 
         if airflow_instance.verify_airflow_dag_exists(dag_name):
@@ -488,27 +487,27 @@ def validate_test(model_result, fixtures=None):
             )
 
         # Step 8: Task Log Validation
-        print("🔍 Retrieving task logs to verify Hello Universe output...", flush=True)
+        print("🔍 Retrieving task logs to verify Hello World output...", flush=True)
         try:
             logs = airflow_instance.get_task_instance_logs(
-                dag_id=dag_name, dag_run_id=dag_run_id, task_id="hello_universe_task"
+                dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello"
             )
             print(
                 f"📝 Task logs retrieved. Log content length: {len(logs)}, flush=True characters"
             )
             print(f"📝 Log content preview: {logs[:300]}...", flush=True)
 
-            # Check for Hello Universe output in logs
-            if "Hello Universe" in logs or "hello universe" in logs.lower():
+            # Check for Hello World output in logs
+            if "Hello World" in logs or "hello world" in logs.lower():
                 test_steps[7]["status"] = "passed"
                 test_steps[7][
                     "Result_Message"
-                ] = "✅ Hello Universe output found in task logs"
+                ] = "✅ Hello World output found in task logs"
             else:
                 test_steps[7]["status"] = "failed"
                 test_steps[7][
                     "Result_Message"
-                ] = "❌ Hello Universe output not found in task logs"
+                ] = "❌ Hello World output not found in task logs"
 
         except Exception as e:
             test_steps[7]["status"] = "failed"
