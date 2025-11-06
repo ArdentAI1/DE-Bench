@@ -34,7 +34,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     custom_airflow_config = {
         "resource_id": resource_id,
         "use_kubernetes": True,  # Enable Kubernetes deployment
-        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
+        "container_image": os.getenv("FAILURE_HELLO_WORLD_AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }
 
