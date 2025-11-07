@@ -34,12 +34,15 @@ def get_fixtures() -> List[DEBenchFixture]:
 
     # Initialize Airflow fixture with test-specific configuration
     custom_airflow_config = {
-        "resource_id": f"advanced_data_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": BRANCH_NAME,
+        "use_kubernetes": True,  # Enable Kubernetes deployment
+        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
+        "kubernetes_namespace": BRANCH_NAME.replace("_", "-"),
     }
 
     # Initialize PostgreSQL fixture for the advanced pipeline data
     custom_postgres_config = {
-        "resource_id": f"advanced_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": BRANCH_NAME,
         "databases": [
             {
                 "name": f"advanced_pipeline_{test_timestamp}_{test_uuid}",
@@ -361,6 +364,20 @@ def validate_test(model_result, fixtures=None):
             test_steps[1]["Result_Message"] = f"❌ Error checking git branch: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
+        if airflow_resource_data.get("k8s_namespace", None) is None:
+            build_info = {
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
+            }
+        else:
+            build_info = {
+                "acrRegistry": os.getenv("AZURE_ACR_NAME"),
+                "acrRepository": airflow_resource_data["deployment_id"],
+                "k8sNamespace": airflow_resource_data["k8s_namespace"],
+                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[:50],
+            }
+
         # Step 3: Check if PR was created and merge it
         print(f"🔍 Checking for PR: {PR_NAME}", flush=True)
         try:
@@ -369,11 +386,7 @@ def validate_test(model_result, fixtures=None):
                 test_step=test_steps[2],
                 commit_title=PR_NAME,
                 merge_method="squash",
-                build_info={
-                    "deploymentId": airflow_resource_data["deployment_id"],
-                    "deploymentName": airflow_resource_data["deployment_name"],
-                    "secretSuffix": airflow_resource_data["secret_suffix"],
-                },
+                build_info=build_info,
             )
 
             if not pr_exists:
