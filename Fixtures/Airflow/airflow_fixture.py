@@ -476,7 +476,7 @@ class AirflowFixture(
         try:
             # Delete the repository from the ACR
             if hasattr(self, "_k8s_manager") and self._k8s_manager:
-                repo_name = resource_id.repalce("_", "-")
+                repo_name = resource_id.replace("_", "-")[:50]
                 self._k8s_manager.delete_repo_from_acr(acr_name=os.getenv("AZURE_ACR_NAME"), repo_name=repo_name)
                 print(f"✅ Deleted repository from ACR: {repo_name}")
 
