@@ -34,7 +34,6 @@ def get_fixtures() -> List[DEBenchFixture]:
     # PostgreSQL CRM database
     custom_postgres_config = {
         "resource_id": f"crm_db_{test_timestamp}_{test_uuid}",
-        "test_module_path": __file__,
         "databases": [
             {
                 "name": f"crm_db_{test_timestamp}_{test_uuid}",
@@ -176,8 +175,16 @@ def create_model_inputs(
     github_fixture = next(
         (f for f in fixtures if f.get_resource_type() == "github_resource"), None
     )
+    if not github_fixture:
+        raise Exception("GitHub fixture not found - required for branch and PR management")
+
     github_resource_data = getattr(github_fixture, "_resource_data", None)
+    if not github_resource_data:
+        raise Exception("GitHub resource data not available")
+
     github_manager = github_resource_data.get("github_manager")
+    if not github_manager:
+        raise Exception("GitHub manager not available")
 
     pr_title = f"Add Cross-Database Analytics Pipeline {test_timestamp}_{test_uuid}"
     branch_name = github_resource_data.get("resource_id")
