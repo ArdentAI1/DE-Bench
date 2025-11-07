@@ -337,7 +337,7 @@ spec:
         Get the external IP of the LoadBalancer service in the given namespace
         """
         self._ensure_api_attributes_set()
-        max_attempts = 60  # Wait up to 60 seconds (1 second per attempt)
+        max_attempts = 60 * 5 # Wait up to 5 minutes (1 second per attempt)
         for attempt in range(max_attempts):
             try:
                 service = self.k8s_core_api.read_namespaced_service(
@@ -347,8 +347,11 @@ spec:
                     external_ip = service.status.load_balancer.ingress[0].ip
                     if external_ip:
                         print(f"Service {namespace}-service has external IP: {external_ip}")
+                        print(f"Retrieved external IP in {attempt + 1} seconds")
                         return external_ip
-                print(f"Waiting for external IP for service {namespace}-service... (attempt {attempt + 1}/{max_attempts})")
+                # Print progress every 30 seconds to avoid log spam
+                if (attempt + 1) % 30 == 0 or attempt == 0:
+                    print(f"Waiting for external IP for service {namespace}-service... (attempt {attempt + 1}/{max_attempts})")
                 time.sleep(1)
             except k8s_client_sdk.ApiException as e:
                 if e.status != 404:  # 404 is expected if service doesn't exist yet
@@ -356,6 +359,7 @@ spec:
                 time.sleep(1)
         
         print(f"Failed to get external IP for service {namespace}-service after {max_attempts} attempts")
+        print(f"Waited for a total of {max_attempts} seconds")
         return None
 
     @staticmethod
