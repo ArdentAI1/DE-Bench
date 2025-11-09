@@ -67,7 +67,7 @@ k8s_manager = KubernetesManifestManager(provider="AZURE")
 
 # Deploy Airflow to Kubernetes
 namespace = "my-airflow-test"
-container = "airflowstates-cudfbgfvekd7f0at.azurecr.io/airflow2-session-auth:base"
+container = "your-ecr-name.azurecr.io/airflow2-session-auth:base"
 
 k8s_manager.generate_and_apply_manifest(
     namespace=namespace,
@@ -97,7 +97,7 @@ from Fixtures.Airflow.airflow_fixture import AirflowFixture
 custom_airflow_config = {
     "resource_id": "my_test_12345",
     "use_kubernetes": True,  # Enable Kubernetes deployment
-    "container_image": "airflowstates-cudfbgfvekd7f0at.azurecr.io/airflow2-session-auth:base",
+    "container_image": "your-ecr-name.azurecr.io/airflow2-session-auth:base",
 }
 
 # Create fixture - ManifestManager is used internally
@@ -124,7 +124,7 @@ python Environment/Kubernetes/ManifestManager.py generate <namespace> \
 Example:
 ```bash
 python Environment/Kubernetes/ManifestManager.py generate my-airflow \
-  --container airflowstates-cudfbgfvekd7f0at.azurecr.io/airflow2-session-auth:base \
+  --container your-ecr-name.azurecr.io/airflow2-session-auth:base \
   --output my-manifest.yml
 ```
 
@@ -143,7 +143,7 @@ python Environment/Kubernetes/ManifestManager.py generate-and-apply <namespace> 
 Example:
 ```bash
 python Environment/Kubernetes/ManifestManager.py generate-and-apply test-airflow \
-  --container airflowstates-cudfbgfvekd7f0at.azurecr.io/airflow2-session-auth:base \
+  --container your-ecr-name.azurecr.io/airflow2-session-auth:base \
   --save test-manifest.yml
 ```
 
@@ -169,7 +169,7 @@ from Environment.Kubernetes.ManifestManager import profile
 # Deploy 10 Airflow instances and measure performance
 profile(
     number_of_instances=10,
-    container="airflowstates-cudfbgfvekd7f0at.azurecr.io/airflow2-session-auth:base"
+    container="your-ecr-name.azurecr.io/airflow2-session-auth:base"
 )
 ```
 
