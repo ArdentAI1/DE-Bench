@@ -315,25 +315,41 @@ class AirflowFixture(
 
         # Initialize Kubernetes manifest manager
         k8s_manager = KubernetesManifestManager(provider="AZURE")
+        # Store k8s_manager and namespace immediately for cleanup in case of failure
+        self._k8s_manager = k8s_manager
+        self._k8s_namespace = namespace
+        
         total_start_time = time.time()
         start_time = time.time()
         # Deploy Airflow to Kubernetes
         print(f"🚀 Deploying Airflow to Kubernetes...")
-        k8s_manager.generate_and_apply_manifest(
-            namespace=namespace,
-            container=container_image
-        )
-        print(f"🚀 Kubernetes manifest deployment took {time.time() - start_time:.2f}s")
-
-        # Get the external IP from the LoadBalancer service
-        start_time = time.time()
-        print(f"🔍 Waiting for external IP from LoadBalancer...")
-        external_ip = k8s_manager.get_service_external_ip(namespace=namespace)
-        print(f"🚀 External IP retrieval took {time.time() - start_time:.2f}s")
-        if not external_ip:
-            raise RuntimeError(
-                f"Failed to get external IP for namespace {namespace} after deployment"
+        try:
+            k8s_manager.generate_and_apply_manifest(
+                namespace=namespace,
+                container=container_image
             )
+            print(f"🚀 Kubernetes manifest deployment took {time.time() - start_time:.2f}s")
+
+            # Get the external IP from the LoadBalancer service
+            start_time = time.time()
+            print(f"🔍 Waiting for external IP from LoadBalancer...")
+            external_ip = k8s_manager.get_service_external_ip(namespace=namespace)
+            print(f"🚀 External IP retrieval took {time.time() - start_time:.2f}s")
+            if not external_ip:
+                raise RuntimeError(
+                    f"Failed to get external IP for namespace {namespace} after deployment"
+                )
+        except Exception as e:
+            # Clean up namespace on failure
+            print(f"❌ Error during Kubernetes setup: {e}")
+            print(f"🧹 Cleaning up namespace {namespace} due to setup failure...")
+            try:
+                if k8s_manager:
+                    k8s_manager.delete_namespace(namespace=namespace)
+                    print(f"✅ Cleaned up namespace {namespace}")
+            except Exception as cleanup_error:
+                print(f"⚠️ Error during cleanup: {cleanup_error}")
+            raise
 
         print(f"✅ External IP obtained: {external_ip}")
 
@@ -417,33 +433,75 @@ class AirflowFixture(
     def _test_teardown(self) -> None:
         """
         Clean up the resource and ensure proper teardown.
+        Handles both successful setup and partial setup failures.
         """
         from braintrust import traced
 
         @traced(name=f"{self.get_resource_type()}.test_teardown")
-        def inner_test_teardown(resource_data: AirflowResourceData) -> None:
+        def inner_test_teardown(resource_data: Optional[AirflowResourceData] = None) -> None:
             return self.test_teardown(resource_data)
 
         # Check if _resource_data exists before trying to use it
         if hasattr(self, "_resource_data") and self._resource_data:
             inner_test_teardown(self._resource_data)
         else:
+            # Handle partial setup failure - try to clean up Kubernetes resources if they exist
             print(
-                f"⚠️ No _resource_data found for {self.get_resource_type()}, skipping teardown"
+                f"⚠️ No _resource_data found for {self.get_resource_type()}, attempting cleanup of partial setup"
             )
+            if hasattr(self, "_k8s_manager") and hasattr(self, "_k8s_namespace") and self._k8s_manager and self._k8s_namespace:
+                print("🧹 Cleaning up partially initialized Kubernetes resources...")
+                try:
+                    self._k8s_manager.delete_namespace(namespace=self._k8s_namespace)
+                    print(f"✅ Cleaned up namespace {self._k8s_namespace} from partial setup")
+                except Exception as e:
+                    print(f"⚠️ Error cleaning up partial setup: {e}")
+            else:
+                print("⚠️ No Kubernetes resources found to clean up")
 
-    def test_teardown(self, resource_data: AirflowResourceData) -> None:
+    def test_teardown(self, resource_data: Optional[AirflowResourceData] = None) -> None:
         """Clean up individual Airflow resource (Astro or Kubernetes)"""
-        resource_id = resource_data["resource_id"]
-        test_dir = resource_data.get("test_dir")
+        # Handle case where resource_data might be None (partial setup failure)
+        if resource_data is None:
+            resource_id = getattr(self, "custom_config", {}).get("resource_id", "unknown")
+        else:
+            resource_id = resource_data["resource_id"]
 
         print(f"🧹 Cleaning up Airflow resource: {resource_id}")
 
         # Check if this is a Kubernetes deployment
         if hasattr(self, "_k8s_manager") and self._k8s_manager:
-            self._cleanup_kubernetes_airflow(resource_data)
+            # Use resource_data if available, otherwise construct minimal data for cleanup
+            if resource_data is None:
+                # Create minimal resource_data for cleanup
+                if namespace := getattr(self, "_k8s_namespace", None):
+                    resource_data = AirflowResourceData(
+                        resource_id=resource_id,
+                        type="airflow_resource",
+                        creation_time=0,
+                        creation_duration=0,
+                        description="Partial setup cleanup",
+                        status="failed",
+                        deployment_id=namespace,
+                        deployment_name=namespace,
+                        secret_suffix=resource_id,
+                        base_url="",
+                        api_url="",
+                        api_token="",
+                        api_headers={},
+                        username="",
+                        password="",
+                        airflow_instance=None,
+                        test_dir=None,
+                        k8s_manager=self._k8s_manager,
+                        k8s_namespace=namespace,
+                        external_ip=None,
+                    )
+            if resource_data:
+                self._cleanup_kubernetes_airflow(resource_data)
         # Otherwise, use the AirflowManager cleanup
         elif hasattr(self, "_airflow_manager") and self._airflow_manager:
+            test_dir = resource_data.get("test_dir") if resource_data else None
             self._airflow_manager.cleanup_resource(test_dir)
             print(f"✅ Airflow resource {resource_id} cleaned up using AirflowManager")
         else:
