@@ -10,6 +10,7 @@ dependencies = [
     "asn1crypto==1.5.1",
     "attrs==25.1.0",
     "azure-common==1.1.28",
+    "azure-containerregistry>=1.2.0",
     "azure-core==1.35.0",
     "azure-identity==1.24.0",
     "azure-mgmt-containerservice==39.1.0",

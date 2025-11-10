@@ -293,40 +293,40 @@ def validate_test(model_result, fixtures=None):
 
             if len(hub_tables) >= 2:
                 test_steps[6]["status"] = "passed"
-                test_steps[6]["Result_Message"] = (
-                    f"✅ Found {len(hub_tables)} Hub tables: {hub_tables}"
-                )
+                test_steps[6][
+                    "Result_Message"
+                ] = f"✅ Found {len(hub_tables)} Hub tables: {hub_tables}"
             else:
                 test_steps[6]["status"] = "partial"
-                test_steps[6]["Result_Message"] = (
-                    f"⚠️ Only {len(hub_tables)} Hub table(s) found"
-                )
+                test_steps[6][
+                    "Result_Message"
+                ] = f"⚠️ Only {len(hub_tables)} Hub table(s) found"
 
             # Check Link tables
             link_tables = [t for t in all_tables if t.upper().startswith("LINK_")]
             if len(link_tables) >= 1:
                 test_steps[7]["status"] = "passed"
-                test_steps[7]["Result_Message"] = (
-                    f"✅ Found {len(link_tables)} Link tables: {link_tables}"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"✅ Found {len(link_tables)} Link tables: {link_tables}"
             else:
                 test_steps[7]["status"] = "partial"
-                test_steps[7]["Result_Message"] = (
-                    f"⚠️ Only {len(link_tables)} Link table(s) found"
-                )
+                test_steps[7][
+                    "Result_Message"
+                ] = f"⚠️ Only {len(link_tables)} Link table(s) found"
 
             # Check Satellite tables
             sat_tables = [t for t in all_tables if t.upper().startswith("SAT_")]
             if len(sat_tables) >= 2:
                 test_steps[8]["status"] = "passed"
-                test_steps[8]["Result_Message"] = (
-                    f"✅ Found {len(sat_tables)} Satellite tables: {sat_tables}"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = f"✅ Found {len(sat_tables)} Satellite tables: {sat_tables}"
             else:
                 test_steps[8]["status"] = "partial"
-                test_steps[8]["Result_Message"] = (
-                    f"⚠️ Only {len(sat_tables)} Satellite table(s) found"
-                )
+                test_steps[8][
+                    "Result_Message"
+                ] = f"⚠️ Only {len(sat_tables)} Satellite table(s) found"
 
         finally:
             snowflake_cur.close()
@@ -341,9 +341,9 @@ def validate_test(model_result, fixtures=None):
                 test_steps[9]["Result_Message"] = f"✅ DAG executed successfully"
             except:
                 test_steps[9]["status"] = "partial"
-                test_steps[9]["Result_Message"] = (
-                    "⚠️ DAG triggered but execution incomplete"
-                )
+                test_steps[9][
+                    "Result_Message"
+                ] = "⚠️ DAG triggered but execution incomplete"
         else:
             test_steps[9]["status"] = "failed"
             test_steps[9]["Result_Message"] = "❌ Failed to trigger DAG"

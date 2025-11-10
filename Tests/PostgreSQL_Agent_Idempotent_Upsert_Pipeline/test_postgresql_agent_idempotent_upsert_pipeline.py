@@ -108,20 +108,31 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed or returned no result"
-            score = sum([step["status"] == "passed" for step in test_steps]) / len(test_steps)
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
+            score = sum([step["status"] == "passed" for step in test_steps]) / len(
+                test_steps
+            )
             return {
                 "score": score,
                 "metadata": {"test_steps": test_steps},
             }
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = "✅ AI Agent completed task execution successfully"
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Use fixture to get PostgreSQL connection for validation
-        postgres_fixture = next(
-            (f for f in fixtures if f.get_resource_type() == "postgres_resource"), None
-        ) if fixtures else None
+        postgres_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "postgres_resource"),
+                None,
+            )
+            if fixtures
+            else None
+        )
 
         if not postgres_fixture:
             raise Exception("PostgreSQL fixture not found")
@@ -167,46 +178,62 @@ def validate_test(model_result, fixtures=None):
                     else:
                         raise
 
-                if len(test_customers) >= 4:  # Alice, Bob, Carol (existing) + Dave (new)
+                if (
+                    len(test_customers) >= 4
+                ):  # Alice, Bob, Carol (existing) + Dave (new)
                     test_steps[1]["status"] = "passed"
-                    test_steps[1]["Result_Message"] = f"✅ Upsert operations completed - found {len(test_customers)} test customers: {test_customers}"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"✅ Upsert operations completed - found {len(test_customers)} test customers: {test_customers}"
                 elif len(test_customers) >= 3:  # At least Alice, Bob, Carol
                     test_steps[1]["status"] = "partial"
-                    test_steps[1]["Result_Message"] = f"⚠️ Partial upsert success - found {len(test_customers)} customers, expected Dave to be added too: {test_customers}"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"⚠️ Partial upsert success - found {len(test_customers)} customers, expected Dave to be added too: {test_customers}"
                 else:
                     test_steps[1]["status"] = "failed"
-                    test_steps[1]["Result_Message"] = f"❌ Insufficient upsert operations - found {len(test_customers)} customers, expected at least Alice, Bob, Carol: {test_customers}"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"❌ Insufficient upsert operations - found {len(test_customers)} customers, expected at least Alice, Bob, Carol: {test_customers}"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ No evidence of upsert operations - only {customer_count} customers found, expected at least 5 (original seed data)"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ No evidence of upsert operations - only {customer_count} customers found, expected at least 5 (original seed data)"
 
             # Step 3: Test idempotency by checking if repeated operations don't create duplicates
             print("🔍 Testing idempotency...", flush=True)
-            
+
             # Get current state
             db_cursor.execute("SELECT COUNT(*) FROM dim_customers")
             count_before = db_cursor.fetchone()[0]
-            
+
             # Check if audit log shows the operations (indicates proper pipeline implementation)
             db_cursor.execute("SELECT COUNT(*) FROM customer_audit_log")
             audit_count = db_cursor.fetchone()[0]
-            
+
             if audit_count > 0:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ Pipeline shows audit trail with {audit_count} operations, indicating proper upsert implementation"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Pipeline shows audit trail with {audit_count} operations, indicating proper upsert implementation"
             else:
                 # Alternative check - verify no duplicate emails exist (business constraint)
                 db_cursor.execute(
                     "SELECT email, COUNT(*) as cnt FROM dim_customers GROUP BY email HAVING COUNT(*) > 1"
                 )
                 duplicates = db_cursor.fetchall()
-                
+
                 if len(duplicates) == 0:
                     test_steps[2]["status"] = "passed"
-                    test_steps[2]["Result_Message"] = "✅ No duplicate emails found - idempotency maintained"
+                    test_steps[2][
+                        "Result_Message"
+                    ] = "✅ No duplicate emails found - idempotency maintained"
                 else:
                     test_steps[2]["status"] = "failed"
-                    test_steps[2]["Result_Message"] = f"❌ Found {len(duplicates)} duplicate emails - idempotency failed"
+                    test_steps[2][
+                        "Result_Message"
+                    ] = f"❌ Found {len(duplicates)} duplicate emails - idempotency failed"
 
             # Step 4: Check conflict resolution - look for updated records
             print("🔍 Checking conflict resolution...", flush=True)
@@ -243,7 +270,9 @@ def validate_test(model_result, fixtures=None):
                         bob_record = db_cursor.fetchone()
                     except Exception as fallback_error:
                         test_steps[3]["status"] = "failed"
-                        test_steps[3]["Result_Message"] = f"❌ Schema mismatch: customer_id should be VARCHAR but appears to be INTEGER. Fallback query also failed: {fallback_error}"
+                        test_steps[3][
+                            "Result_Message"
+                        ] = f"❌ Schema mismatch: customer_id should be VARCHAR but appears to be INTEGER. Fallback query also failed: {fallback_error}"
                         raise  # Re-raise to skip to exception handler
                 else:
                     raise  # Re-raise other errors
@@ -253,60 +282,82 @@ def validate_test(model_result, fixtures=None):
 
             if alice_record:
                 # Check if Alice's email and tier were updated as specified
-                if 'alice.johnson@newdomain.com' in str(alice_record) and 'Enterprise' in str(alice_record):
+                if "alice.johnson@newdomain.com" in str(
+                    alice_record
+                ) and "Enterprise" in str(alice_record):
                     updates_found += 1
                     update_details.append(f"Alice fully updated: {alice_record}")
-                elif 'Enterprise' in str(alice_record):
+                elif "Enterprise" in str(alice_record):
                     updates_found += 0.5
-                    update_details.append(f"Alice tier updated but email may not be: {alice_record}")
+                    update_details.append(
+                        f"Alice tier updated but email may not be: {alice_record}"
+                    )
                 else:
-                    update_details.append(f"Alice found but may not be updated: {alice_record}")
+                    update_details.append(
+                        f"Alice found but may not be updated: {alice_record}"
+                    )
             else:
                 update_details.append("Alice's record not found")
 
             if bob_record:
                 # Check if Bob's tier was updated from Free to Premium
-                if 'Premium' in str(bob_record):
+                if "Premium" in str(bob_record):
                     updates_found += 1
                     update_details.append(f"Bob tier updated to Premium: {bob_record}")
                 else:
-                    update_details.append(f"Bob found but tier may not be updated: {bob_record}")
+                    update_details.append(
+                        f"Bob found but tier may not be updated: {bob_record}"
+                    )
             else:
                 update_details.append("Bob's record not found")
 
-            if updates_found >= 1.5:  # At least Alice tier + Bob tier or Alice full update
+            if (
+                updates_found >= 1.5
+            ):  # At least Alice tier + Bob tier or Alice full update
                 test_steps[3]["status"] = "passed"
-                test_steps[3]["Result_Message"] = f"✅ Conflict resolution working - Updates: {'; '.join(update_details)}"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"✅ Conflict resolution working - Updates: {'; '.join(update_details)}"
             elif updates_found >= 0.5:
                 test_steps[3]["status"] = "partial"
-                test_steps[3]["Result_Message"] = f"⚠️ Partial conflict resolution - Updates: {'; '.join(update_details)}"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"⚠️ Partial conflict resolution - Updates: {'; '.join(update_details)}"
             else:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"❌ No evidence of proper updates - Details: {'; '.join(update_details)}"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"❌ No evidence of proper updates - Details: {'; '.join(update_details)}"
 
             # Step 5: Verify audit trail implementation
             print("🔍 Checking audit trail...", flush=True)
-            
+
             if audit_count > 0:
                 # Check audit log structure
                 db_cursor.execute(
                     "SELECT operation_type, COUNT(*) FROM customer_audit_log GROUP BY operation_type"
                 )
                 audit_summary = db_cursor.fetchall()
-                
+
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ Audit trail implemented with operations: {audit_summary}"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ Audit trail implemented with operations: {audit_summary}"
             else:
                 # Check if staging table was used (alternative production pattern)
                 db_cursor.execute("SELECT COUNT(*) FROM staging_customers")
                 staging_count = db_cursor.fetchone()[0]
-                
+
                 if staging_count > 0:
                     test_steps[4]["status"] = "passed"
-                    test_steps[4]["Result_Message"] = f"✅ Staging table used for ETL pattern with {staging_count} records"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = f"✅ Staging table used for ETL pattern with {staging_count} records"
                 else:
                     test_steps[4]["status"] = "partial"
-                    test_steps[4]["Result_Message"] = "⚠️ No audit trail or staging table usage detected"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = "⚠️ No audit trail or staging table usage detected"
 
         finally:
             db_cursor.close()

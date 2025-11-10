@@ -155,7 +155,9 @@ def validate_test(model_result, fixtures=None):
                 "SELECT title, authors FROM books_bad WHERE authors LIKE '%Gamma%'"
             )
             gamma_books = db_cursor.fetchall()
-            print(f"Books by Gamma (showing incomplete author info, flush=True): {gamma_books}")
+            print(
+                f"Books by Gamma (showing incomplete author info, flush=True): {gamma_books}"
+            )
 
             # Step 3: Check if the agent created a normalized schema
             print("🔍 Checking for normalized schema...", flush=True)
@@ -212,70 +214,90 @@ def validate_test(model_result, fixtures=None):
                     ]  # Use the first junction table found
 
                     # Discover actual column names from schema
-                    db_cursor.execute("""
+                    db_cursor.execute(
+                        """
                         SELECT column_name
                         FROM information_schema.columns
                         WHERE table_name = 'books'
                         AND column_name LIKE '%id%'
                         ORDER BY ordinal_position
                         LIMIT 1
-                    """)
+                    """
+                    )
                     books_pk = db_cursor.fetchone()
-                    books_pk_col = books_pk[0] if books_pk else 'id'
+                    books_pk_col = books_pk[0] if books_pk else "id"
 
                     # Discover book title column
-                    db_cursor.execute("""
+                    db_cursor.execute(
+                        """
                         SELECT column_name
                         FROM information_schema.columns
                         WHERE table_name = 'books'
                         AND column_name LIKE '%title%'
                         ORDER BY ordinal_position
                         LIMIT 1
-                    """)
+                    """
+                    )
                     book_title_result = db_cursor.fetchone()
-                    book_title_col = book_title_result[0] if book_title_result else 'title'
+                    book_title_col = (
+                        book_title_result[0] if book_title_result else "title"
+                    )
 
-                    db_cursor.execute("""
+                    db_cursor.execute(
+                        """
                         SELECT column_name
                         FROM information_schema.columns
                         WHERE table_name = 'authors'
                         AND column_name LIKE '%id%'
                         ORDER BY ordinal_position
                         LIMIT 1
-                    """)
+                    """
+                    )
                     authors_pk = db_cursor.fetchone()
-                    authors_pk_col = authors_pk[0] if authors_pk else 'id'
+                    authors_pk_col = authors_pk[0] if authors_pk else "id"
 
                     # Discover author name column
-                    db_cursor.execute("""
+                    db_cursor.execute(
+                        """
                         SELECT column_name
                         FROM information_schema.columns
                         WHERE table_name = 'authors'
                         AND column_name LIKE '%name%'
                         ORDER BY ordinal_position
                         LIMIT 1
-                    """)
+                    """
+                    )
                     author_name_result = db_cursor.fetchone()
-                    author_name_col = author_name_result[0] if author_name_result else 'name'
+                    author_name_col = (
+                        author_name_result[0] if author_name_result else "name"
+                    )
 
                     # Discover junction table foreign keys
-                    db_cursor.execute(f"""
+                    db_cursor.execute(
+                        f"""
                         SELECT column_name
                         FROM information_schema.columns
                         WHERE table_name = '{junction_table}'
                         AND column_name LIKE '%book%'
-                    """)
+                    """
+                    )
                     junction_book_fk = db_cursor.fetchone()
-                    junction_book_col = junction_book_fk[0] if junction_book_fk else 'book_id'
+                    junction_book_col = (
+                        junction_book_fk[0] if junction_book_fk else "book_id"
+                    )
 
-                    db_cursor.execute(f"""
+                    db_cursor.execute(
+                        f"""
                         SELECT column_name
                         FROM information_schema.columns
                         WHERE table_name = '{junction_table}'
                         AND column_name LIKE '%author%'
-                    """)
+                    """
+                    )
                     junction_author_fk = db_cursor.fetchone()
-                    junction_author_col = junction_author_fk[0] if junction_author_fk else 'author_id'
+                    junction_author_col = (
+                        junction_author_fk[0] if junction_author_fk else "author_id"
+                    )
 
                     # Test query to get all authors for each book
                     db_cursor.execute(
@@ -303,7 +325,9 @@ def validate_test(model_result, fixtures=None):
                         else:
                             authors_for_book.append(row[1])
                     if current_book:
-                        print(f"  '{current_book}' by {', '.join(authors_for_book)}, flush=True")
+                        print(
+                            f"  '{current_book}' by {', '.join(authors_for_book)}, flush=True"
+                        )
 
                     # Check that we can properly query for Gamma's books and see all co-authors
                     db_cursor.execute(
@@ -322,7 +346,10 @@ def validate_test(model_result, fixtures=None):
                     gamma_normalized = db_cursor.fetchall()
 
                     if gamma_normalized:
-                        print(f"Gamma's books with all co-authors: {gamma_normalized}", flush=True)
+                        print(
+                            f"Gamma's books with all co-authors: {gamma_normalized}",
+                            flush=True,
+                        )
 
                         # Check if we have complete author information
                         has_design_patterns = any(

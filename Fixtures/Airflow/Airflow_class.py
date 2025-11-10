@@ -13,6 +13,7 @@ better resource sharing and dependency management.
 """
 
 import copy
+import base64
 import fcntl
 import functools
 import os
@@ -65,6 +66,7 @@ class AirflowManager:
         api_url: Optional[str] = None,
         cache_manager: Optional[CacheManager] = None,
         resource_id: Optional[str] = None,
+        provider: str = "astro",
     ):
         """
         Initialize the AirflowManager with all necessary configurations.
@@ -77,6 +79,7 @@ class AirflowManager:
             max_retries: Maximum number of retries for operations
             cache_manager: Shared cache manager instance
             resource_id: Unique identifier for this resource
+            provider: Airflow deployment provider - "astro", "aks", or "ecs" (default: "astro")
         """
         # Core instance variables
         self.airflow_dir = airflow_dir.absolute() if airflow_dir else None
@@ -85,16 +88,10 @@ class AirflowManager:
         self.api_url = api_url
         self.cache_manager = cache_manager
         self.resource_id = resource_id
+        self.provider = provider
 
         # API headers for Airflow requests
-        self.api_headers = (
-            {
-                "Authorization": f"Bearer {self.api_token}",
-                "Cache-Control": "no-cache",
-            }
-            if api_token
-            else {}
-        )
+        self.api_headers = self.set_api_headers(provider=provider)
 
         # Deployment tracking
         self.deployment_id = None
@@ -103,28 +100,85 @@ class AirflowManager:
         self.secret_suffix = None  # Track the suffix used for GitHub secrets
 
         # Environment validation
-        self._validate_environment()
+        self._validate_environment(provider=provider)
 
-    def _validate_environment(self):
-        """Validate required environment variables and installations."""
-        required_envars = [
-            "ASTRO_WORKSPACE_ID",
-            "AIRFLOW_GITHUB_TOKEN",
-            "AIRFLOW_REPO",
-            "ASTRO_CLOUD_PROVIDER",
-            "ASTRO_REGION",
-        ]
+    def _validate_environment(self, provider: str = "astro"):
+        """
+        Validate required environment variables and installations.
+
+        Args:
+            provider: Airflow deployment provider - "astro", "aks", or "ecs"
+        """
+        if provider == "aks":
+            required_envars = [
+                "AZURE_CLIENT_ID",
+                "AZURE_CLIENT_SECRET",
+                "AZURE_TENANT_ID",
+                "AZURE_SUBSCRIPTION_ID",
+                "AZURE_ACR_NAME",
+                "AKS_RESOURCE_GROUP",
+                "AKS_CLUSTER_NAME",
+                "AZURE_CREDENTIALS",
+                "DE_BENCH_AKS_IMAGE_NAME",
+                "DE_BENCH_AKS_CLUSTER_NAME",
+                "DE_BENCH_AKS_RESOURCE_GROUP",
+            ]
+        elif provider == "ecs":
+            required_envars = [
+                "DE_BENCH_ECS_CLUSTER_NAME",
+                "AWS_REGION",
+            ]
+        else:  # astro
+            required_envars = [
+                "ASTRO_WORKSPACE_ID",
+                "AIRFLOW_GITHUB_TOKEN",
+                "AIRFLOW_REPO",
+                "ASTRO_CLOUD_PROVIDER",
+                "ASTRO_REGION",
+            ]
 
         if missing_envars := [
             envar for envar in required_envars if not os.getenv(envar)
         ]:
             raise ValueError(f"The following envars are not set: {missing_envars}")
 
-        if not os.getenv("ASTRO_API_TOKEN"):
-            raise ValueError("ASTRO_API_TOKEN must be set")
+        if (
+            provider == "astro"
+            and not os.getenv("ASTRO_ACCESS_TOKEN")
+            and not os.getenv("ASTRO_API_TOKEN")
+        ):
+            raise ValueError("Either ASTRO_ACCESS_TOKEN or ASTRO_API_TOKEN must be set")
 
         # Validate Astro CLI installation
-        self._parse_astro_version()
+        if provider == "astro":
+            self._parse_astro_version()
+
+    def set_api_headers(self, provider: str = "astro") -> Dict[str, str]:
+        """
+        Set the API headers for Airflow requests.
+
+        :param str provider: Airflow deployment provider - "astro", "aks", or "ecs"
+        :return: The API headers as a dictionary to use for subsequent requests
+        :rtype: Dict[str, str]
+        """
+        if provider == "astro":
+            return (
+                {
+                    "Authorization": f"Bearer {self.api_token}",
+                    "Cache-Control": "no-cache",
+                }
+                if self.api_token
+                else {}
+            )
+
+        # For AKS and ECS, use basic authentication
+        username = os.getenv("AIRFLOW_USERNAME", "admin")
+        password = os.getenv("AIRFLOW_PASSWORD", "admin")
+        print(f"username: {username}, password: {password}")
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {
+            "Authorization": f"Basic {credentials}",
+        }
 
     # ===== UTILITY METHODS =====
 
@@ -610,114 +664,6 @@ class AirflowManager:
         print(f"Worker {os.getpid()}: Astro project initialized: {astro_project}")
         return temp_dir
 
-    # ===== GITHUB INTEGRATION METHODS =====
-
-    @traced(name="_check_and_update_gh_secrets")
-    def _check_and_update_gh_secrets(
-        self,
-        deployment_id: str,
-        deployment_name: str,
-        astro_api_token: str,
-        astro_workspace_id: str,
-    ) -> str:
-        """
-        Checks if GitHub secrets exist, deletes them if they do, and creates new ones.
-        Creates test-specific secrets to avoid collision in parallel execution.
-
-        Args:
-            deployment_id: The ID of the deployment
-            deployment_name: The name of the deployment
-            astro_api_token: The Astro API token
-            astro_workspace_id: The Astro workspace ID
-
-        Returns:
-            The secret suffix used for this test's secrets
-        """
-        # Use only the UUID part of resource_id to keep secret names short
-        # GitHub has a ~50-64 character limit on secret names
-        # Extract the UUID (last part after splitting by underscore) to ensure uniqueness
-        # while keeping names under the limit
-        if self.resource_id:
-            # Extract just the UUID part: "..._timestamp_uuid" -> "uuid"
-            secret_suffix = self.resource_id.split("_")[-1]
-            print(
-                f"Worker {os.getpid()}: Using shortened secret suffix '{secret_suffix}' "
-                f"from resource_id '{self.resource_id}'"
-            )
-        else:
-            # Fallback: use last 8 chars of deployment name
-            secret_suffix = (
-                deployment_name.split("_")[-1]
-                if "_" in deployment_name
-                else deployment_name[-8:]
-            )
-            print(
-                f"Worker {os.getpid()}: Using deployment name suffix '{secret_suffix}' "
-                f"from deployment_name '{deployment_name}'"
-            )
-
-        # Create test-specific secret names by appending suffix
-        gh_secrets = {
-            f"ASTRO_DEPLOYMENT_ID_{secret_suffix}": deployment_id,
-            f"ASTRO_DEPLOYMENT_NAME_{secret_suffix}": deployment_name,
-            f"ASTRO_API_TOKEN_{secret_suffix}": astro_api_token,
-            f"ASTRO_WORKSPACE_ID_{secret_suffix}": astro_workspace_id,
-        }
-
-        # Validate secret name lengths (GitHub limit is ~50-64 chars)
-        max_secret_length = 50
-        for secret_name in gh_secrets.keys():
-            if len(secret_name) > max_secret_length:
-                raise ValueError(
-                    f"GitHub secret name '{secret_name}' is {len(secret_name)} characters, "
-                    f"exceeds GitHub's {max_secret_length} character limit. "
-                    f"Secret suffix: '{secret_suffix}'"
-                )
-
-        airflow_github_repo = os.getenv("AIRFLOW_REPO")
-        g = Github(os.getenv("AIRFLOW_GITHUB_TOKEN"))
-
-        if "github.com" in airflow_github_repo:
-            parts = airflow_github_repo.split("/")
-            airflow_github_repo = f"{parts[-2]}/{parts[-1]}"
-
-        repo = g.get_repo(airflow_github_repo)
-
-        try:
-            for secret, value in gh_secrets.items():
-                try:
-                    if repo.get_secret(secret):
-                        print(
-                            f"Worker {os.getpid()}: {secret} already exists in GitHub, deleting..."
-                        )
-                        repo.delete_secret(secret)
-                    print(f"Worker {os.getpid()}: Creating {secret}...")
-                except github.GithubException as e:
-                    if e.status == 404:
-                        print(
-                            f"Worker {os.getpid()}: {secret} does not exist in GitHub, creating..."
-                        )
-                    else:
-                        print(
-                            f"Worker {os.getpid()}: Error checking GitHub secret {secret}: {e}"
-                        )
-                        raise e
-
-                repo.create_secret(secret, value)
-                print(
-                    f"Worker {os.getpid()}: GitHub secret {secret} created successfully."
-                )
-
-            print(
-                f"Worker {os.getpid()}: Created {len(gh_secrets)} test-specific secrets with suffix '{secret_suffix}'"
-            )
-            return secret_suffix
-        except Exception as e:
-            print(
-                f"Worker {os.getpid()}: Error checking and updating GitHub secrets: {e}"
-            )
-            raise e from e
-
     def get_airflow_dags_from_github(self):
         """
         Clone the GitHub repository and copy DAG files to the Airflow dags directory.
@@ -967,6 +913,9 @@ class AirflowManager:
         retries = 10
         while retries > 0:
             print(f"Checking Airflow readiness... {retries} retries left")
+
+            print(f"self.host: {self.host}")
+            print(f"self.api_headers: {self.api_headers}")
             try:
                 health = requests.get(
                     f"{self.host.rstrip('/')}/health",
@@ -1731,15 +1680,6 @@ class AirflowManager:
             manager.deployment_name = astro_deployment_name
             manager.test_resources.append((astro_deployment_name, shared_cache_manager))
 
-            # # Update GitHub secrets with test-specific naming
-            # secret_suffix = manager._check_and_update_gh_secrets(
-            #     deployment_id=astro_deployment_id,
-            #     deployment_name=astro_deployment_name,
-            #     astro_api_token=os.environ["ASTRO_API_TOKEN"],
-            #     astro_workspace_id=os.environ["ASTRO_WORKSPACE_ID"],
-            # )
-            # Store the secret suffix for later use in build info
-            # manager.secret_suffix = secret_suffix
             import hashlib
 
             hash_suffix = hashlib.sha256(astro_deployment_name.encode()).hexdigest()[:8]

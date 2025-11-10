@@ -188,17 +188,20 @@ def validate_test(model_result, fixtures=None):
 
             if record_count > 3:  # Initial data had 3 records
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = (
-                    f"✅ Data successfully imported: {record_count} total records (started with 3)"
-                )
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ Data successfully imported: {record_count} total records (started with 3)"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ No additional data imported: only {record_count} records found (expected > 3)"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ No additional data imported: only {record_count} records found (expected > 3)"
                 return {"score": 0.25, "metadata": {"test_steps": test_steps}}
 
             # Step 3: Check for edge cases handling
             # Look for records with special characters, quotes, or NULL values
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT name, description, price 
                 FROM products 
                 WHERE description LIKE '%,%' 
@@ -208,30 +211,35 @@ def validate_test(model_result, fixtures=None):
                    OR price IS NULL
                 ORDER BY product_id
                 LIMIT 5
-            """)
+            """
+            )
             edge_case_records = db_cursor.fetchall()
 
             if edge_case_records and len(edge_case_records) > 0:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = (
-                    f"✅ Edge cases handled correctly: found {len(edge_case_records)} records with special characters/cases"
-                )
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Edge cases handled correctly: found {len(edge_case_records)} records with special characters/cases"
             else:
                 test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = "❌ No edge cases found - may indicate encoding or parsing issues"
+                test_steps[2][
+                    "Result_Message"
+                ] = "❌ No edge cases found - may indicate encoding or parsing issues"
 
             # Step 4: Data integrity checks
             # Check that data types are correct and no obvious corruption
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT 
                     COUNT(*) as total_records,
                     COUNT(DISTINCT product_id) as unique_products,
                     SUM(CASE WHEN price > 0 THEN 1 ELSE 0 END) as valid_prices,
                     SUM(CASE WHEN name IS NOT NULL AND name != '' THEN 1 ELSE 0 END) as valid_names
                 FROM products
-            """)
+            """
+            )
             integrity_check = db_cursor.fetchone()
-            
+
             total_records, unique_products, valid_prices, valid_names = integrity_check
 
             if total_records > 0 and valid_names > 0:

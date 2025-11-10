@@ -164,7 +164,7 @@ def validate_test(model_result, fixtures=None):
             record = results[0]
             expected_values = {
                 "FIRST_NAME": "Sarah",
-                "LAST_NAME": "Johnson", 
+                "LAST_NAME": "Johnson",
                 "EMAIL": "sarah.johnson@newuser.com",
                 "AGE": 35,
                 "CITY": "Austin",
@@ -177,7 +177,7 @@ def validate_test(model_result, fixtures=None):
             validation_errors = []
             for i, (field, expected) in enumerate(expected_values.items()):
                 actual = record[i]
-                
+
                 # Handle data type conversions for comparison
                 if field == "TOTAL_PURCHASES":
                     # Convert Decimal to float for comparison
@@ -187,7 +187,7 @@ def validate_test(model_result, fixtures=None):
                     # Ensure integer fields are compared as integers
                     actual = int(actual)
                     expected = int(expected)
-                
+
                 if actual != expected:
                     validation_errors.append(
                         f"{field}: expected {expected}, got {actual}"

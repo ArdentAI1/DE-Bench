@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from Fixtures.base_fixture import DEBenchFixture
 
 # Dynamic config loading
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
@@ -24,18 +25,40 @@ def get_fixtures() -> List[DEBenchFixture]:
     """
     Provides custom DEBenchFixture instances for Braintrust evaluation.
     This Airflow test validates that AI can create and execute a Hello Universe DAG pipeline.
+
+    Supports three deployment providers (set via DEFAULT_AIRFLOW_PROVIDER):
+    - "astro" (default): Astronomer Cloud
+    - "aks": Azure Kubernetes Service
+    - "ecs": AWS ECS Fargate
     """
     from Fixtures.Airflow.airflow_fixture import AirflowFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Initialize Airflow fixture with test-specific configuration
+    # Get provider from environment or default to "astro"
+    provider = "aks"
+
+    # Initialize Airflow fixture with appropriate deployment provider
+    resource_id = f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
-        "resource_id": f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": resource_id,
+        "airflow_provider": provider,
+        "container_image": os.getenv("DE_BENCH_ECS_IMAGE_NAME")
+        if provider == "ecs"
+        else os.getenv("DE_BENCH_AKS_IMAGE_NAME"),
+        "ecs_namespace": resource_id.replace("_", "-") if provider == "ecs" else None,
+        "kubernetes_namespace": resource_id.replace("_", "-")[:63]
+        if provider == "aks"
+        else None,
+        "enable_load_balancer": os.getenv("ECS_ENABLE_LOAD_BALANCER", "true").lower()
+        == "true"
+        if provider == "ecs"
+        else None,
     }
 
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {
-        "resource_id": f"test_airflow_hello_universe_pipeline_test_{test_timestamp}_{test_uuid}",
+        "resource_id": f"test_airflow_{resource_id}",
+        "state_archive_path": f"{root_dir}/Fixtures/Airflow/GitHub_States/empty-state.zip",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -299,17 +322,48 @@ def validate_test(model_result, fixtures=None):
                 }
             )
 
+        # Determine build_info based on deployment mode
+        if airflow_resource_data.get("k8s_namespace", None) is not None:
+            # Kubernetes (AKS) deployment
+            build_info = {
+                "acrRegistry": os.getenv("AZURE_ACR_NAME"),
+                "acrRepository": airflow_resource_data["deployment_id"],
+                "k8sNamespace": airflow_resource_data["k8s_namespace"],
+                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
+                    :50
+                ],
+            }
+        elif airflow_resource_data.get("ecs_namespace", None) is not None:
+            ecr_registry = (
+                os.getenv("AWS_ECR_BASE")
+                or os.getenv("AWS_ACCOUNT_ID", "").strip()
+                + ".dkr.ecr."
+                + os.getenv("AWS_REGION", "us-east-1")
+                + ".amazonaws.com"
+            )
+            # ECS deployment
+            build_info = {
+                "ecrRegistry": ecr_registry,
+                "ecrRepository": airflow_resource_data["deployment_id"],
+                "ecsCluster": os.getenv("DE_BENCH_ECS_CLUSTER_NAME"),
+                "ecsNamespace": airflow_resource_data["ecs_namespace"],
+                "ecsServiceName": airflow_resource_data["ecs_namespace"] + "-service",
+            }
+        else:
+            # Astro deployment
+            build_info = {
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
+            }
+
         # PR creation and merge
         pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
             pr_title=pr_title,
             test_step=test_steps[2],
             commit_title=pr_title,
             merge_method="squash",
-            build_info={
-                "deploymentId": airflow_resource_data["deployment_id"],
-                "deploymentName": airflow_resource_data["deployment_name"],
-                "secretSuffix": airflow_resource_data["secret_suffix"],
-            },
+            build_info=build_info,
         )
 
         if not pr_exists:
@@ -475,7 +529,7 @@ def validate_test(model_result, fixtures=None):
         print("🔍 Retrieving task logs to verify Hello Universe output...", flush=True)
         try:
             logs = airflow_instance.get_task_instance_logs(
-                dag_id=dag_name, dag_run_id=dag_run_id, task_id="hello_universe_task"
+                dag_id=dag_name, dag_run_id=dag_run_id, task_id="print_hello"
             )
             print(
                 f"📝 Task logs retrieved. Log content length: {len(logs)}, flush=True characters"

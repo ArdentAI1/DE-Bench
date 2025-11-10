@@ -46,3 +46,7 @@ tmp_airflow_tests/*
 
 # Parallel evaluation logs
 logs/
+
+# Manifest files
+*.yml
+*.yaml

@@ -63,7 +63,7 @@ def validate_test(model_result, fixtures=None):
 
     Expected behavior:
     - Time Travel queries using AT/BEFORE clauses should be implemented
-    - UNDROP functionality should be demonstrated  
+    - UNDROP functionality should be demonstrated
     - Recovery procedures should be created for common accident scenarios
     - Audit trail and recovery validation should be implemented
 
@@ -95,7 +95,7 @@ def validate_test(model_result, fixtures=None):
             "Result_Message": "Checking for Time Travel recovery procedures...",
         },
         {
-            "name": "Time Travel Query Capability", 
+            "name": "Time Travel Query Capability",
             "description": "Test AT/BEFORE clause functionality for point-in-time recovery",
             "status": "running",
             "Result_Message": "Testing Time Travel query capabilities...",
@@ -112,11 +112,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = "✅ AI Agent completed task execution successfully"
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Use fixture to get Snowflake connection for validation
         snowflake_fixture = None
@@ -148,20 +152,30 @@ def validate_test(model_result, fixtures=None):
             all_tables = cursor.fetchall()
 
             # Get column names from cursor description
-            table_columns = [desc[0].lower() for desc in cursor.description] if cursor.description else []
+            table_columns = (
+                [desc[0].lower() for desc in cursor.description]
+                if cursor.description
+                else []
+            )
 
             # Filter tables that have data retention > 0
             time_travel_tables = []
             for table in all_tables:
                 try:
                     # Create a dict mapping column names to values
-                    table_dict = dict(zip(table_columns, table)) if table_columns else {}
+                    table_dict = (
+                        dict(zip(table_columns, table)) if table_columns else {}
+                    )
 
                     # Get retention_time with proper type handling
-                    retention_time = table_dict.get('retention_time', table[10] if len(table) > 10 else 0)
+                    retention_time = table_dict.get(
+                        "retention_time", table[10] if len(table) > 10 else 0
+                    )
 
                     # Convert to int for comparison
-                    retention_int = int(retention_time) if retention_time is not None else 0
+                    retention_int = (
+                        int(retention_time) if retention_time is not None else 0
+                    )
 
                     if retention_int > 0:
                         time_travel_tables.append(table)
@@ -169,54 +183,77 @@ def validate_test(model_result, fixtures=None):
                     # Skip tables where we can't parse retention_time
                     continue
 
-            cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CUSTOMERS")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CUSTOMERS"
+            )
             customer_count = int(cursor.fetchone()[0])
 
             cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.ORDERS")
             order_count = int(cursor.fetchone()[0])
 
-            cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.AUDIT_LOG")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {database_name}.{schema_name}.AUDIT_LOG"
+            )
             audit_count = int(cursor.fetchone()[0])
 
-            if len(time_travel_tables) >= 2 and customer_count >= 3 and order_count >= 5 and audit_count >= 10:
+            if (
+                len(time_travel_tables) >= 2
+                and customer_count >= 3
+                and order_count >= 5
+                and audit_count >= 10
+            ):
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = f"✅ Production setup validated: {len(time_travel_tables)} tables with time travel, {customer_count} customers, {order_count} orders, {audit_count} audit records"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ Production setup validated: {len(time_travel_tables)} tables with time travel, {customer_count} customers, {order_count} orders, {audit_count} audit records"
             else:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ Insufficient production setup: {len(time_travel_tables)} time travel tables, {customer_count} customers, {order_count} orders"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ Insufficient production setup: {len(time_travel_tables)} time travel tables, {customer_count} customers, {order_count} orders"
 
             # Step 3: Check for recovery procedures and stored functions
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT procedure_name, argument_signature
                 FROM {database_name}.information_schema.procedures
                 WHERE procedure_schema = '{schema_name}'
                 AND (UPPER(procedure_name) LIKE '%RECOVERY%' OR UPPER(procedure_name) LIKE '%RESTORE%' OR UPPER(procedure_name) LIKE '%ROLLBACK%')
-            """)
+            """
+            )
             recovery_procedures = cursor.fetchall()
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT function_name 
                 FROM {database_name}.information_schema.functions
                 WHERE function_schema = '{schema_name}'
                 AND (UPPER(function_name) LIKE '%RECOVERY%' OR UPPER(function_name) LIKE '%TIME_TRAVEL%')
-            """)
+            """
+            )
             recovery_functions = cursor.fetchall()
 
             # Check for recovery-related tables
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT table_name
                 FROM {database_name}.information_schema.tables
                 WHERE table_schema = '{schema_name}' 
                 AND (UPPER(table_name) LIKE '%RECOVERY%' OR UPPER(table_name) LIKE '%CHECKPOINT%')
-            """)
+            """
+            )
             recovery_tables = cursor.fetchall()
 
             if recovery_procedures or recovery_functions or recovery_tables:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ Recovery infrastructure found: {len(recovery_procedures)} procedures, {len(recovery_functions)} functions, {len(recovery_tables)} tables"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Recovery infrastructure found: {len(recovery_procedures)} procedures, {len(recovery_functions)} functions, {len(recovery_tables)} tables"
             else:
                 test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = "❌ No recovery procedures, functions, or management infrastructure found"
+                test_steps[2][
+                    "Result_Message"
+                ] = "❌ No recovery procedures, functions, or management infrastructure found"
 
             # Step 4: Test Time Travel query capability
             # Try to execute a basic Time Travel query to verify functionality
@@ -227,80 +264,120 @@ def validate_test(model_result, fixtures=None):
                 tables_with_retention = cursor.fetchall()
 
                 # Get column names from cursor description
-                show_tables_columns = [desc[0].lower() for desc in cursor.description] if cursor.description else []
+                show_tables_columns = (
+                    [desc[0].lower() for desc in cursor.description]
+                    if cursor.description
+                    else []
+                )
 
                 # Count tables that have time travel enabled (retention > 0)
                 time_travel_enabled_count = 0
                 for table_row in tables_with_retention:
                     try:
-                        table_dict = dict(zip(show_tables_columns, table_row)) if show_tables_columns else {}
-                        retention_time = table_dict.get('retention_time', 0)
-                        retention_int = int(retention_time) if retention_time is not None else 0
+                        table_dict = (
+                            dict(zip(show_tables_columns, table_row))
+                            if show_tables_columns
+                            else {}
+                        )
+                        retention_time = table_dict.get("retention_time", 0)
+                        retention_int = (
+                            int(retention_time) if retention_time is not None else 0
+                        )
                         if retention_int > 0:
                             time_travel_enabled_count += 1
                     except (ValueError, TypeError):
                         continue
 
                 # Test BEFORE clause functionality (works for current timestamp)
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*)
                     FROM {database_name}.{schema_name}.ORDERS BEFORE(TIMESTAMP => CURRENT_TIMESTAMP())
-                """)
+                """
+                )
                 current_order_count = int(cursor.fetchone()[0])
 
                 # Check if we can execute time travel queries
                 if time_travel_enabled_count > 0 and current_order_count >= 0:
                     test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = f"✅ Time Travel capability verified: {time_travel_enabled_count} tables with retention enabled, BEFORE clause returned {current_order_count} orders"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"✅ Time Travel capability verified: {time_travel_enabled_count} tables with retention enabled, BEFORE clause returned {current_order_count} orders"
                 else:
                     test_steps[3]["status"] = "failed"
-                    test_steps[3]["Result_Message"] = f"❌ Time Travel not properly configured: {time_travel_enabled_count} tables with retention"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"❌ Time Travel not properly configured: {time_travel_enabled_count} tables with retention"
 
             except Exception as e:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = f"❌ Time Travel query test failed: {str(e)}"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"❌ Time Travel query test failed: {str(e)}"
 
             # Step 5: Validate recovery management framework
             # Check for proper audit trail and recovery tracking
             try:
-                cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.AUDIT_LOG")
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {database_name}.{schema_name}.AUDIT_LOG"
+                )
                 total_audit_records = int(cursor.fetchone()[0])
 
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT DISTINCT TABLE_NAME 
                     FROM {database_name}.{schema_name}.AUDIT_LOG
-                """)
+                """
+                )
                 audited_tables = cursor.fetchall()
 
                 # Check for business metrics or validation views
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT table_name
                     FROM {database_name}.information_schema.views
                     WHERE table_schema = '{schema_name}'
                     AND (UPPER(table_name) LIKE '%METRIC%' OR UPPER(table_name) LIKE '%BUSINESS%' OR UPPER(table_name) LIKE '%VALIDATION%')
-                """)
+                """
+                )
                 validation_views = cursor.fetchall()
 
                 # Check for checkpoint or recovery tracking capabilities
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*)
                     FROM {database_name}.information_schema.tables
                     WHERE table_schema = '{schema_name}'
                     AND UPPER(table_name) LIKE '%CHECKPOINT%'
-                """)
+                """
+                )
                 checkpoint_tables_raw = cursor.fetchone()[0]
-                checkpoint_tables = int(checkpoint_tables_raw) if checkpoint_tables_raw is not None else 0
+                checkpoint_tables = (
+                    int(checkpoint_tables_raw)
+                    if checkpoint_tables_raw is not None
+                    else 0
+                )
 
-                if total_audit_records >= 10 and len(audited_tables) >= 2 and (validation_views or checkpoint_tables > 0):
+                if (
+                    total_audit_records >= 10
+                    and len(audited_tables) >= 2
+                    and (validation_views or checkpoint_tables > 0)
+                ):
                     test_steps[4]["status"] = "passed"
-                    test_steps[4]["Result_Message"] = f"✅ Recovery framework validated: {total_audit_records} audit records, {len(audited_tables)} audited tables, {len(validation_views)} validation views, {checkpoint_tables} checkpoint tables"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = f"✅ Recovery framework validated: {total_audit_records} audit records, {len(audited_tables)} audited tables, {len(validation_views)} validation views, {checkpoint_tables} checkpoint tables"
                 else:
                     test_steps[4]["status"] = "failed"
-                    test_steps[4]["Result_Message"] = f"❌ Incomplete recovery framework: {total_audit_records} audit records, {len(audited_tables)} audited tables"
+                    test_steps[4][
+                        "Result_Message"
+                    ] = f"❌ Incomplete recovery framework: {total_audit_records} audit records, {len(audited_tables)} audited tables"
 
             except Exception as e:
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = f"❌ Recovery framework validation failed: {str(e)}"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"❌ Recovery framework validation failed: {str(e)}"
 
         finally:
             cursor.close()
@@ -314,8 +391,10 @@ def validate_test(model_result, fixtures=None):
                 step["Result_Message"] = f"❌ Validation error: {str(e)}"
 
     # Calculate score as the fraction of steps that passed
-    score = sum(1 for step in test_steps if step["status"] == "passed") / len(test_steps)
-    
+    score = sum(1 for step in test_steps if step["status"] == "passed") / len(
+        test_steps
+    )
+
     return {
         "score": score,
         "metadata": {"test_steps": test_steps},

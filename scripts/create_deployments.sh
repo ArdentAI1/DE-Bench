@@ -26,7 +26,7 @@ for deployment_num in "$@"; do
         continue
     fi
     
-    deployment_name="test_runner_$deployment_num"
+    deployment_name="de_bench_test_runner_$deployment_num"
     echo "Processing deployment: $deployment_name"
     
     # Check if deployment already exists

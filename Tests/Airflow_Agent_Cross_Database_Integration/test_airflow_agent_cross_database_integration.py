@@ -11,6 +11,7 @@ from Fixtures.base_fixture import DEBenchFixture
 
 # Dynamic config loading
 current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
@@ -33,7 +34,6 @@ def get_fixtures() -> List[DEBenchFixture]:
     # PostgreSQL CRM database
     custom_postgres_config = {
         "resource_id": f"crm_db_{test_timestamp}_{test_uuid}",
-        "test_module_path": __file__,
         "databases": [
             {
                 "name": f"crm_db_{test_timestamp}_{test_uuid}",
@@ -134,14 +134,19 @@ def get_fixtures() -> List[DEBenchFixture]:
         "sql_file": None,
     }
 
+    resource_id = f"cross_db_integration_{test_timestamp}_{test_uuid}"
     # Airflow orchestration
     custom_airflow_config = {
-        "resource_id": f"cross_db_integration_{test_timestamp}_{test_uuid}",
+        "resource_id": resource_id,
+        "airflow_provider": "aks",  # Use ECS deployment
+        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
+        "kubernetes_namespace": resource_id.replace("_", "-"),
     }
 
     # GitHub
     custom_github_config = {
-        "resource_id": f"test_airflow_cross_db_{test_timestamp}_{test_uuid}",
+        "resource_id": f"test_airflow_{resource_id}",
+        "state_archive_path": f"{root_dir}/Fixtures/Airflow/GitHub_States/empty-state.zip",
     }
 
     postgres_fixture = PostgreSQLFixture(custom_config=custom_postgres_config)
@@ -170,8 +175,18 @@ def create_model_inputs(
     github_fixture = next(
         (f for f in fixtures if f.get_resource_type() == "github_resource"), None
     )
+    if not github_fixture:
+        raise Exception(
+            "GitHub fixture not found - required for branch and PR management"
+        )
+
     github_resource_data = getattr(github_fixture, "_resource_data", None)
+    if not github_resource_data:
+        raise Exception("GitHub resource data not available")
+
     github_manager = github_resource_data.get("github_manager")
+    if not github_manager:
+        raise Exception("GitHub manager not available")
 
     pr_title = f"Add Cross-Database Analytics Pipeline {test_timestamp}_{test_uuid}"
     branch_name = github_resource_data.get("resource_id")
@@ -384,16 +399,28 @@ def validate_test(model_result, fixtures=None):
                 }
             )
 
+        if airflow_resource_data.get("k8s_namespace", None) is None:
+            build_info = {
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
+            }
+        else:
+            build_info = {
+                "acrRegistry": os.getenv("AZURE_ACR_NAME"),
+                "acrRepository": airflow_resource_data["deployment_id"],
+                "k8sNamespace": airflow_resource_data["k8s_namespace"],
+                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
+                    :50
+                ],
+            }
+
         pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
             pr_title=pr_title,
             test_step=test_steps[2],
             commit_title=pr_title,
             merge_method="squash",
-            build_info={
-                "deploymentId": airflow_resource_data["deployment_id"],
-                "deploymentName": airflow_resource_data["deployment_name"],
-                "secretSuffix": airflow_resource_data["secret_suffix"],
-            },
+            build_info=build_info,
         )
 
         if not pr_exists:

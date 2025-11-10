@@ -4,7 +4,7 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_file_path = os.path.join(current_dir, "products_bulk_data.csv")
 
-with open(csv_file_path, 'r', encoding='utf-8') as f:
+with open(csv_file_path, "r", encoding="utf-8") as f:
     CSV_DATA = f.read()
 
 # AI Agent task for MySQL bulk data ingestion with LOAD DATA INFILE

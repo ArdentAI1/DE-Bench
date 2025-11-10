@@ -113,9 +113,14 @@ def validate_test(model_result, fixtures=None):
         test_steps[0]["Result_Message"] = "✅ AI Agent completed successfully"
 
         # Get Snowflake fixture
-        snowflake_fixture = next(
-            (f for f in fixtures if f.get_resource_type() == "snowflake_resource"), None
-        ) if fixtures else None
+        snowflake_fixture = (
+            next(
+                (f for f in fixtures if f.get_resource_type() == "snowflake_resource"),
+                None,
+            )
+            if fixtures
+            else None
+        )
 
         if not snowflake_fixture:
             raise Exception("Snowflake fixture not found")
@@ -142,51 +147,71 @@ def validate_test(model_result, fixtures=None):
         try:
             # Step 2: Check for external stages
             print("🔍 Checking for external stages...", flush=True)
-            
-            snowflake_cur.execute(f"SHOW STAGES IN SCHEMA {database_name}.{schema_name}")
+
+            snowflake_cur.execute(
+                f"SHOW STAGES IN SCHEMA {database_name}.{schema_name}"
+            )
             stages = snowflake_cur.fetchall()
-            
+
             # Look for stages with S3 or external in name
-            external_stages = [s for s in stages if 'EXTERNAL' in str(s).upper() or 'S3' in str(s).upper()]
-            
+            external_stages = [
+                s
+                for s in stages
+                if "EXTERNAL" in str(s).upper() or "S3" in str(s).upper()
+            ]
+
             if len(external_stages) >= 1:
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = f"✅ Found {len(external_stages)} external stage(s)"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"✅ Found {len(external_stages)} external stage(s)"
             else:
                 test_steps[1]["status"] = "partial"
-                test_steps[1]["Result_Message"] = f"⚠️ Found {len(stages)} stage(s), but may not be external stages"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"⚠️ Found {len(stages)} stage(s), but may not be external stages"
 
             # Step 3: Check for external tables
             print("🔍 Checking for external tables...", flush=True)
-            
-            snowflake_cur.execute(f"""
+
+            snowflake_cur.execute(
+                f"""
                 SHOW TABLES IN SCHEMA {database_name}.{schema_name}
-            """)
+            """
+            )
             all_tables = snowflake_cur.fetchall()
-            
+
             # Check for external tables (look in table type or properties)
-            snowflake_cur.execute(f"""
+            snowflake_cur.execute(
+                f"""
                 SELECT table_name, table_type 
                 FROM {database_name}.INFORMATION_SCHEMA.TABLES 
                 WHERE table_schema = '{schema_name}'
-            """)
+            """
+            )
             tables_info = snowflake_cur.fetchall()
-            
-            external_tables = [t for t in tables_info if 'EXTERNAL' in str(t[1]).upper()]
-            
+
+            external_tables = [
+                t for t in tables_info if "EXTERNAL" in str(t[1]).upper()
+            ]
+
             if len(external_tables) >= 1:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ Found {len(external_tables)} external table(s): {[t[0] for t in external_tables]}"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Found {len(external_tables)} external table(s): {[t[0] for t in external_tables]}"
             elif len(all_tables) >= 1:
                 test_steps[2]["status"] = "partial"
-                test_steps[2]["Result_Message"] = f"⚠️ Found {len(all_tables)} table(s), verifying if external..."
+                test_steps[2][
+                    "Result_Message"
+                ] = f"⚠️ Found {len(all_tables)} table(s), verifying if external..."
             else:
                 test_steps[2]["status"] = "failed"
                 test_steps[2]["Result_Message"] = "❌ No tables found"
 
             # Step 4: Test query functionality
             print("🔍 Testing query functionality...", flush=True)
-            
+
             query_worked = False
             if len(all_tables) > 0:
                 try:
@@ -195,9 +220,11 @@ def validate_test(model_result, fixtures=None):
                     snowflake_cur.execute(f"SELECT * FROM {table_name} LIMIT 5")
                     results = snowflake_cur.fetchall()
                     query_worked = True
-                    
+
                     test_steps[3]["status"] = "passed"
-                    test_steps[3]["Result_Message"] = f"✅ Successfully queried external table, returned {len(results)} rows"
+                    test_steps[3][
+                        "Result_Message"
+                    ] = f"✅ Successfully queried external table, returned {len(results)} rows"
                 except Exception as e:
                     test_steps[3]["status"] = "failed"
                     test_steps[3]["Result_Message"] = f"❌ Query failed: {str(e)}"
@@ -207,70 +234,89 @@ def validate_test(model_result, fixtures=None):
 
             # Step 5: Check schema handling (INFER_SCHEMA or flexible columns)
             print("🔍 Checking schema handling...", flush=True)
-            
+
             schema_features = []
-            
+
             # Check if any tables use INFER_SCHEMA
             for table_info in all_tables[:3]:  # Check first few tables
                 table_name = table_info[1]
                 try:
                     snowflake_cur.execute(f"DESCRIBE TABLE {table_name}")
                     columns = snowflake_cur.fetchall()
-                    
+
                     # Check for VARIANT columns (flexible schema)
-                    variant_cols = [c for c in columns if 'VARIANT' in str(c[1]).upper()]
+                    variant_cols = [
+                        c for c in columns if "VARIANT" in str(c[1]).upper()
+                    ]
                     if variant_cols:
                         schema_features.append("VARIANT columns for flexibility")
-                    
+
                     if len(columns) > 0:
-                        schema_features.append(f"schema defined with {len(columns)} columns")
+                        schema_features.append(
+                            f"schema defined with {len(columns)} columns"
+                        )
                 except:
                     pass
-            
+
             if len(schema_features) > 0:
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ Schema handling implemented: {', '.join(schema_features)}"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ Schema handling implemented: {', '.join(schema_features)}"
             else:
                 test_steps[4]["status"] = "partial"
                 test_steps[4]["Result_Message"] = "⚠️ Schema handling may be basic"
 
             # Step 6: Check for partition columns
             print("🔍 Checking for partition columns...", flush=True)
-            
+
             partition_found = False
             for table_info in all_tables[:3]:
                 table_name = table_info[1]
                 try:
                     snowflake_cur.execute(f"DESCRIBE TABLE {table_name}")
                     columns = snowflake_cur.fetchall()
-                    
+
                     # Look for common partition column names
                     col_names = [c[0].lower() for c in columns]
-                    if any(name in col_names for name in ['year', 'month', 'day', 'date', 'partition']):
+                    if any(
+                        name in col_names
+                        for name in ["year", "month", "day", "date", "partition"]
+                    ):
                         partition_found = True
                         break
                 except:
                     pass
-            
+
             if partition_found:
                 test_steps[5]["status"] = "passed"
-                test_steps[5]["Result_Message"] = "✅ Partition columns detected (year/month/day)"
+                test_steps[5][
+                    "Result_Message"
+                ] = "✅ Partition columns detected (year/month/day)"
             else:
                 test_steps[5]["status"] = "partial"
-                test_steps[5]["Result_Message"] = "⚠️ No explicit partition columns found (may use metadata)"
+                test_steps[5][
+                    "Result_Message"
+                ] = "⚠️ No explicit partition columns found (may use metadata)"
 
             # Step 7: Check file format configuration
             print("🔍 Checking file format configuration...", flush=True)
-            
-            snowflake_cur.execute(f"SHOW FILE FORMATS IN SCHEMA {database_name}.{schema_name}")
+
+            snowflake_cur.execute(
+                f"SHOW FILE FORMATS IN SCHEMA {database_name}.{schema_name}"
+            )
             file_formats = snowflake_cur.fetchall()
-            
+
             if len(file_formats) >= 1:
                 test_steps[6]["status"] = "passed"
-                test_steps[6]["Result_Message"] = f"✅ Found {len(file_formats)} file format(s) configured"
+                test_steps[6][
+                    "Result_Message"
+                ] = f"✅ Found {len(file_formats)} file format(s) configured"
             else:
                 test_steps[6]["status"] = "partial"
-                test_steps[6]["Result_Message"] = "⚠️ No custom file formats (may use defaults)"
+                test_steps[6][
+                    "Result_Message"
+                ] = "⚠️ No custom file formats (may use defaults)"
 
         finally:
             snowflake_cur.close()

@@ -118,11 +118,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0]["Result_Message"] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0][
+                "Result_Message"
+            ] = "❌ AI Agent task execution failed or returned no result"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0]["Result_Message"] = "✅ AI Agent completed task execution successfully"
+        test_steps[0][
+            "Result_Message"
+        ] = "✅ AI Agent completed task execution successfully"
 
         # Use fixture to get Snowflake connection for validation
         snowflake_fixture = None
@@ -149,13 +153,15 @@ def validate_test(model_result, fixtures=None):
             schema_name = resource_data.get("schema")
 
             # Step 2: Check if staging table exists with flexible schema
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT column_name, data_type 
                 FROM {database_name}.information_schema.columns 
                 WHERE table_schema = '{schema_name}' 
                 AND table_name = 'CUSTOMER_STAGING'
                 ORDER BY ordinal_position
-            """)
+            """
+            )
             staging_columns = cursor.fetchall()
 
             if not staging_columns:
@@ -164,98 +170,133 @@ def validate_test(model_result, fixtures=None):
             else:
                 # Check for key columns that support schema evolution
                 column_names = [col[0] for col in staging_columns]
-                required_cols = ['CUSTOMER_ID', 'NAME', 'EMAIL', 'SIGNUP_DATE']
-                evolution_cols = ['PHONE', 'ADDRESS', 'CUSTOMER_TYPE', 'LOYALTY_POINTS']
-                
-                missing_required = [col for col in required_cols if col not in column_names]
-                present_evolution = [col for col in evolution_cols if col in column_names]
-                
+                required_cols = ["CUSTOMER_ID", "NAME", "EMAIL", "SIGNUP_DATE"]
+                evolution_cols = ["PHONE", "ADDRESS", "CUSTOMER_TYPE", "LOYALTY_POINTS"]
+
+                missing_required = [
+                    col for col in required_cols if col not in column_names
+                ]
+                present_evolution = [
+                    col for col in evolution_cols if col in column_names
+                ]
+
                 if missing_required:
-                    test_steps[1]["status"] = "failed" 
-                    test_steps[1]["Result_Message"] = f"❌ Missing required columns: {missing_required}"
+                    test_steps[1]["status"] = "failed"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"❌ Missing required columns: {missing_required}"
                 elif len(present_evolution) >= 2:  # At least 2 evolution columns
                     test_steps[1]["status"] = "passed"
-                    test_steps[1]["Result_Message"] = f"✅ Flexible staging table found with {len(column_names)} columns including evolution fields"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"✅ Flexible staging table found with {len(column_names)} columns including evolution fields"
                 else:
                     test_steps[1]["status"] = "partial"
-                    test_steps[1]["Result_Message"] = f"⚠️ Staging table exists but may not support full schema evolution"
+                    test_steps[1][
+                        "Result_Message"
+                    ] = f"⚠️ Staging table exists but may not support full schema evolution"
 
             # Step 3: Check for COPY INTO configuration with MATCH_BY_COLUMN_NAME
             # This is checked by looking for evidence of proper file format and stage setup
             file_formats = []
             stages = []
-            
+
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT file_format_name, file_format_type, format_options
                     FROM {database_name}.information_schema.file_formats
                     WHERE file_format_schema = '{schema_name}'
-                """)
+                """
+                )
                 file_formats = cursor.fetchall()
             except Exception:
                 # Fallback to SHOW FILE FORMATS
                 try:
-                    cursor.execute(f"SHOW FILE FORMATS IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW FILE FORMATS IN SCHEMA {database_name}.{schema_name}"
+                    )
                     file_formats = cursor.fetchall()
                 except Exception:
                     file_formats = []
 
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT stage_name, stage_type, stage_url
                     FROM {database_name}.information_schema.stages  
                     WHERE stage_schema = '{schema_name}'
-                """)
+                """
+                )
                 stages = cursor.fetchall()
             except Exception:
                 # Fallback to SHOW STAGES
                 try:
-                    cursor.execute(f"SHOW STAGES IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW STAGES IN SCHEMA {database_name}.{schema_name}"
+                    )
                     stages = cursor.fetchall()
                 except Exception:
                     stages = []
 
             if file_formats and stages:
                 test_steps[2]["status"] = "passed"
-                test_steps[2]["Result_Message"] = f"✅ Found {len(file_formats)} file format(s) and {len(stages)} stage(s) for flexible data loading"
+                test_steps[2][
+                    "Result_Message"
+                ] = f"✅ Found {len(file_formats)} file format(s) and {len(stages)} stage(s) for flexible data loading"
             else:
                 test_steps[2]["status"] = "failed"
-                test_steps[2]["Result_Message"] = "❌ Missing file formats or stages for COPY INTO operation"
+                test_steps[2][
+                    "Result_Message"
+                ] = "❌ Missing file formats or stages for COPY INTO operation"
 
             # Step 4: Test schema evolution handling by checking for flexible column handling
             evolution_views = 0
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*) as view_count
                     FROM {database_name}.information_schema.views
                     WHERE table_schema = '{schema_name}' 
                     AND (table_name LIKE '%UNIFIED%' OR table_name LIKE '%EVOLUTION%' OR table_name LIKE '%FLEXIBLE%')
-                """)
+                """
+                )
                 evolution_views = cursor.fetchone()[0]
             except Exception:
                 # Fallback to SHOW VIEWS
                 try:
-                    cursor.execute(f"SHOW VIEWS IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW VIEWS IN SCHEMA {database_name}.{schema_name}"
+                    )
                     views = cursor.fetchall()
-                    evolution_views = sum(1 for view in views 
-                                        if any(keyword in view[0].upper() 
-                                              for keyword in ['UNIFIED', 'EVOLUTION', 'FLEXIBLE']))
+                    evolution_views = sum(
+                        1
+                        for view in views
+                        if any(
+                            keyword in view[0].upper()
+                            for keyword in ["UNIFIED", "EVOLUTION", "FLEXIBLE"]
+                        )
+                    )
                 except Exception:
                     evolution_views = 0
 
             # Also check for procedures or functions that might handle schema evolution
             procedures_count = 0
             try:
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*) 
                     FROM {database_name}.information_schema.procedures
                     WHERE procedure_schema = '{schema_name}'
-                """)
+                """
+                )
                 procedures_count = cursor.fetchone()[0]
             except Exception:
                 # Fallback to SHOW PROCEDURES
                 try:
-                    cursor.execute(f"SHOW PROCEDURES IN SCHEMA {database_name}.{schema_name}")
+                    cursor.execute(
+                        f"SHOW PROCEDURES IN SCHEMA {database_name}.{schema_name}"
+                    )
                     procedures = cursor.fetchall()
                     procedures_count = len(procedures)
                 except Exception:
@@ -263,27 +304,39 @@ def validate_test(model_result, fixtures=None):
 
             if evolution_views > 0 or procedures_count > 0:
                 test_steps[3]["status"] = "passed"
-                test_steps[3]["Result_Message"] = f"✅ Schema evolution handling implemented with {evolution_views} views and {procedures_count} procedures"
+                test_steps[3][
+                    "Result_Message"
+                ] = f"✅ Schema evolution handling implemented with {evolution_views} views and {procedures_count} procedures"
             else:
                 test_steps[3]["status"] = "failed"
-                test_steps[3]["Result_Message"] = "❌ No evidence of schema evolution handling mechanisms"
+                test_steps[3][
+                    "Result_Message"
+                ] = "❌ No evidence of schema evolution handling mechanisms"
 
             # Step 5: Validate data loading by checking staging table contents
-            cursor.execute(f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CUSTOMER_STAGING")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {database_name}.{schema_name}.CUSTOMER_STAGING"
+            )
             staging_count = cursor.fetchone()[0]
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT COUNT(DISTINCT COALESCE(CUSTOMER_TYPE, 'DEFAULT')) as type_variety
                 FROM {database_name}.{schema_name}.CUSTOMER_STAGING
-            """)
+            """
+            )
             type_variety = cursor.fetchone()[0]
 
             if staging_count >= 3:  # Initial test data should be present
                 test_steps[4]["status"] = "passed"
-                test_steps[4]["Result_Message"] = f"✅ Data loading successful with {staging_count} records and {type_variety} customer types"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"✅ Data loading successful with {staging_count} records and {type_variety} customer types"
             else:
                 test_steps[4]["status"] = "failed"
-                test_steps[4]["Result_Message"] = f"❌ Insufficient data in staging table: {staging_count} records"
+                test_steps[4][
+                    "Result_Message"
+                ] = f"❌ Insufficient data in staging table: {staging_count} records"
 
         finally:
             cursor.close()
@@ -300,9 +353,9 @@ def validate_test(model_result, fixtures=None):
     passed_steps = sum(1 for step in test_steps if step["status"] == "passed")
     partial_steps = sum(0.5 for step in test_steps if step["status"] == "partial")
     total_steps = len(test_steps)
-    
+
     score = (passed_steps + partial_steps) / total_steps
-    
+
     return {
         "score": score,
         "metadata": {"test_steps": test_steps},

@@ -42,7 +42,11 @@ def get_fixtures() -> List[DEBenchFixture]:
                                 "primary_key": True,
                             },
                             {"name": "account_id", "type": "INT", "not_null": True},
-                            {"name": "amount", "type": "DECIMAL(15,2)", "not_null": True},
+                            {
+                                "name": "amount",
+                                "type": "DECIMAL(15,2)",
+                                "not_null": True,
+                            },
                             {
                                 "name": "transaction_type",
                                 "type": "ENUM('CREDIT', 'DEBIT')",
@@ -213,44 +217,69 @@ def validate_test(model_result, fixtures=None):
             db_cursor.execute("DESCRIBE transactions")
             columns = {row[0]: row[1] for row in db_cursor.fetchall()}
 
-            required_columns = ['transaction_id', 'account_id', 'amount', 'transaction_type', 'created_at']
+            required_columns = [
+                "transaction_id",
+                "account_id",
+                "amount",
+                "transaction_type",
+                "created_at",
+            ]
             missing_columns = [col for col in required_columns if col not in columns]
 
             if missing_columns:
                 test_steps[1]["status"] = "failed"
-                test_steps[1]["Result_Message"] = f"❌ Missing columns: {missing_columns}"
+                test_steps[1][
+                    "Result_Message"
+                ] = f"❌ Missing columns: {missing_columns}"
                 return {"score": 0.25, "metadata": {"test_steps": test_steps}}
 
             # Check for index on account_id
-            db_cursor.execute("SHOW INDEX FROM transactions WHERE Column_name = 'account_id'")
+            db_cursor.execute(
+                "SHOW INDEX FROM transactions WHERE Column_name = 'account_id'"
+            )
             index_exists = db_cursor.fetchone()
 
             if index_exists:
                 test_steps[1]["status"] = "passed"
-                test_steps[1]["Result_Message"] = "✅ Table structure and indexes validated successfully"
+                test_steps[1][
+                    "Result_Message"
+                ] = "✅ Table structure and indexes validated successfully"
             else:
-                test_steps[1]["status"] = "passed"  # Still pass if basic structure is correct
-                test_steps[1]["Result_Message"] = "✅ Table structure validated (index on account_id recommended)"
+                test_steps[1][
+                    "status"
+                ] = "passed"  # Still pass if basic structure is correct
+                test_steps[1][
+                    "Result_Message"
+                ] = "✅ Table structure validated (index on account_id recommended)"
 
             # Step 3: Validate initial data
             db_cursor.execute("SELECT COUNT(*) FROM transactions")
             record_count = db_cursor.fetchone()[0]
 
             # Check for account 1001 and 1002 data
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT account_id, COUNT(*) as transaction_count,
                        SUM(CASE WHEN transaction_type = 'CREDIT' THEN amount ELSE -amount END) as balance
                 FROM transactions 
                 WHERE account_id IN (1001, 1002)
                 GROUP BY account_id
                 ORDER BY account_id
-            """)
+            """
+            )
             account_data = db_cursor.fetchall()
             # total up the number of transactions for account 1001 and 1002
-            account_1001_transactions = sum(acc[1] for acc in account_data if acc[0] == 1001)
-            account_1002_transactions = sum(acc[1] for acc in account_data if acc[0] == 1002)
+            account_1001_transactions = sum(
+                acc[1] for acc in account_data if acc[0] == 1001
+            )
+            account_1002_transactions = sum(
+                acc[1] for acc in account_data if acc[0] == 1002
+            )
 
-            if record_count >= 7 and (account_1001_transactions + account_1002_transactions) >= 6:
+            if (
+                record_count >= 7
+                and (account_1001_transactions + account_1002_transactions) >= 6
+            ):
                 test_steps[2]["status"] = "passed"
                 test_steps[2]["Result_Message"] = (
                     f"✅ Transaction data validated: {record_count} total transactions, "
@@ -265,18 +294,22 @@ def validate_test(model_result, fixtures=None):
 
             # Step 4: Look for evidence of advanced transaction work
             # This is harder to validate directly, so we check for additional data or complexity
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT DISTINCT account_id 
                 FROM transactions 
                 ORDER BY account_id
-            """)
+            """
+            )
             unique_accounts = [row[0] for row in db_cursor.fetchall()]
 
-            db_cursor.execute("""
+            db_cursor.execute(
+                """
                 SELECT transaction_type, COUNT(*) 
                 FROM transactions 
                 GROUP BY transaction_type
-            """)
+            """
+            )
             transaction_types = db_cursor.fetchall()
 
             if len(unique_accounts) >= 2 and len(transaction_types) >= 2:

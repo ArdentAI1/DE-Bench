@@ -155,12 +155,20 @@ def validate_test(model_result, fixtures=None):
             # Check if the problem was demonstrated (all division results should be 0 due to integer truncation)
             division_results = [row[3] for row in original_results]
             if all(result == 0 for result in division_results):
-                print("✅ Integer division problem confirmed - all results are 0", flush=True)
+                print(
+                    "✅ Integer division problem confirmed - all results are 0",
+                    flush=True,
+                )
             else:
-                print("⚠️ Warning: Integer division problem not clearly demonstrated", flush=True)
+                print(
+                    "⚠️ Warning: Integer division problem not clearly demonstrated",
+                    flush=True,
+                )
 
             # Step 3: Check if the agent fixed the issue
-            print("🔍 Checking if agent fixed the integer division issue...", flush=True)
+            print(
+                "🔍 Checking if agent fixed the integer division issue...", flush=True
+            )
 
             # Try different approaches the agent might have used:
             # 1. Check if column types were changed to DECIMAL/NUMERIC
@@ -183,7 +191,10 @@ def validate_test(model_result, fixtures=None):
                     if "numeric" in col[1].lower() or "decimal" in col[1].lower()
                 ]
                 if decimal_types:
-                    print("✅ Agent changed column types to support decimal division", flush=True)
+                    print(
+                        "✅ Agent changed column types to support decimal division",
+                        flush=True,
+                    )
 
                     # Test the division again
                     db_cursor.execute(

@@ -33,23 +33,25 @@ cleanup_already_run = False
 def cleanup_handler():
     """Cleanup function that runs on exit or interrupt"""
     global cleanup_already_run
-    
+
     if cleanup_already_run:
         print("🔄 Cleanup already completed, skipping...")
         return
-    
+
     cleanup_already_run = True
     print("\n🛑 Interrupt received! Running cleanup...")
-    
+
     try:
         from Fixtures.session_spindown import session_spindown
+
         session_spindown()
         print("✅ Session spindown completed")
     except Exception as e:
         print(f"❌ Error during session spindown: {e}")
-    
+
     # Clean up temp directory
     import shutil
+
     if os.path.exists(".tmp"):
         try:
             shutil.rmtree(".tmp/")
@@ -68,9 +70,9 @@ def signal_handler(signum, frame):
 def pytest_configure(config):
     # Register signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     # Also register cleanup for normal exit
-    
+
     print("Configuring pytest...")
 
     # Load environment variables from the .env file
@@ -95,12 +97,17 @@ def pytest_configure(config):
 
     # SQLite will create the database file automatically
     with sqlite3.connect(".tmp/resources.db") as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS resources (id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id TEXT, type TEXT, creation_time REAL, worker_pid INTEGER, creation_duration REAL, description TEXT, status TEXT, custom_info TEXT)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS resources (id INTEGER PRIMARY KEY AUTOINCREMENT, resource_id TEXT, type TEXT, creation_time REAL, worker_pid INTEGER, creation_duration REAL, description TEXT, status TEXT, custom_info TEXT)"
+        )
 
     initialize_model()
 
+
 def pytest_addoption(parser):
-    parser.addoption("--mode", action="store", default="Ardent", help="Mode to run the test in")
+    parser.addoption(
+        "--mode", action="store", default="Ardent", help="Mode to run the test in"
+    )
 
 
 def pytest_runtest_logreport(report):
@@ -110,7 +117,7 @@ def pytest_runtest_logreport(report):
         user_query = None
         test_steps = None
         run_trace_id = None
-        
+
         # Get values from user_properties if they exist
         for name, value in report.user_properties:
             if name == "model_runtime":
@@ -139,7 +146,6 @@ def pytest_sessionfinish(session, exitstatus):
     from Configs.ArdentConfig import Ardent_Client
     from Fixtures.session_spindown import session_spindown
     import shutil
-
 
     if os.path.exists(".tmp"):
         print("TMP directory exists")

@@ -42,7 +42,7 @@ class Kubernetes:
         try:
             kubeconfig = (
                 cloud_provider_client.managed_clusters.list_cluster_user_credentials(
-                    os.getenv("ACI_RESOURCE_GROUP"), os.getenv("AKS_CLUSTER_NAME")
+                    os.getenv("AKS_RESOURCE_GROUP"), os.getenv("AKS_CLUSTER_NAME")
                 )
                 .kubeconfigs[0]
                 .value
