@@ -154,37 +154,65 @@ def get_test_function_name(test_name: str) -> str:
 # ========== Session-Level Fixture Management ==========
 
 
-def discover_session_fixtures(all_fixtures: List[Any]) -> List[Any]:
+def discover_session_fixtures(
+    all_fixtures: List[Any],
+) -> Tuple[List[Any], Dict[str, List[Any]]]:
     """
     Discover which fixtures require session-level setup across all tests.
+    Collects ALL configs from ALL tests for each fixture type to pass to session_setup().
 
     Args:
         all_fixtures: List of all DEBenchFixture instances from all tests
 
     Returns:
-        List of unique fixture classes that require session setup
+        Tuple of (session_fixtures, session_configs_map)
+        - session_fixtures: List of unique fixture instances (one per fixture class)
+        - session_configs_map: Dict mapping resource_type -> list of ALL configs from ALL tests
     """
     from Fixtures.base_fixture import DEBenchFixture
 
-    session_fixture_classes = set()
+    session_fixture_classes = {}  # Map fixture class -> first instance
+    session_configs_map = {}  # Map resource_type -> list of configs
 
     for fixture in all_fixtures:
-        if (
-            isinstance(fixture, DEBenchFixture)
-            and fixture.__class__.requires_session_setup()
-        ):
-            session_fixture_classes.add(fixture.__class__)
+        if isinstance(fixture, DEBenchFixture):
+            resource_type = fixture.get_resource_type()
+            requires_session = fixture.__class__.requires_session_setup()
+            print(
+                f"🔍 Checking fixture {resource_type}: requires_session_setup={requires_session}"
+            )
 
-    # Return one instance of each unique session fixture class
-    return [fixture_class() for fixture_class in session_fixture_classes]
+            if requires_session:
+                # Store first instance of each fixture class
+                if fixture.__class__ not in session_fixture_classes:
+                    session_fixture_classes[fixture.__class__] = fixture
+                    session_configs_map[resource_type] = []
+                    print(f"   ✅ Added {resource_type} to session fixtures")
+
+                # Collect config from this test's fixture
+                if hasattr(fixture, "custom_config") and fixture.custom_config:
+                    session_configs_map[resource_type].append(fixture.custom_config)
+                    print(
+                        f"   📝 Collected config: {fixture.custom_config.get('airflow_provider', 'N/A')}"
+                    )
+
+    # Return one instance of each unique session fixture class + all their configs
+    print(f"📋 Collected {len(session_fixture_classes)} unique session fixture types")
+    for resource_type, configs in session_configs_map.items():
+        print(f"   {resource_type}: {len(configs)} configs collected")
+
+    return list(session_fixture_classes.values()), session_configs_map
 
 
-def setup_session_fixtures(session_fixtures: List[Any]) -> Dict[str, Any]:
+def setup_session_fixtures(
+    session_fixtures: List[Any], session_configs_map: Dict[str, List[Any]]
+) -> Dict[str, Any]:
     """
     Set up session-level fixtures that will be shared across all tests.
 
     Args:
         session_fixtures: List of unique session fixtures to set up
+        session_configs_map: Dict mapping resource_type -> list of ALL configs from ALL tests
 
     Returns:
         Dictionary mapping resource_type -> session_data
@@ -199,16 +227,28 @@ def setup_session_fixtures(session_fixtures: List[Any]) -> Dict[str, Any]:
 
         resource_type = fixture.get_resource_type()
 
+        # Get all configs for this resource type across all tests
+        all_configs = session_configs_map.get(resource_type, [])
+
         try:
             print(f"🔧 Setting up session-level {resource_type}...")
-            fixture_session_data = fixture.session_setup()
+            print(
+                f"   Passing {len(all_configs)} configs from all tests to session_setup()"
+            )
+
+            # Pass ALL configs to session_setup so it can make decisions based on aggregate
+            fixture_session_data = fixture.session_setup(all_configs)
             session_data[resource_type] = fixture_session_data
             print(f"✅ Session-level {resource_type} set up successfully")
+            print(
+                f"   Session data keys in result: {list(fixture_session_data.keys()) if isinstance(fixture_session_data, dict) else 'Not a dict'}"
+            )
         except Exception as e:
             print(
                 f"❌ Failed to set up session-level {resource_type}: {e}, {traceback.format_exc()}"
             )
 
+    print(f"📊 Final session_data structure: {list(session_data.keys())}")
     return session_data
 
 
@@ -269,9 +309,18 @@ def setup_test_resources_from_fixtures(
 
         resource_type = fixture.get_resource_type()
 
+        # Debug: Print session data keys
+        print(f"🔍 Setting up {resource_type}...")
+        print(f"   Available session data keys: {list(session_data.keys())}")
+        print(f"   Looking for key: {resource_type}")
+
         # Pass session data to fixture if available
         if resource_type in session_data:
+            print(f"   ✅ Found session data for {resource_type}, setting on fixture")
             fixture.session_data = session_data[resource_type]
+        else:
+            print(f"   ⚠️  No session data found for {resource_type}")
+            fixture.session_data = None
 
         # Use provided config or default config
         config = fixture_configs.get(resource_type, fixture.get_default_config())

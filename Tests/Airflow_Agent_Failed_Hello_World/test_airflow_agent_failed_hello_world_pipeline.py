@@ -33,7 +33,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     resource_id = f"hello_world_failure_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
-        "airflow_provider": "ecs",  # Use ECS deployment
+        "airflow_provider": "aks",
         "container_image": os.getenv("FAILURE_HELLO_WORLD_AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }

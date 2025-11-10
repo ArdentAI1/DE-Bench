@@ -35,7 +35,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
     # Get provider from environment or default to "astro"
-    provider = "ecs"
+    provider = "aks"
 
     # Initialize Airflow fixture with appropriate deployment provider
     resource_id = f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}"

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, TypeVar, Generic, Optional
+from typing import Dict, Any, TypeVar, Generic, Optional, List
 from typing_extensions import TypedDict
 from braintrust import traced
 
@@ -150,7 +150,7 @@ class DEBenchFixture(ABC, Generic[ConfigT, ResourceT, SessionT]):
         return False
 
     def session_setup(
-        self, session_config: Optional[ConfigT] = None
+        self, session_configs: Optional[List[ConfigT]] = None
     ) -> Optional[SessionT]:
         """
         Set up session-level resources that will be shared across multiple tests.
@@ -158,8 +158,12 @@ class DEBenchFixture(ABC, Generic[ConfigT, ResourceT, SessionT]):
         This method is called once before any tests run, for fixtures that
         return True from requires_session_setup().
 
+        It receives ALL configs from ALL tests to allow intelligent decisions
+        about what infrastructure to provision (e.g., if tests need AKS + ECS,
+        both can be set up in a single session_setup call).
+
         Args:
-            session_config: Configuration for session setup. If None, uses
+            session_configs: List of ALL configurations from ALL tests in the session. If None or empty, uses
                           custom_config from __init__ or get_default_config().
 
         Returns:
