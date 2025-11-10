@@ -54,7 +54,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     resource_id = f"dynamic_dag_generation_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
-        "use_kubernetes": True,  # Enable Kubernetes deployment
+        "airflow_provider": "ecs",  # Use ECS deployment
         "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }
@@ -252,9 +252,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1][
-            "Result_Message"
-        ] = f"✅ Git branch '{branch_name}' created successfully"
+        test_steps[1]["Result_Message"] = (
+            f"✅ Git branch '{branch_name}' created successfully"
+        )
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -325,7 +325,9 @@ def validate_test(model_result, fixtures=None):
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),
                 "acrRepository": airflow_resource_data["deployment_id"],
                 "k8sNamespace": airflow_resource_data["k8s_namespace"],
-                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[:50],
+                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
+                    :50
+                ],
             }
 
         pr_exists, test_steps[2] = github_manager.find_and_merge_pr(
@@ -347,9 +349,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2][
-            "Result_Message"
-        ] = f"✅ PR '{pr_title}' created and merged successfully"
+        test_steps[2]["Result_Message"] = (
+            f"✅ PR '{pr_title}' created and merged successfully"
+        )
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -358,9 +360,9 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action timed out (status: {action_status['status']})"
+            )
             test_steps[3]["action_status"] = action_status
             # Mark remaining steps as failed
             for step in test_steps:
@@ -370,9 +372,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            )
             test_steps[3]["action_status"] = action_status
             # CI details are automatically included in action_status["ci_details"]
             if "ci_details" in action_status:
@@ -397,9 +399,9 @@ def validate_test(model_result, fixtures=None):
 
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4][
-                "Result_Message"
-            ] = "❌ Airflow instance did not redeploy successfully"
+            test_steps[4]["Result_Message"] = (
+                "❌ Airflow instance did not redeploy successfully"
+            )
             # Mark remaining steps as failed
             for step in test_steps:
                 if step["status"] == "running":
@@ -408,9 +410,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4][
-            "Result_Message"
-        ] = "✅ Airflow redeployed successfully after GitHub action"
+        test_steps[4]["Result_Message"] = (
+            "✅ Airflow redeployed successfully after GitHub action"
+        )
 
         # Check tenant config table in PostgreSQL
         postgres_db_name = postgres_resource_data["created_resources"][0]["name"]
@@ -428,19 +430,19 @@ def validate_test(model_result, fixtures=None):
 
             if config_count >= 5 and enabled_count == 4:
                 test_steps[5]["status"] = "passed"
-                test_steps[5][
-                    "Result_Message"
-                ] = f"✅ tenant_pipeline_configs has {config_count} configs ({enabled_count} enabled)"
+                test_steps[5]["Result_Message"] = (
+                    f"✅ tenant_pipeline_configs has {config_count} configs ({enabled_count} enabled)"
+                )
             elif config_count >= 5:
                 test_steps[5]["status"] = "partial"
-                test_steps[5][
-                    "Result_Message"
-                ] = f"⚠️ Table has {config_count} configs but {enabled_count} enabled (expected 4)"
+                test_steps[5]["Result_Message"] = (
+                    f"⚠️ Table has {config_count} configs but {enabled_count} enabled (expected 4)"
+                )
             else:
                 test_steps[5]["status"] = "failed"
-                test_steps[5][
-                    "Result_Message"
-                ] = f"❌ Only {config_count} tenant configs found"
+                test_steps[5]["Result_Message"] = (
+                    f"❌ Only {config_count} tenant configs found"
+                )
 
         finally:
             db_cursor.close()
@@ -448,9 +450,9 @@ def validate_test(model_result, fixtures=None):
 
         # Check for dynamic DAG factory code
         test_steps[6]["status"] = "partial"
-        test_steps[6][
-            "Result_Message"
-        ] = "⚠️ DAG factory code validation requires GitHub inspection"
+        test_steps[6]["Result_Message"] = (
+            "⚠️ DAG factory code validation requires GitHub inspection"
+        )
 
         # Check for generated tenant DAGs
         # Try to find DAGs matching pattern tenant_*_pipeline
@@ -459,9 +461,9 @@ def validate_test(model_result, fixtures=None):
             # This requires Airflow API to list all DAGs
             # We'll check if at least some DAGs exist
             test_steps[7]["status"] = "partial"
-            test_steps[7][
-                "Result_Message"
-            ] = "⚠️ Tenant DAG count validation requires Airflow API inspection"
+            test_steps[7]["Result_Message"] = (
+                "⚠️ Tenant DAG count validation requires Airflow API inspection"
+            )
         except Exception as e:
             test_steps[7]["status"] = "partial"
             test_steps[7]["Result_Message"] = f"⚠️ Cannot enumerate DAGs: {str(e)}"
@@ -489,16 +491,16 @@ def validate_test(model_result, fixtures=None):
                     executed_dag_name = dag_name
                     executed_dag_run_id = dag_run_id
                     test_steps[8]["status"] = "passed"
-                    test_steps[8][
-                        "Result_Message"
-                    ] = f"✅ Successfully executed tenant DAG: {dag_name} (run_id: {dag_run_id})"
+                    test_steps[8]["Result_Message"] = (
+                        f"✅ Successfully executed tenant DAG: {dag_name} (run_id: {dag_run_id})"
+                    )
                     break
 
         if not executed_any:
             test_steps[8]["status"] = "partial"
-            test_steps[8][
-                "Result_Message"
-            ] = "⚠️ Could not execute tenant DAGs (may not exist or use different naming)"
+            test_steps[8]["Result_Message"] = (
+                "⚠️ Could not execute tenant DAGs (may not exist or use different naming)"
+            )
         else:
             # Capture comprehensive DAG information for the executed tenant DAG
             print(

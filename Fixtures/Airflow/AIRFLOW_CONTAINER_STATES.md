@@ -334,9 +334,9 @@ def get_fixtures():
 
     custom_airflow_config = {
         "resource_id": f"my_test_{timestamp}_{uuid}",
-        "use_kubernetes": True,
+        "airflow_provider": "ecs",
         "container_image": os.getenv("MY_AIRFLOW_STATE_IMAGE"),
-        "kubernetes_namespace": f"my-test-{timestamp}-{uuid}",
+        "ecs_namespace": f"my-test-{timestamp}-{uuid}",
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)
@@ -358,9 +358,9 @@ This is simpler - just reference an existing image without building a new one.
 # In your test configuration
 custom_airflow_config = {
     "resource_id": f"test_{timestamp}_{uuid}",
-    "use_kubernetes": True,
-    "container_image": "myacr.azurecr.io/airflow-base:latest",  # Existing image
-    "kubernetes_namespace": f"test-{timestamp}-{uuid}",
+    "airflow_provider": "ecs",
+    "container_image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/airflow-base:latest",  # Existing image
+    "ecs_namespace": f"test-{timestamp}-{uuid}",
 }
 ```
 
@@ -370,9 +370,9 @@ custom_airflow_config = {
 # Use official Airflow image
 custom_airflow_config = {
     "resource_id": f"test_{timestamp}_{uuid}",
-    "use_kubernetes": True,
+    "airflow_provider": "ecs",
     "container_image": "apache/airflow:2.10.5-python3.11",  # Docker Hub
-    "kubernetes_namespace": f"test-{timestamp}-{uuid}",
+    "ecs_namespace": f"test-{timestamp}-{uuid}",
 }
 ```
 
@@ -405,7 +405,7 @@ az acr repository show \
    ```python
    custom_airflow_config = {
        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
-       "use_kubernetes": True,
+       "airflow_provider": "ecs",
    }
    ```
 
@@ -442,9 +442,9 @@ def get_fixtures():
 
     custom_airflow_config = {
         "resource_id": resource_id,
-        "use_kubernetes": True,
+        "airflow_provider": "ecs",
         "container_image": os.getenv("FAILURE_HELLO_WORLD_AIRFLOW_CONTAINER_IMAGE"),
-        "kubernetes_namespace": resource_id.replace("_", "-"),
+        "ecs_namespace": resource_id.replace("_", "-"),
     }
 
     airflow_fixture = AirflowFixture(custom_config=custom_airflow_config)

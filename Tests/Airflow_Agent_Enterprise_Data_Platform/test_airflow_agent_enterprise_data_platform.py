@@ -35,7 +35,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     resource_id = f"enterprise_data_platform_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
-        "use_kubernetes": True,  # Enable Kubernetes deployment
+        "airflow_provider": "ecs",  # Use ECS deployment
         "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }
@@ -234,15 +234,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0][
-                "Result_Message"
-            ] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0]["Result_Message"] = (
+                "❌ AI Agent task execution failed or returned no result"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0][
-            "Result_Message"
-        ] = "✅ AI Agent completed task execution successfully"
+        test_steps[0]["Result_Message"] = (
+            "✅ AI Agent completed task execution successfully"
+        )
 
         # Get fixtures for Airflow, PostgreSQL, and GitHub
         airflow_fixture = (
@@ -313,9 +313,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1][
-            "Result_Message"
-        ] = f"✅ Git branch '{branch_name}' created successfully"
+        test_steps[1]["Result_Message"] = (
+            f"✅ Git branch '{branch_name}' created successfully"
+        )
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -386,7 +386,9 @@ def validate_test(model_result, fixtures=None):
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),
                 "acrRepository": airflow_resource_data["deployment_id"],
                 "k8sNamespace": airflow_resource_data["k8s_namespace"],
-                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[:50],
+                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
+                    :50
+                ],
             }
 
         # PR creation and merge
@@ -404,9 +406,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2][
-            "Result_Message"
-        ] = f"✅ PR '{pr_title}' created and merged successfully"
+        test_steps[2]["Result_Message"] = (
+            f"✅ PR '{pr_title}' created and merged successfully"
+        )
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -415,16 +417,16 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action timed out (status: {action_status['status']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -435,15 +437,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4][
-                "Result_Message"
-            ] = "❌ Airflow instance did not redeploy successfully"
+            test_steps[4]["Result_Message"] = (
+                "❌ Airflow instance did not redeploy successfully"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4][
-            "Result_Message"
-        ] = "✅ Airflow redeployed successfully after GitHub action"
+        test_steps[4]["Result_Message"] = (
+            "✅ Airflow redeployed successfully after GitHub action"
+        )
 
         # DAG existence check
         dag_name = "enterprise_data_platform_dag"
@@ -454,9 +456,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5][
-                "Result_Message"
-            ] = f"❌ DAG '{dag_name}' not found in Airflow"
+            test_steps[5]["Result_Message"] = (
+                f"❌ DAG '{dag_name}' not found in Airflow"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG execution
@@ -471,9 +473,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[6]["status"] = "passed"
-        test_steps[6][
-            "Result_Message"
-        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        test_steps[6]["Result_Message"] = (
+            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        )
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -592,20 +594,20 @@ def validate_test(model_result, fixtures=None):
 
                 if count > 0:
                     test_steps[step_idx]["status"] = "passed"
-                    test_steps[step_idx][
-                        "Result_Message"
-                    ] = f"✅ {description} validated: {count} records"
+                    test_steps[step_idx]["Result_Message"] = (
+                        f"✅ {description} validated: {count} records"
+                    )
                 else:
                     test_steps[step_idx]["status"] = "failed"
-                    test_steps[step_idx][
-                        "Result_Message"
-                    ] = f"❌ No {table_name} data found"
+                    test_steps[step_idx]["Result_Message"] = (
+                        f"❌ No {table_name} data found"
+                    )
 
             except psycopg2.Error as e:
                 test_steps[step_idx]["status"] = "failed"
-                test_steps[step_idx][
-                    "Result_Message"
-                ] = f"❌ {description} validation error: {str(e)}"
+                test_steps[step_idx]["Result_Message"] = (
+                    f"❌ {description} validation error: {str(e)}"
+                )
 
         cur.close()
         conn.close()

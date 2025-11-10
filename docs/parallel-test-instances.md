@@ -67,7 +67,7 @@ python run_braintrust_eval.py \
 Test that AKS can handle multiple simultaneous namespace creations:
 
 ```bash
-export USE_KUBERNETES_AIRFLOW=true
+export DEFAULT_AIRFLOW_PROVIDER=ecs
 
 python run_braintrust_eval.py \
   --num-instances 15 \

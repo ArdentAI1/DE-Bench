@@ -23,11 +23,12 @@ class AirflowResourceConfig(TypedDict):
     deployment_name: Optional[str]
     runtime_version: Optional[str]
     scheduler_size: Optional[str]
-    use_kubernetes: Optional[bool]  # Use Kubernetes instead of Astro
-    container_image: Optional[str]  # Container image for Kubernetes deployment
-    kubernetes_namespace: Optional[str]  # Kubernetes namespace
-    use_ecs: Optional[bool]  # Use ECS instead of Astro
-    ecs_namespace: Optional[str]  # ECS namespace
+    airflow_provider: Optional[
+        str
+    ]  # Deployment provider: "astro", "aks", or "ecs" (default: "astro")
+    container_image: Optional[str]  # Container image for AKS/ECS deployment
+    kubernetes_namespace: Optional[str]  # Kubernetes namespace (for AKS)
+    ecs_namespace: Optional[str]  # ECS namespace (for ECS)
     enable_load_balancer: Optional[bool]  # Enable load balancer for ECS
 
 
@@ -63,8 +64,9 @@ class AirflowSessionData(TypedDict):
     cache_manager: Optional[CacheManager]
     astro_logged_in: Optional[bool] = False
     available_deployments: Optional[List[Dict[str, str]]] = None
-    use_kubernetes: Optional[bool] = False
-    use_ecs: Optional[bool] = False
+    airflow_provider: Optional[str] = (
+        "astro"  # Deployment provider: "astro", "aks", or "ecs"
+    )
 
 
 class AirflowFixture(
@@ -93,26 +95,37 @@ class AirflowFixture(
         """
         print("🌐 Setting up Airflow session-level resources...")
 
-        # Determine deployment mode
-        use_kubernetes = (session_config and session_config.get("use_kubernetes", False)) or os.getenv("USE_KUBERNETES_AIRFLOW", "false").lower() == "true"
-        use_ecs = (session_config and session_config.get("use_ecs", False)) or os.getenv("USE_ECS_AIRFLOW", "false").lower() == "true"
+        # Determine deployment provider from config or environment
+        provider = (
+            session_config.get("airflow_provider")
+            if session_config
+            else os.getenv("DEFAULT_AIRFLOW_PROVIDER", "astro").lower()
+        )
 
-        # Validate deployment mode - only one can be active
-        if use_kubernetes and use_ecs:
-            raise ValueError("Cannot use both Kubernetes and ECS deployment modes simultaneously")
+        print(f"provider: {provider} from session_config: {session_config}")
 
-        if use_kubernetes:
+        # Validate provider value
+        valid_providers = ["astro", "aks", "ecs"]
+        if provider not in valid_providers:
+            raise ValueError(
+                f"Invalid AIRFLOW_PROVIDER '{provider}'. Must be one of: {valid_providers}"
+            )
+
+        print(f"📦 Airflow provider: {provider}")
+
+        # Determine required environment variables based on provider
+        if provider == "aks":
             required_envars = [
                 "DE_BENCH_AKS_RESOURCE_GROUP",
                 "DE_BENCH_AKS_CLUSTER_NAME",
                 "DE_BENCH_AKS_IMAGE_NAME",
             ]
-        elif use_ecs:
+        elif provider == "ecs":
             required_envars = [
                 "DE_BENCH_ECS_CLUSTER_NAME",
                 "AWS_REGION",
             ]
-        else:
+        else:  # astro
             required_envars = [
                 "ASTRO_WORKSPACE_ID",
                 "AIRFLOW_GITHUB_TOKEN",
@@ -128,60 +141,57 @@ class AirflowFixture(
                 f"Missing required environment variables: {missing_envars}"
             )
 
-        if use_kubernetes:
-            # Skip CacheManager initialization for Kubernetes - it's not needed
-            # Kubernetes deployments don't use Astronomer cache
-            print("✅ Kubernetes mode detected - skipping CacheManager and Astro setup")
+        if provider == "aks":
+            # Skip CacheManager initialization for AKS - it's not needed
+            print("✅ AKS mode detected - skipping CacheManager and Astro setup")
             return AirflowSessionData(
                 cache_manager=None,
                 astro_logged_in=False,
                 available_deployments=None,
-                use_kubernetes=use_kubernetes,
-                use_ecs=False,
+                airflow_provider=provider,
             )
 
-        if use_ecs:
+        if provider == "ecs":
             # Skip CacheManager initialization for ECS - it's not needed
-            # ECS deployments don't use Astronomer cache
             print("✅ ECS mode detected - skipping CacheManager and Astro setup")
             return AirflowSessionData(
                 cache_manager=None,
                 astro_logged_in=False,
                 available_deployments=None,
-                use_kubernetes=False,
-                use_ecs=use_ecs,
+                airflow_provider=provider,
             )
 
-        # switch to the correct workspace
-        # self._switch_to_correct_workspace()  # COMMENTED OUT - causing concurrent CLI conflicts
+        # # switch to the correct workspace
+        # # self._switch_to_correct_workspace()  # COMMENTED OUT - causing concurrent CLI conflicts
 
-        # make sure ASTRO_API_TOKEN is set
-        if not os.getenv("ASTRO_API_TOKEN"):
-            raise ValueError("ASTRO_API_TOKEN must be set")
+        # # make sure ASTRO_API_TOKEN is set
+        # if not os.getenv("ASTRO_API_TOKEN"):
+        #     raise ValueError("ASTRO_API_TOKEN must be set")
 
-        # 1. Ensure Astro login
-        print("🔐 Ensuring Astro CLI login...")
-        temp_manager = AirflowManager()
-        temp_manager._ensure_astro_login()
+        # # 1. Ensure Astro login
+        # print("🔐 Ensuring Astro CLI login...")
+        # temp_manager = AirflowManager()
+        # temp_manager._ensure_astro_login()
 
-        # 2. Initialize cache manager
-        print("💾 Initializing deployment cache manager...")
-        from Fixtures.Airflow.airflow_resources import _ensure_cache_manager_initialized
+        # # 2. Initialize cache manager
+        # print("💾 Initializing deployment cache manager...")
+        # from Fixtures.Airflow.airflow_resources import _ensure_cache_manager_initialized
 
-        cache_manager = _ensure_cache_manager_initialized()
+        # cache_manager = _ensure_cache_manager_initialized()
 
-        # 3. Get available deployments
-        available_deployments = cache_manager.get_all_astronomer_deployments()
+        # # 3. Get available deployments
+        # available_deployments = cache_manager.get_all_astronomer_deployments()
 
-        print(
-            f"✅ Airflow session setup complete! Found {len(available_deployments)} deployments in cache"
-        )
+        # print(
+        #     f"✅ Airflow session setup complete! Found {len(available_deployments)} deployments in cache"
+        # )
 
-        return AirflowSessionData(
-            cache_manager=cache_manager,
-            astro_logged_in=True,
-            available_deployments=available_deployments,
-        )
+        # return AirflowSessionData(
+        #     cache_manager=cache_manager,
+        #     astro_logged_in=True,
+        #     available_deployments=available_deployments,
+        #     airflow_provider=provider,
+        # )
 
     def session_teardown(
         self, session_data: Optional[AirflowSessionData] = None
@@ -219,7 +229,7 @@ class AirflowFixture(
     ) -> AirflowResourceData:
         """
         Set up individual Airflow resource for a test.
-        Supports both Astro (via AirflowManager) and Kubernetes (via KubernetesManifestManager).
+        Supports Astro, AKS (Kubernetes), and ECS deployment providers.
         """
         # Determine which config to use
         if resource_config is not None:
@@ -230,28 +240,33 @@ class AirflowFixture(
             config = self.get_default_config()
 
         resource_id = config["resource_id"]
-        use_kubernetes = config.get("use_kubernetes", False)
-        use_ecs = config.get("use_ecs", False)
 
-        # Determine deployment mode
-        if use_kubernetes and use_ecs:
-            raise ValueError("Cannot use both Kubernetes and ECS deployment modes simultaneously")
+        # Get provider from config or default to "astro"
+        provider = config.get("airflow_provider", "astro").lower()
 
-        deployment_mode = "Kubernetes" if use_kubernetes else ("ECS" if use_ecs else "Astro")
+        # Validate provider value
+        valid_providers = ["astro", "aks", "ecs"]
+        if provider not in valid_providers:
+            raise ValueError(
+                f"Invalid airflow_provider '{provider}'. Must be one of: {valid_providers}"
+            )
+
         print(f"🚀 Setting up Airflow resource: {resource_id}")
-        print(f"📦 Deployment mode: {deployment_mode}")
+        print(f"📦 Deployment provider: {provider}")
 
         creation_start = time.time()
 
         try:
-            if use_kubernetes:
-                # Kubernetes deployment path
-                return self._setup_kubernetes_airflow(config, resource_id, creation_start)
-            elif use_ecs:
+            if provider == "aks":
+                # AKS (Kubernetes) deployment path
+                return self._setup_kubernetes_airflow(
+                    config, resource_id, creation_start
+                )
+            elif provider == "ecs":
                 # ECS deployment path
                 return self._setup_ecs_airflow(config, resource_id, creation_start)
-            else:
-                # Astro deployment path (existing logic)
+            else:  # astro
+                # Astro deployment path
                 return self._setup_astro_airflow(config, resource_id, creation_start)
 
         except Exception as e:
@@ -269,10 +284,10 @@ class AirflowFixture(
                 "Session data not available - session setup may have failed"
             )
 
-        # Ensure we're not in Kubernetes mode
-        if session_data.get("use_kubernetes", False):
+        # Ensure we're in Astro mode
+        if session_data.get("airflow_provider", "astro") != "astro":
             raise RuntimeError(
-                "Cannot use Astro setup when Kubernetes mode is enabled"
+                f"Cannot use Astro setup when provider is '{session_data.get('airflow_provider')}'"
             )
 
         cache_manager = session_data["cache_manager"]
@@ -303,9 +318,7 @@ class AirflowFixture(
         )
 
         creation_end = time.time()
-        print(
-            f"✅ Airflow resource creation took {creation_end - creation_start:.2f}s"
-        )
+        print(f"✅ Airflow resource creation took {creation_end - creation_start:.2f}s")
 
         # Create resource data for backward compatibility
         resource_data = AirflowResourceData(
@@ -344,12 +357,18 @@ class AirflowFixture(
         from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
 
         # Get container image from config or environment
-        container_image = config.get("container_image") or os.getenv("AIRFLOW_CONTAINER_IMAGE")
+        container_image = config.get("container_image") or os.getenv(
+            "AIRFLOW_CONTAINER_IMAGE"
+        )
         if not container_image:
-            raise ValueError("AIRFLOW_CONTAINER_IMAGE environment variable is not set and the container_image is not set in the config.")
+            raise ValueError(
+                "AIRFLOW_CONTAINER_IMAGE environment variable is not set and the container_image is not set in the config."
+            )
 
         # Get or generate namespace
-        namespace = config.get("kubernetes_namespace") or f"airflow-{resource_id}".lower()[:63]
+        namespace = (
+            config.get("kubernetes_namespace") or f"airflow-{resource_id}".lower()[:63]
+        )
 
         print(f"🐳 Container image: {container_image}")
         print(f"📦 Kubernetes namespace: {namespace}")
@@ -359,17 +378,18 @@ class AirflowFixture(
         # Store k8s_manager and namespace immediately for cleanup in case of failure
         self._k8s_manager = k8s_manager
         self._k8s_namespace = namespace
-        
+
         total_start_time = time.time()
         start_time = time.time()
         # Deploy Airflow to Kubernetes
         print(f"🚀 Deploying Airflow to Kubernetes...")
         try:
             k8s_manager.generate_and_apply_manifest(
-                namespace=namespace,
-                container=container_image
+                namespace=namespace, container=container_image
             )
-            print(f"🚀 Kubernetes manifest deployment took {time.time() - start_time:.2f}s")
+            print(
+                f"🚀 Kubernetes manifest deployment took {time.time() - start_time:.2f}s"
+            )
 
             # Get the external IP from the LoadBalancer service
             start_time = time.time()
@@ -413,17 +433,16 @@ class AirflowFixture(
         # We create an AirflowManager instance pointing to the Kubernetes deployment URL.
         start_time = time.time()
         try:
-            # Create an AirflowManager instance pointing to the K8s deployment
-            # Skip Astro validation since we're using Kubernetes
+            # Create an AirflowManager instance pointing to the AKS deployment
             airflow_api_client = AirflowManager(
                 host=base_url,
                 api_url=api_url,
-                api_token="",  # Not used for Kubernetes mode
+                api_token="",  # Not used for AKS
                 resource_id=resource_id,
-                require_astro=False,  # Skip Astro validation for Kubernetes mode
+                provider="aks",
             )
             print(f"✅ Created AirflowManager instance for Kubernetes deployment")
-            
+
             # Wait for Airflow to be fully ready
             print(f"⏳ Waiting for Airflow to be ready...")
             if not airflow_api_client.wait_for_airflow_to_be_ready():
@@ -434,8 +453,12 @@ class AirflowFixture(
             raise RuntimeError(
                 f"Failed to create AirflowManager instance for Kubernetes deployment: {e}"
             ) from e
-        print(f"🚀 AirflowManager instance creation took {time.time() - start_time:.2f}s")
-        print(f"🚀 Total Kubernetes Airflow deployment took {time.time() - total_start_time:.2f}s")
+        print(
+            f"🚀 AirflowManager instance creation took {time.time() - start_time:.2f}s"
+        )
+        print(
+            f"🚀 Total Kubernetes Airflow deployment took {time.time() - total_start_time:.2f}s"
+        )
         creation_end = time.time()
         print(
             f"✅ Kubernetes Airflow deployment took {creation_end - creation_start:.2f}s"
@@ -478,12 +501,19 @@ class AirflowFixture(
         from Environment.ECS.ManifestManager import ECSManifestManager
 
         # Get container image from config or environment
-        container_image = config.get("container_image") or os.getenv("AIRFLOW_CONTAINER_IMAGE")
+        container_image = config.get("container_image") or os.getenv(
+            "AIRFLOW_CONTAINER_IMAGE"
+        )
         if not container_image:
-            raise ValueError("AIRFLOW_CONTAINER_IMAGE environment variable is not set and the container_image is not set in the config.")
+            raise ValueError(
+                "AIRFLOW_CONTAINER_IMAGE environment variable is not set and the container_image is not set in the config."
+            )
 
-        # Get or generate namespace
-        namespace = config.get("ecs_namespace") or f"airflow-{resource_id}".lower()[:63]
+        # Get or generate namespace (replace underscores with hyphens for AWS naming constraints)
+        namespace = (
+            config.get("ecs_namespace")
+            or f"airflow-{resource_id}".replace("_", "-").lower()[:63]
+        )
 
         # Get load balancer preference
         enable_load_balancer = config.get("enable_load_balancer", True)
@@ -508,7 +538,7 @@ class AirflowFixture(
                 namespace=namespace,
                 container_image=container_image,
                 use_service=True,  # Always use service for long-running Airflow
-                enable_load_balancer=enable_load_balancer
+                enable_load_balancer=enable_load_balancer,
             )
             print(f"🚀 ECS deployment took {time.time() - start_time:.2f}s")
 
@@ -520,11 +550,15 @@ class AirflowFixture(
                 # Use load balancer DNS
                 endpoint = deployment_result.get("dns_name")
                 if not endpoint:
-                    raise RuntimeError(f"Failed to get load balancer DNS for namespace {namespace}")
+                    raise RuntimeError(
+                        f"Failed to get load balancer DNS for namespace {namespace}"
+                    )
 
                 # Get port from deployment result (NLB uses 8080, ALB uses 80)
                 port = deployment_result.get("port", 8080)
-                base_url = deployment_result.get("base_url", f"http://{endpoint}:{port}")
+                base_url = deployment_result.get(
+                    "base_url", f"http://{endpoint}:{port}"
+                )
             else:
                 # Use task public IP - need to wait for service to have running tasks
                 print(f"⏳ Waiting for ECS service to have running tasks...")
@@ -536,11 +570,15 @@ class AirflowFixture(
                     endpoint = ecs_manager.get_service_external_ip(namespace=namespace)
                     if endpoint:
                         break
-                    print(f"   Still waiting for task IP... ({int(time.time() - wait_start)}s elapsed)")
+                    print(
+                        f"   Still waiting for task IP... ({int(time.time() - wait_start)}s elapsed)"
+                    )
                     time.sleep(10)
 
                 if not endpoint:
-                    raise RuntimeError(f"Failed to get public IP for namespace {namespace} after {max_wait}s")
+                    raise RuntimeError(
+                        f"Failed to get public IP for namespace {namespace} after {max_wait}s"
+                    )
 
                 base_url = f"http://{endpoint}:8080"
                 port = 8080
@@ -554,7 +592,9 @@ class AirflowFixture(
             print(f"🧹 Cleaning up namespace {namespace} due to setup failure...")
             try:
                 if ecs_manager:
-                    ecs_manager.cleanup_deployment(namespace=namespace, cleanup_infrastructure=False)
+                    ecs_manager.cleanup_deployment(
+                        namespace=namespace, cleanup_infrastructure=False
+                    )
                     print(f"✅ Cleaned up namespace {namespace}")
             except Exception as cleanup_error:
                 print(f"⚠️ Error during cleanup: {cleanup_error}")
@@ -577,13 +617,12 @@ class AirflowFixture(
         start_time = time.time()
         try:
             # Create an AirflowManager instance pointing to the ECS deployment
-            # Skip Astro validation since we're using ECS
             airflow_api_client = AirflowManager(
                 host=base_url,
                 api_url=api_url,
-                api_token="",  # Not used for ECS mode
+                api_token="",  # Not used for ECS
                 resource_id=resource_id,
-                require_astro=False,  # Skip Astro validation for ECS mode
+                provider="ecs",
             )
             print(f"✅ Created AirflowManager instance for ECS deployment")
 
@@ -597,8 +636,12 @@ class AirflowFixture(
             raise RuntimeError(
                 f"Failed to create AirflowManager instance for ECS deployment: {e}"
             ) from e
-        print(f"🚀 AirflowManager instance creation took {time.time() - start_time:.2f}s")
-        print(f"🚀 Total ECS Airflow deployment took {time.time() - total_start_time:.2f}s")
+        print(
+            f"🚀 AirflowManager instance creation took {time.time() - start_time:.2f}s"
+        )
+        print(
+            f"🚀 Total ECS Airflow deployment took {time.time() - total_start_time:.2f}s"
+        )
 
         creation_end = time.time()
         print(f"✅ ECS Airflow deployment took {creation_end - creation_start:.2f}s")
@@ -644,7 +687,9 @@ class AirflowFixture(
         from braintrust import traced
 
         @traced(name=f"{self.get_resource_type()}.test_teardown")
-        def inner_test_teardown(resource_data: Optional[AirflowResourceData] = None) -> None:
+        def inner_test_teardown(
+            resource_data: Optional[AirflowResourceData] = None,
+        ) -> None:
             return self.test_teardown(resource_data)
 
         # Check if _resource_data exists before trying to use it
@@ -655,28 +700,48 @@ class AirflowFixture(
             print(
                 f"⚠️ No _resource_data found for {self.get_resource_type()}, attempting cleanup of partial setup"
             )
-            if hasattr(self, "_k8s_manager") and hasattr(self, "_k8s_namespace") and self._k8s_manager and self._k8s_namespace:
+            if (
+                hasattr(self, "_k8s_manager")
+                and hasattr(self, "_k8s_namespace")
+                and self._k8s_manager
+                and self._k8s_namespace
+            ):
                 print("🧹 Cleaning up partially initialized Kubernetes resources...")
                 try:
                     self._k8s_manager.delete_namespace(namespace=self._k8s_namespace)
-                    print(f"✅ Cleaned up namespace {self._k8s_namespace} from partial setup")
+                    print(
+                        f"✅ Cleaned up namespace {self._k8s_namespace} from partial setup"
+                    )
                 except Exception as e:
                     print(f"⚠️ Error cleaning up partial setup: {e}")
-            elif hasattr(self, "_ecs_manager") and hasattr(self, "_ecs_namespace") and self._ecs_manager and self._ecs_namespace:
+            elif (
+                hasattr(self, "_ecs_manager")
+                and hasattr(self, "_ecs_namespace")
+                and self._ecs_manager
+                and self._ecs_namespace
+            ):
                 print("🧹 Cleaning up partially initialized ECS resources...")
                 try:
-                    self._ecs_manager.cleanup_deployment(namespace=self._ecs_namespace, cleanup_infrastructure=False)
-                    print(f"✅ Cleaned up namespace {self._ecs_namespace} from partial setup")
+                    self._ecs_manager.cleanup_deployment(
+                        namespace=self._ecs_namespace, cleanup_infrastructure=False
+                    )
+                    print(
+                        f"✅ Cleaned up namespace {self._ecs_namespace} from partial setup"
+                    )
                 except Exception as e:
                     print(f"⚠️ Error cleaning up partial setup: {e}")
             else:
                 print("⚠️ No Kubernetes or ECS resources found to clean up")
 
-    def test_teardown(self, resource_data: Optional[AirflowResourceData] = None) -> None:
+    def test_teardown(
+        self, resource_data: Optional[AirflowResourceData] = None
+    ) -> None:
         """Clean up individual Airflow resource (Astro, Kubernetes, or ECS)"""
         # Handle case where resource_data might be None (partial setup failure)
         if resource_data is None:
-            resource_id = getattr(self, "custom_config", {}).get("resource_id", "unknown")
+            resource_id = getattr(self, "custom_config", {}).get(
+                "resource_id", "unknown"
+            )
         else:
             resource_id = resource_data["resource_id"]
 
@@ -762,7 +827,9 @@ class AirflowFixture(
         k8s_namespace = resource_data.get("k8s_namespace")
 
         if not k8s_namespace:
-            print(f"⚠️ No Kubernetes namespace found for {resource_id}, skipping K8s cleanup")
+            print(
+                f"⚠️ No Kubernetes namespace found for {resource_id}, skipping K8s cleanup"
+            )
             return
 
         print(f"🧹 Cleaning up Kubernetes resources in namespace: {k8s_namespace}")
@@ -784,7 +851,9 @@ class AirflowFixture(
             # Delete the repository from the ACR
             if hasattr(self, "_k8s_manager") and self._k8s_manager:
                 repo_name = resource_id.replace("_", "-")[:50]
-                self._k8s_manager.delete_repo_from_acr(acr_name=os.getenv("AZURE_ACR_NAME"), repo_name=repo_name)
+                self._k8s_manager.delete_repo_from_acr(
+                    acr_name=os.getenv("AZURE_ACR_NAME"), repo_name=repo_name
+                )
                 print(f"✅ Deleted repository from ACR: {repo_name}")
 
         except Exception as e:
@@ -794,6 +863,7 @@ class AirflowFixture(
         test_dir = resource_data.get("test_dir")
         if test_dir and test_dir.exists():
             import shutil
+
             try:
                 shutil.rmtree(test_dir)
                 print(f"✅ Cleaned up temporary directory: {test_dir}")
@@ -816,7 +886,7 @@ class AirflowFixture(
             if hasattr(self, "_ecs_manager") and self._ecs_manager:
                 self._ecs_manager.cleanup_deployment(
                     namespace=ecs_namespace,
-                    cleanup_infrastructure=False  # Don't cleanup shared infrastructure
+                    cleanup_infrastructure=False,  # Don't cleanup shared infrastructure
                 )
                 print(f"✅ Deleted ECS deployment: {ecs_namespace}")
 
@@ -839,6 +909,7 @@ class AirflowFixture(
         test_dir = resource_data.get("test_dir")
         if test_dir and test_dir.exists():
             import shutil
+
             try:
                 shutil.rmtree(test_dir)
                 print(f"✅ Cleaned up temporary directory: {test_dir}")
@@ -900,8 +971,12 @@ class AirflowFixture(
                 "api_token": api_token,
                 "requirements_path": requirements_path,
                 "host": base_url,
-                "username": resource_data.get("username", os.getenv("AIRFLOW_USERNAME", "airflow")),  # Default to standard Airflow username
-                "password": resource_data.get("password", os.getenv("AIRFLOW_PASSWORD", "airflow")),  # Default to standard Airflow password
+                "username": resource_data.get(
+                    "username", os.getenv("AIRFLOW_USERNAME", "airflow")
+                ),  # Default to standard Airflow username
+                "password": resource_data.get(
+                    "password", os.getenv("AIRFLOW_PASSWORD", "airflow")
+                ),  # Default to standard Airflow password
             }
         }
 

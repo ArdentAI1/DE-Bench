@@ -93,11 +93,11 @@ The ManifestManager integrates seamlessly with the AirflowFixture for Kubernetes
 ```python
 from Fixtures.Airflow.airflow_fixture import AirflowFixture
 
-# Configure Airflow to use Kubernetes
+# Configure Airflow to use ECS (or AKS)
 custom_airflow_config = {
     "resource_id": "my_test_12345",
-    "use_kubernetes": True,  # Enable Kubernetes deployment
-    "container_image": "your-ecr-name.azurecr.io/airflow2-session-auth:base",
+    "airflow_provider": "ecs",  # Use ECS deployment (or "aks" for AKS)
+    "container_image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/airflow2-session-auth:base",
 }
 
 # Create fixture - ManifestManager is used internally

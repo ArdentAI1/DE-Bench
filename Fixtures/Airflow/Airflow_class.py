@@ -66,7 +66,7 @@ class AirflowManager:
         api_url: Optional[str] = None,
         cache_manager: Optional[CacheManager] = None,
         resource_id: Optional[str] = None,
-        require_astro: bool = True,
+        provider: str = "astro",
     ):
         """
         Initialize the AirflowManager with all necessary configurations.
@@ -79,7 +79,7 @@ class AirflowManager:
             max_retries: Maximum number of retries for operations
             cache_manager: Shared cache manager instance
             resource_id: Unique identifier for this resource
-            require_astro: If False, skip Astro environment validation (for Kubernetes mode)
+            provider: Airflow deployment provider - "astro", "aks", or "ecs" (default: "astro")
         """
         # Core instance variables
         self.airflow_dir = airflow_dir.absolute() if airflow_dir else None
@@ -88,9 +88,10 @@ class AirflowManager:
         self.api_url = api_url
         self.cache_manager = cache_manager
         self.resource_id = resource_id
+        self.provider = provider
 
         # API headers for Airflow requests
-        self.api_headers = self.set_api_headers(require_astro=require_astro)
+        self.api_headers = self.set_api_headers(provider=provider)
 
         # Deployment tracking
         self.deployment_id = None
@@ -98,18 +99,17 @@ class AirflowManager:
         self.test_resources = []
         self.secret_suffix = None  # Track the suffix used for GitHub secrets
 
-        # Environment validation (skip for Kubernetes mode)
-        self._validate_environment(require_astro=require_astro)
+        # Environment validation
+        self._validate_environment(provider=provider)
 
-    def _validate_environment(self, require_astro: bool = True):
+    def _validate_environment(self, provider: str = "astro"):
         """
         Validate required environment variables and installations.
 
         Args:
-            require_astro: If False, skip Astro-specific validation (for Kubernetes mode)
+            provider: Airflow deployment provider - "astro", "aks", or "ecs"
         """
-        # If not requiring Astro (e.g., Kubernetes mode), skip validation
-        if not require_astro:
+        if provider == "aks":
             required_envars = [
                 "AZURE_CLIENT_ID",
                 "AZURE_CLIENT_SECRET",
@@ -122,10 +122,13 @@ class AirflowManager:
                 "DE_BENCH_AKS_IMAGE_NAME",
                 "DE_BENCH_AKS_CLUSTER_NAME",
                 "DE_BENCH_AKS_RESOURCE_GROUP",
-                "USE_KUBERNETES_AIRFLOW",
             ]
-
-        else:
+        elif provider == "ecs":
+            required_envars = [
+                "DE_BENCH_ECS_CLUSTER_NAME",
+                "AWS_REGION",
+            ]
+        else:  # astro
             required_envars = [
                 "ASTRO_WORKSPACE_ID",
                 "AIRFLOW_GITHUB_TOKEN",
@@ -139,22 +142,26 @@ class AirflowManager:
         ]:
             raise ValueError(f"The following envars are not set: {missing_envars}")
 
-        if require_astro and not os.getenv("ASTRO_ACCESS_TOKEN") and not os.getenv("ASTRO_API_TOKEN"):
+        if (
+            provider == "astro"
+            and not os.getenv("ASTRO_ACCESS_TOKEN")
+            and not os.getenv("ASTRO_API_TOKEN")
+        ):
             raise ValueError("Either ASTRO_ACCESS_TOKEN or ASTRO_API_TOKEN must be set")
 
         # Validate Astro CLI installation
-        if require_astro:
+        if provider == "astro":
             self._parse_astro_version()
 
-    def set_api_headers(self, require_astro: bool = True) -> Dict[str, str]:
+    def set_api_headers(self, provider: str = "astro") -> Dict[str, str]:
         """
         Set the API headers for Airflow requests.
 
-        :param bool require_astro: If True, use Astro authentication, otherwise use basic authentication
+        :param str provider: Airflow deployment provider - "astro", "aks", or "ecs"
         :return: The API headers as a dictionary to use for subsequent requests
         :rtype: Dict[str, str]
         """
-        if require_astro:
+        if provider == "astro":
             return (
                 {
                     "Authorization": f"Bearer {self.api_token}",
@@ -163,9 +170,14 @@ class AirflowManager:
                 if self.api_token
                 else {}
             )
-        # Running for Kubernetes mode, use basic authentication
+
+        # For AKS and ECS, use basic authentication
+        username = os.getenv("AIRFLOW_USERNAME", "admin")
+        password = os.getenv("AIRFLOW_PASSWORD", "admin")
+        print(f"username: {username}, password: {password}")
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
         return {
-            "Authorization": f"Basic {base64.b64encode(f'{os.getenv('AIRFLOW_USERNAME', 'admin')}:{os.getenv('AIRFLOW_PASSWORD', 'admin')}'.encode()).decode()}",
+            "Authorization": f"Basic {credentials}",
         }
 
     # ===== UTILITY METHODS =====
@@ -901,6 +913,9 @@ class AirflowManager:
         retries = 10
         while retries > 0:
             print(f"Checking Airflow readiness... {retries} retries left")
+
+            print(f"self.host: {self.host}")
+            print(f"self.api_headers: {self.api_headers}")
             try:
                 health = requests.get(
                     f"{self.host.rstrip('/')}/health",

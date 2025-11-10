@@ -36,7 +36,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     resource_id = f"workflow_observability_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
-        "use_kubernetes": True,  # Enable Kubernetes deployment
+        "airflow_provider": "ecs",  # Use ECS deployment
         "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }
@@ -215,15 +215,15 @@ def validate_test(model_result, fixtures=None):
         # Step 1: Check that the agent task executed
         if not model_result or model_result.get("status") == "failed":
             test_steps[0]["status"] = "failed"
-            test_steps[0][
-                "Result_Message"
-            ] = "❌ AI Agent task execution failed or returned no result"
+            test_steps[0]["Result_Message"] = (
+                "❌ AI Agent task execution failed or returned no result"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[0]["status"] = "passed"
-        test_steps[0][
-            "Result_Message"
-        ] = "✅ AI Agent completed task execution successfully"
+        test_steps[0]["Result_Message"] = (
+            "✅ AI Agent completed task execution successfully"
+        )
 
         # Get fixtures for Airflow, PostgreSQL, Snowflake, and GitHub
         airflow_fixture = (
@@ -308,9 +308,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[1]["status"] = "passed"
-        test_steps[1][
-            "Result_Message"
-        ] = f"✅ Git branch '{branch_name}' created successfully"
+        test_steps[1]["Result_Message"] = (
+            f"✅ Git branch '{branch_name}' created successfully"
+        )
 
         # Capture agent's code snapshot for observability (after branch verification)
         print(
@@ -381,7 +381,9 @@ def validate_test(model_result, fixtures=None):
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),
                 "acrRepository": airflow_resource_data["deployment_id"],
                 "k8sNamespace": airflow_resource_data["k8s_namespace"],
-                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[:50],
+                "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
+                    :50
+                ],
             }
 
         # PR creation and merge
@@ -399,9 +401,9 @@ def validate_test(model_result, fixtures=None):
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[2]["status"] = "passed"
-        test_steps[2][
-            "Result_Message"
-        ] = f"✅ PR '{pr_title}' created and merged successfully"
+        test_steps[2]["Result_Message"] = (
+            f"✅ PR '{pr_title}' created and merged successfully"
+        )
 
         # GitHub action completion with CI failure details
         action_status = github_manager.check_if_action_is_complete(
@@ -410,16 +412,16 @@ def validate_test(model_result, fixtures=None):
 
         if not action_status["completed"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action timed out (status: {action_status['status']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action timed out (status: {action_status['status']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         elif not action_status["success"]:
             test_steps[3]["status"] = "failed"
-            test_steps[3][
-                "Result_Message"
-            ] = f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            test_steps[3]["Result_Message"] = (
+                f"❌ GitHub action failed (conclusion: {action_status['conclusion']})"
+            )
             test_steps[3]["action_status"] = action_status
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
         else:
@@ -430,15 +432,15 @@ def validate_test(model_result, fixtures=None):
         # Airflow redeployment
         if not airflow_instance.wait_for_airflow_to_be_ready():
             test_steps[4]["status"] = "failed"
-            test_steps[4][
-                "Result_Message"
-            ] = "❌ Airflow instance did not redeploy successfully"
+            test_steps[4]["Result_Message"] = (
+                "❌ Airflow instance did not redeploy successfully"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         test_steps[4]["status"] = "passed"
-        test_steps[4][
-            "Result_Message"
-        ] = "✅ Airflow redeployed successfully after GitHub action"
+        test_steps[4]["Result_Message"] = (
+            "✅ Airflow redeployed successfully after GitHub action"
+        )
 
         # DAG existence check
         dag_name = "workflow_observability_etl"
@@ -449,9 +451,9 @@ def validate_test(model_result, fixtures=None):
             test_steps[5]["Result_Message"] = f"✅ DAG '{dag_name}' found in Airflow"
         else:
             test_steps[5]["status"] = "failed"
-            test_steps[5][
-                "Result_Message"
-            ] = f"❌ DAG '{dag_name}' not found in Airflow"
+            test_steps[5]["Result_Message"] = (
+                f"❌ DAG '{dag_name}' not found in Airflow"
+            )
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
         # DAG execution
@@ -466,9 +468,9 @@ def validate_test(model_result, fixtures=None):
         # Monitor the DAG run until completion
         airflow_instance.verify_dag_id_ran(dag_name, dag_run_id)
         test_steps[6]["status"] = "passed"
-        test_steps[6][
-            "Result_Message"
-        ] = f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        test_steps[6]["Result_Message"] = (
+            f"✅ DAG '{dag_name}' executed successfully (run_id: {dag_run_id})"
+        )
 
         # Capture comprehensive DAG information for debugging (source, import errors, task logs)
         print("📊 Capturing comprehensive DAG information for debugging...", flush=True)
@@ -576,23 +578,23 @@ def validate_test(model_result, fixtures=None):
 
             if workflow_runs_count > 0 and workflow_step_runs_count > 0:
                 test_steps[7]["status"] = "passed"
-                test_steps[7][
-                    "Result_Message"
-                ] = f"✅ PostgreSQL source data validated: {workflow_runs_count} workflow runs, {workflow_step_runs_count} step runs"
+                test_steps[7]["Result_Message"] = (
+                    f"✅ PostgreSQL source data validated: {workflow_runs_count} workflow runs, {workflow_step_runs_count} step runs"
+                )
             else:
                 test_steps[7]["status"] = "failed"
-                test_steps[7][
-                    "Result_Message"
-                ] = f"❌ Insufficient source data: {workflow_runs_count} workflow runs, {workflow_step_runs_count} step runs"
+                test_steps[7]["Result_Message"] = (
+                    f"❌ Insufficient source data: {workflow_runs_count} workflow runs, {workflow_step_runs_count} step runs"
+                )
 
             postgres_cur.close()
             postgres_conn.close()
 
         except Exception as e:
             test_steps[7]["status"] = "failed"
-            test_steps[7][
-                "Result_Message"
-            ] = f"❌ PostgreSQL validation error: {str(e)}"
+            test_steps[7]["Result_Message"] = (
+                f"❌ PostgreSQL validation error: {str(e)}"
+            )
 
         # Step 9 & 10: Snowflake Target Data Validation
         try:
@@ -617,9 +619,9 @@ def validate_test(model_result, fixtures=None):
 
             if events_count >= 0:  # Table exists even if no records
                 test_steps[8]["status"] = "passed"
-                test_steps[8][
-                    "Result_Message"
-                ] = f"✅ Snowflake workflow_step_events table created with {events_count} records"
+                test_steps[8]["Result_Message"] = (
+                    f"✅ Snowflake workflow_step_events table created with {events_count} records"
+                )
 
                 # Step 10: Validate observability metrics computation
                 if events_count > 0:
@@ -637,28 +639,28 @@ def validate_test(model_result, fixtures=None):
                         field is not None for field in sample_record[:3]
                     ):  # Check first 3 required fields
                         test_steps[9]["status"] = "passed"
-                        test_steps[9][
-                            "Result_Message"
-                        ] = f"✅ Observability metrics validated: proper duration and status computation"
+                        test_steps[9]["Result_Message"] = (
+                            f"✅ Observability metrics validated: proper duration and status computation"
+                        )
                     else:
                         test_steps[9]["status"] = "failed"
-                        test_steps[9][
-                            "Result_Message"
-                        ] = "❌ Event records exist but lack proper metrics computation"
+                        test_steps[9]["Result_Message"] = (
+                            "❌ Event records exist but lack proper metrics computation"
+                        )
                 else:
                     test_steps[9]["status"] = "failed"
-                    test_steps[9][
-                        "Result_Message"
-                    ] = "❌ No event records found - metrics computation may have failed"
+                    test_steps[9]["Result_Message"] = (
+                        "❌ No event records found - metrics computation may have failed"
+                    )
             else:
                 test_steps[8]["status"] = "failed"
-                test_steps[8][
-                    "Result_Message"
-                ] = "❌ Snowflake workflow_step_events table not found"
+                test_steps[8]["Result_Message"] = (
+                    "❌ Snowflake workflow_step_events table not found"
+                )
                 test_steps[9]["status"] = "failed"
-                test_steps[9][
-                    "Result_Message"
-                ] = "❌ Cannot validate metrics - table not found"
+                test_steps[9]["Result_Message"] = (
+                    "❌ Cannot validate metrics - table not found"
+                )
 
             snowflake_cur.close()
             snowflake_conn.close()

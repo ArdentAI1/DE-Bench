@@ -4,7 +4,7 @@ This document describes the integration of AWS ECS deployment support into the D
 
 ## Overview
 
-The ECS integration allows Airflow tests to deploy to AWS ECS Fargate instead of Astronomer or Azure Kubernetes Service. This provides a third deployment option with the following benefits:
+The ECS integration allows Airflow tests to deploy to AWS ECS Fargate instead of Astronomer or Azure Kubernetes Service (AKS). This provides a third deployment provider option with the following benefits:
 
 - **Fast Deployment**: ~60 seconds without load balancer, ~2-5 minutes with load balancer
 - **Stable Endpoints**: Service endpoints remain stable across container updates
@@ -31,8 +31,8 @@ The ECS integration allows Airflow tests to deploy to AWS ECS Fargate instead of
 ### New Configuration Fields
 
 **AirflowResourceConfig (TypedDict)**:
-- `use_ecs: Optional[bool]` - Enable ECS deployment mode
-- `ecs_namespace: Optional[str]` - ECS namespace (like Kubernetes namespace)
+- `airflow_provider: Optional[str]` - Deployment provider: "astro", "aks", or "ecs" (default: "astro")
+- `ecs_namespace: Optional[str]` - ECS namespace (for ECS provider)
 - `enable_load_balancer: Optional[bool]` - Enable ALB for ECS (default: True)
 
 **AirflowResourceData (TypedDict)**:
@@ -47,8 +47,8 @@ The ECS integration allows Airflow tests to deploy to AWS ECS Fargate instead of
 For ECS deployment, set these environment variables:
 
 ```bash
-# Deployment mode
-export USE_ECS_AIRFLOW=true
+# Deployment provider (choose one: "astro", "aks", or "ecs")
+export DEFAULT_AIRFLOW_PROVIDER=ecs
 
 # AWS Configuration
 export DE_BENCH_ECS_CLUSTER_NAME=my-ecs-cluster
@@ -74,32 +74,32 @@ export AWS_ACCOUNT_ID=123456789012
 ### Running Tests with ECS
 
 ```bash
-# Set deployment mode to ECS
-export USE_ECS_AIRFLOW=true
+# Set deployment provider to ECS
+export DEFAULT_AIRFLOW_PROVIDER=ecs
 
 # Run the test
 python -m pytest Tests/Airflow_Agent_Hello_Universe_Pipeline/test_airflow_agent_hello_universe_pipeline.py
 ```
 
-### Deployment Modes Comparison
+### Deployment Providers Comparison
 
-The test now supports three mutually exclusive deployment modes:
+The test now supports three deployment providers via the `DEFAULT_AIRFLOW_PROVIDER` environment variable:
 
-| Mode | Environment Variable | Infrastructure |
-|------|---------------------|----------------|
-| Astro | Default (or `USE_ASTRO_AIRFLOW=true`) | Astronomer Cloud |
-| Kubernetes | `USE_KUBERNETES_AIRFLOW=true` | Azure AKS |
-| ECS | `USE_ECS_AIRFLOW=true` | AWS ECS Fargate |
+| Provider | Environment Variable | Infrastructure |
+|----------|---------------------|----------------|
+| Astro | `DEFAULT_AIRFLOW_PROVIDER=astro` (default) | Astronomer Cloud |
+| AKS | `DEFAULT_AIRFLOW_PROVIDER=aks` | Azure Kubernetes Service |
+| ECS | `DEFAULT_AIRFLOW_PROVIDER=ecs` | AWS ECS Fargate |
 
 ## Implementation Details
 
 ### ECS Deployment Flow
 
 1. **Session Setup** (`session_setup`)
-   - Detects `USE_ECS_AIRFLOW=true` environment variable
+   - Detects `DEFAULT_AIRFLOW_PROVIDER=ecs` environment variable
    - Validates required environment variables (cluster name, region)
    - Skips Astronomer cache manager initialization (not needed for ECS)
-   - Returns session data with `use_ecs=True`
+   - Returns session data with `airflow_provider="ecs"`
 
 2. **Test Setup** (`_setup_ecs_airflow`)
    - Initializes `ECSManifestManager` from `Environment/ECS/ManifestManager.py`
@@ -169,12 +169,13 @@ This allows GitHub Actions to:
 2. The extra 2-3 minutes is worth the reliability
 3. Your workflow does 10+ parallel deployments - load balancer provides better isolation
 
-## Comparison with Kubernetes Integration
+## Comparison with AKS Integration
 
-The ECS integration follows the exact same pattern as Kubernetes:
+The ECS integration follows the exact same pattern as AKS (Kubernetes):
 
-| Aspect | Kubernetes | ECS |
-|--------|-----------|-----|
+| Aspect | AKS | ECS |
+|--------|-----|-----|
+| Provider Value | `aks` | `ecs` |
 | Manager Class | `KubernetesManifestManager` | `ECSManifestManager` |
 | Setup Method | `_setup_kubernetes_airflow()` | `_setup_ecs_airflow()` |
 | Cleanup Method | `_cleanup_kubernetes_airflow()` | `_cleanup_ecs_airflow()` |
@@ -189,7 +190,7 @@ The integration includes comprehensive error handling:
 
 1. **Deployment Failures**: Automatic cleanup of ECS resources on setup failure
 2. **Partial Setup**: Cleanup of partially initialized resources in `_test_teardown`
-3. **Validation**: Prevents using both Kubernetes and ECS modes simultaneously
+3. **Validation**: Validates provider value is one of "astro", "aks", or "ecs"
 4. **Missing Configuration**: Clear error messages for missing environment variables
 
 ## Testing the Integration
@@ -202,7 +203,7 @@ from Fixtures.Airflow.airflow_fixture import AirflowFixture
 # Create ECS-based Airflow fixture
 config = {
     "resource_id": "test_ecs_deployment",
-    "use_ecs": True,
+    "airflow_provider": "ecs",
     "container_image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/airflow:latest",
     "ecs_namespace": "test-deployment",
     "enable_load_balancer": False,  # Faster for testing
@@ -225,7 +226,7 @@ fixture._test_teardown()
 Run the complete test:
 
 ```bash
-export USE_ECS_AIRFLOW=true
+export DEFAULT_AIRFLOW_PROVIDER=ecs
 export DE_BENCH_ECS_CLUSTER_NAME=test-cluster
 export AIRFLOW_CONTAINER_IMAGE=123456789012.dkr.ecr.us-east-1.amazonaws.com/airflow:latest
 
