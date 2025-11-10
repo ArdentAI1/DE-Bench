@@ -7,7 +7,9 @@ import argparse
 import json
 import os
 import time
+import boto3
 from typing import Optional, Dict, Any
+import requests
 
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -35,9 +37,19 @@ class ECSManifestManager:
         self.region = os.getenv("AWS_REGION", "us-east-1")
 
         # Optional: Use existing resources if provided
-        self.existing_subnet_ids = os.getenv("DE_BENCH_ECS_SUBNET_IDS", "").split(",") if os.getenv("DE_BENCH_ECS_SUBNET_IDS") else None
-        self.existing_security_group_ids = os.getenv("DE_BENCH_ECS_SECURITY_GROUP_IDS", "").split(",") if os.getenv("DE_BENCH_ECS_SECURITY_GROUP_IDS") else None
-        self.existing_task_execution_role_arn = os.getenv("DE_BENCH_ECS_TASK_EXECUTION_ROLE_ARN")
+        self.existing_subnet_ids = (
+            os.getenv("DE_BENCH_ECS_SUBNET_IDS", "").split(",")
+            if os.getenv("DE_BENCH_ECS_SUBNET_IDS")
+            else None
+        )
+        self.existing_security_group_ids = (
+            os.getenv("DE_BENCH_ECS_SECURITY_GROUP_IDS", "").split(",")
+            if os.getenv("DE_BENCH_ECS_SECURITY_GROUP_IDS")
+            else None
+        )
+        self.existing_task_execution_role_arn = os.getenv(
+            "DE_BENCH_ECS_TASK_EXECUTION_ROLE_ARN"
+        )
         self.existing_task_role_arn = os.getenv("DE_BENCH_ECS_TASK_ROLE_ARN")
 
         # Resources that will be created/used
@@ -86,19 +98,18 @@ class ECSManifestManager:
 
     def _initialize_clients(self):
         """Initialize AWS service clients"""
-        # Local import due to import timing, boto3 is a massive library
-        import boto3
-
         # Use AWS credentials from environment or IAM role
         # Support both AWS_* and ACCESS_KEY_ID_AWS formats
         access_key = os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("ACCESS_KEY_ID_AWS")
-        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv("SECRET_ACCESS_KEY_AWS")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv(
+            "SECRET_ACCESS_KEY_AWS"
+        )
 
         session = boto3.Session(
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
-            region_name=self.region
+            region_name=self.region,
         )
 
         self.ecs_client = session.client("ecs")
@@ -131,7 +142,9 @@ class ECSManifestManager:
 
         # 3. Setup IAM roles
         if self.existing_task_execution_role_arn:
-            print(f"Using existing task execution role: {self.existing_task_execution_role_arn}")
+            print(
+                f"Using existing task execution role: {self.existing_task_execution_role_arn}"
+            )
             self.task_execution_role_arn = self.existing_task_execution_role_arn
         else:
             print("Creating IAM task execution role...")
@@ -156,11 +169,14 @@ class ECSManifestManager:
                     {
                         "ResourceType": "vpc",
                         "Tags": [
-                            {"Key": "Name", "Value": f"de-bench-ecs-vpc-{self.cluster_name}"},
+                            {
+                                "Key": "Name",
+                                "Value": f"de-bench-ecs-vpc-{self.cluster_name}",
+                            },
                             {"Key": "ManagedBy", "Value": "DE-Bench-ECS"},
-                        ]
+                        ],
                     }
-                ]
+                ],
             )
             self.vpc_id = vpc_response["Vpc"]["VpcId"]
             self.created_vpc = True
@@ -171,12 +187,10 @@ class ECSManifestManager:
 
             # Enable DNS hostname support
             self.ec2_client.modify_vpc_attribute(
-                VpcId=self.vpc_id,
-                EnableDnsHostnames={"Value": True}
+                VpcId=self.vpc_id, EnableDnsHostnames={"Value": True}
             )
             self.ec2_client.modify_vpc_attribute(
-                VpcId=self.vpc_id,
-                EnableDnsSupport={"Value": True}
+                VpcId=self.vpc_id, EnableDnsSupport={"Value": True}
             )
 
             # Create Internet Gateway
@@ -185,27 +199,33 @@ class ECSManifestManager:
                     {
                         "ResourceType": "internet-gateway",
                         "Tags": [
-                            {"Key": "Name", "Value": f"de-bench-ecs-igw-{self.cluster_name}"},
+                            {
+                                "Key": "Name",
+                                "Value": f"de-bench-ecs-igw-{self.cluster_name}",
+                            },
                             {"Key": "ManagedBy", "Value": "DE-Bench-ECS"},
-                        ]
+                        ],
                     }
                 ]
             )
-            self.internet_gateway_id = igw_response["InternetGateway"]["InternetGatewayId"]
+            self.internet_gateway_id = igw_response["InternetGateway"][
+                "InternetGatewayId"
+            ]
             self.created_internet_gateway = True
             print(f"Created Internet Gateway: {self.internet_gateway_id}")
 
             # Attach Internet Gateway to VPC
             self.ec2_client.attach_internet_gateway(
-                InternetGatewayId=self.internet_gateway_id,
-                VpcId=self.vpc_id
+                InternetGatewayId=self.internet_gateway_id, VpcId=self.vpc_id
             )
 
             # Get available AZs
             azs_response = self.ec2_client.describe_availability_zones(
                 Filters=[{"Name": "state", "Values": ["available"]}]
             )
-            azs = [az["ZoneName"] for az in azs_response["AvailabilityZones"]][:2]  # Use first 2 AZs
+            azs = [az["ZoneName"] for az in azs_response["AvailabilityZones"]][
+                :2
+            ]  # Use first 2 AZs
 
             # Create public subnets in different AZs
             for i, az in enumerate(azs):
@@ -217,11 +237,14 @@ class ECSManifestManager:
                         {
                             "ResourceType": "subnet",
                             "Tags": [
-                                {"Key": "Name", "Value": f"de-bench-ecs-subnet-{i+1}-{self.cluster_name}"},
+                                {
+                                    "Key": "Name",
+                                    "Value": f"de-bench-ecs-subnet-{i + 1}-{self.cluster_name}",
+                                },
                                 {"Key": "ManagedBy", "Value": "DE-Bench-ECS"},
-                            ]
+                            ],
                         }
-                    ]
+                    ],
                 )
                 subnet_id = subnet_response["Subnet"]["SubnetId"]
                 self.subnet_ids.append(subnet_id)
@@ -230,8 +253,7 @@ class ECSManifestManager:
 
                 # Enable auto-assign public IP
                 self.ec2_client.modify_subnet_attribute(
-                    SubnetId=subnet_id,
-                    MapPublicIpOnLaunch={"Value": True}
+                    SubnetId=subnet_id, MapPublicIpOnLaunch={"Value": True}
                 )
 
             # Create route table
@@ -241,11 +263,14 @@ class ECSManifestManager:
                     {
                         "ResourceType": "route-table",
                         "Tags": [
-                            {"Key": "Name", "Value": f"de-bench-ecs-rt-{self.cluster_name}"},
+                            {
+                                "Key": "Name",
+                                "Value": f"de-bench-ecs-rt-{self.cluster_name}",
+                            },
                             {"Key": "ManagedBy", "Value": "DE-Bench-ECS"},
-                        ]
+                        ],
                     }
-                ]
+                ],
             )
             self.route_table_id = rt_response["RouteTable"]["RouteTableId"]
             self.created_route_table = True
@@ -255,14 +280,13 @@ class ECSManifestManager:
             self.ec2_client.create_route(
                 RouteTableId=self.route_table_id,
                 DestinationCidrBlock="0.0.0.0/0",
-                GatewayId=self.internet_gateway_id
+                GatewayId=self.internet_gateway_id,
             )
 
             # Associate route table with subnets
             for subnet_id in self.subnet_ids:
                 self.ec2_client.associate_route_table(
-                    RouteTableId=self.route_table_id,
-                    SubnetId=subnet_id
+                    RouteTableId=self.route_table_id, SubnetId=subnet_id
                 )
 
         except ClientError as e:
@@ -279,11 +303,14 @@ class ECSManifestManager:
                     {
                         "ResourceType": "security-group",
                         "Tags": [
-                            {"Key": "Name", "Value": f"de-bench-ecs-sg-{self.cluster_name}"},
+                            {
+                                "Key": "Name",
+                                "Value": f"de-bench-ecs-sg-{self.cluster_name}",
+                            },
                             {"Key": "ManagedBy", "Value": "DE-Bench-ECS"},
-                        ]
+                        ],
                     }
-                ]
+                ],
             )
             sg_id = sg_response["GroupId"]
             self.security_group_ids = [sg_id]
@@ -298,15 +325,22 @@ class ECSManifestManager:
                         "IpProtocol": "tcp",
                         "FromPort": 8080,
                         "ToPort": 8080,
-                        "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": "Airflow web interface"}]
+                        "IpRanges": [
+                            {
+                                "CidrIp": "0.0.0.0/0",
+                                "Description": "Airflow web interface",
+                            }
+                        ],
                     },
                     {
                         "IpProtocol": "tcp",
                         "FromPort": 80,
                         "ToPort": 80,
-                        "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": "HTTP for ALB"}]
+                        "IpRanges": [
+                            {"CidrIp": "0.0.0.0/0", "Description": "HTTP for ALB"}
+                        ],
                     },
-                ]
+                ],
             )
 
             # Note: AWS automatically creates a default egress rule allowing all outbound traffic
@@ -317,8 +351,11 @@ class ECSManifestManager:
                 # Security group exists, try to find it
                 sg_response = self.ec2_client.describe_security_groups(
                     Filters=[
-                        {"Name": "group-name", "Values": [f"de-bench-ecs-sg-{self.cluster_name}"]},
-                        {"Name": "vpc-id", "Values": [self.vpc_id]}
+                        {
+                            "Name": "group-name",
+                            "Values": [f"de-bench-ecs-sg-{self.cluster_name}"],
+                        },
+                        {"Name": "vpc-id", "Values": [self.vpc_id]},
                     ]
                 )
                 if sg_response["SecurityGroups"]:
@@ -340,12 +377,10 @@ class ECSManifestManager:
             "Statement": [
                 {
                     "Effect": "Allow",
-                    "Principal": {
-                        "Service": "ecs-tasks.amazonaws.com"
-                    },
-                    "Action": "sts:AssumeRole"
+                    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
                 }
-            ]
+            ],
         }
 
         try:
@@ -356,7 +391,7 @@ class ECSManifestManager:
                 Description="Execution role for DE-Bench ECS tasks",
                 Tags=[
                     {"Key": "ManagedBy", "Value": "DE-Bench-ECS"},
-                ]
+                ],
             )
             self.task_execution_role_arn = role_response["Role"]["Arn"]
             self.created_roles.append(role_name)
@@ -365,13 +400,13 @@ class ECSManifestManager:
             # Attach AWS managed policy for ECS task execution
             self.iam_client.attach_role_policy(
                 RoleName=role_name,
-                PolicyArn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+                PolicyArn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
             )
 
             # Attach policy for ECR access
             self.iam_client.attach_role_policy(
                 RoleName=role_name,
-                PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+                PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
             )
 
             # Add inline policy for CloudWatch Logs (includes CreateLogGroup)
@@ -383,17 +418,17 @@ class ECSManifestManager:
                         "Action": [
                             "logs:CreateLogGroup",
                             "logs:CreateLogStream",
-                            "logs:PutLogEvents"
+                            "logs:PutLogEvents",
                         ],
-                        "Resource": "arn:aws:logs:*:*:*"
+                        "Resource": "arn:aws:logs:*:*:*",
                     }
-                ]
+                ],
             }
 
             self.iam_client.put_role_policy(
                 RoleName=role_name,
                 PolicyName="CloudWatchLogsFullAccess",
-                PolicyDocument=json.dumps(logs_policy)
+                PolicyDocument=json.dumps(logs_policy),
             )
             print(f"Added CloudWatch Logs permissions to role")
 
@@ -417,21 +452,23 @@ class ECSManifestManager:
                                 "Action": [
                                     "logs:CreateLogGroup",
                                     "logs:CreateLogStream",
-                                    "logs:PutLogEvents"
+                                    "logs:PutLogEvents",
                                 ],
-                                "Resource": "arn:aws:logs:*:*:*"
+                                "Resource": "arn:aws:logs:*:*:*",
                             }
-                        ]
+                        ],
                     }
 
                     self.iam_client.put_role_policy(
                         RoleName=role_name,
                         PolicyName="CloudWatchLogsFullAccess",
-                        PolicyDocument=json.dumps(logs_policy)
+                        PolicyDocument=json.dumps(logs_policy),
                     )
                     print(f"Added/updated CloudWatch Logs permissions to existing role")
                 except ClientError as policy_error:
-                    print(f"Warning: Could not add CloudWatch Logs policy to existing role: {policy_error}")
+                    print(
+                        f"Warning: Could not add CloudWatch Logs policy to existing role: {policy_error}"
+                    )
             else:
                 raise Exception(f"Failed to create IAM role: {e}")
 
@@ -449,7 +486,7 @@ class ECSManifestManager:
                     clusterName=self.cluster_name,
                     tags=[
                         {"key": "ManagedBy", "value": "DE-Bench-ECS"},
-                    ]
+                    ],
                 )
                 self.created_cluster = True
                 print(f"Created ECS cluster: {self.cluster_name}")
@@ -462,7 +499,7 @@ class ECSManifestManager:
         namespace: str,
         container_image: str,
         cpu: str = "1024",
-        memory: str = "2048"
+        memory: str = "2048",
     ) -> Dict[str, Any]:
         """
         Generate ECS task definition
@@ -489,36 +526,25 @@ class ECSManifestManager:
                         {
                             "containerPort": 8080,
                             "protocol": "tcp",
-                            "name": "airflow-web"
+                            "name": "airflow-web",
                         }
                     ],
-                    "environment": [
-                        {
-                            "name": "IS_SANDBOX",
-                            "value": "1"
-                        }
-                    ],
+                    "environment": [{"name": "IS_SANDBOX", "value": "1"}],
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
                             "awslogs-group": f"/ecs/{namespace}",
                             "awslogs-region": self.region,
                             "awslogs-stream-prefix": "airflow",
-                            "awslogs-create-group": "true"
-                        }
-                    }
+                            "awslogs-create-group": "true",
+                        },
+                    },
                 }
             ],
             "tags": [
-                {
-                    "key": "Environment",
-                    "value": "DE-Bench"
-                },
-                {
-                    "key": "Namespace",
-                    "value": namespace
-                }
-            ]
+                {"key": "Environment", "value": "DE-Bench"},
+                {"key": "Namespace", "value": namespace},
+            ],
         }
 
         # Add task role if specified
@@ -532,7 +558,7 @@ class ECSManifestManager:
         namespace: str,
         container_image: str,
         cpu: str = "1024",
-        memory: str = "2048"
+        memory: str = "2048",
     ) -> str:
         """
         Register a new task definition with ECS
@@ -543,7 +569,9 @@ class ECSManifestManager:
         :param str memory: Memory in MB
         :return: Task definition ARN
         """
-        task_def = self.generate_task_definition(namespace, container_image, cpu, memory)
+        task_def = self.generate_task_definition(
+            namespace, container_image, cpu, memory
+        )
 
         try:
             response = self.ecs_client.register_task_definition(**task_def)
@@ -559,7 +587,7 @@ class ECSManifestManager:
         task_definition_arn: str,
         desired_count: int = 1,
         enable_load_balancer: bool = True,
-        target_group_arn: Optional[str] = None
+        target_group_arn: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create or update an ECS service
@@ -576,13 +604,12 @@ class ECSManifestManager:
         # Check if service already exists
         try:
             existing_services = self.ecs_client.describe_services(
-                cluster=self.cluster_name,
-                services=[service_name]
+                cluster=self.cluster_name, services=[service_name]
             )
 
             service_exists = (
-                existing_services["services"] and
-                existing_services["services"][0]["status"] != "INACTIVE"
+                existing_services["services"]
+                and existing_services["services"][0]["status"] != "INACTIVE"
             )
         except ClientError:
             service_exists = False
@@ -598,19 +625,13 @@ class ECSManifestManager:
                 "awsvpcConfiguration": {
                     "subnets": self.subnet_ids,
                     "securityGroups": self.security_group_ids,
-                    "assignPublicIp": "ENABLED"
+                    "assignPublicIp": "ENABLED",
                 }
             },
             "tags": [
-                {
-                    "key": "Environment",
-                    "value": "DE-Bench"
-                },
-                {
-                    "key": "Namespace",
-                    "value": namespace
-                }
-            ]
+                {"key": "Environment", "value": "DE-Bench"},
+                {"key": "Namespace", "value": namespace},
+            ],
         }
 
         # Add load balancer configuration if specified
@@ -619,7 +640,7 @@ class ECSManifestManager:
                 {
                     "targetGroupArn": target_group_arn,
                     "containerName": "airflow",
-                    "containerPort": 8080
+                    "containerPort": 8080,
                 }
             ]
             service_config["healthCheckGracePeriodSeconds"] = 300
@@ -633,7 +654,7 @@ class ECSManifestManager:
                     service=service_name,
                     taskDefinition=task_definition_arn,
                     desiredCount=desired_count,
-                    networkConfiguration=service_config["networkConfiguration"]
+                    networkConfiguration=service_config["networkConfiguration"],
                 )
             else:
                 # Create new service
@@ -648,7 +669,7 @@ class ECSManifestManager:
         self,
         namespace: str,
         task_definition_arn: str,
-        wait_for_completion: bool = False
+        wait_for_completion: bool = False,
     ) -> Dict[str, Any]:
         """
         Run a standalone ECS task (equivalent to Kubernetes Job)
@@ -667,19 +688,13 @@ class ECSManifestManager:
                     "awsvpcConfiguration": {
                         "subnets": self.subnet_ids,
                         "securityGroups": self.security_group_ids,
-                        "assignPublicIp": "ENABLED"
+                        "assignPublicIp": "ENABLED",
                     }
                 },
                 tags=[
-                    {
-                        "key": "Environment",
-                        "value": "DE-Bench"
-                    },
-                    {
-                        "key": "Namespace",
-                        "value": namespace
-                    }
-                ]
+                    {"key": "Environment", "value": "DE-Bench"},
+                    {"key": "Namespace", "value": namespace},
+                ],
             )
 
             if not response["tasks"]:
@@ -703,8 +718,7 @@ class ECSManifestManager:
         while time.time() - start_time < timeout:
             try:
                 response = self.ecs_client.describe_tasks(
-                    cluster=self.cluster_name,
-                    tasks=[task_arn]
+                    cluster=self.cluster_name, tasks=[task_arn]
                 )
 
                 if not response["tasks"]:
@@ -729,10 +743,7 @@ class ECSManifestManager:
         print(f"Task did not complete within {timeout} seconds")
 
     def create_load_balancer_and_target_group(
-        self,
-        namespace: str,
-        vpc_id: Optional[str] = None,
-        use_nlb: bool = True
+        self, namespace: str, vpc_id: Optional[str] = None, use_nlb: bool = True
     ) -> tuple[str, str]:
         """
         Create a Network Load Balancer (NLB) or Application Load Balancer (ALB) and Target Group
@@ -765,15 +776,9 @@ class ECSManifestManager:
                     HealthyThresholdCount=2,
                     UnhealthyThresholdCount=2,
                     Tags=[
-                        {
-                            "Key": "Environment",
-                            "Value": "DE-Bench"
-                        },
-                        {
-                            "Key": "Namespace",
-                            "Value": namespace
-                        }
-                    ]
+                        {"Key": "Environment", "Value": "DE-Bench"},
+                        {"Key": "Namespace", "Value": namespace},
+                    ],
                 )
             else:
                 # ALB uses HTTP health checks with path
@@ -791,18 +796,14 @@ class ECSManifestManager:
                     UnhealthyThresholdCount=3,
                     Matcher={"HttpCode": "200,302"},  # Allow redirects
                     Tags=[
-                        {
-                            "Key": "Environment",
-                            "Value": "DE-Bench"
-                        },
-                        {
-                            "Key": "Namespace",
-                            "Value": namespace
-                        }
-                    ]
+                        {"Key": "Environment", "Value": "DE-Bench"},
+                        {"Key": "Namespace", "Value": namespace},
+                    ],
                 )
             target_group_arn = tg_response["TargetGroups"][0]["TargetGroupArn"]
-            print(f"Created {'NLB' if use_nlb else 'ALB'} target group: {target_group_arn}")
+            print(
+                f"Created {'NLB' if use_nlb else 'ALB'} target group: {target_group_arn}"
+            )
         except ClientError as e:
             if e.response["Error"]["Code"] == "DuplicateTargetGroupName":
                 # Target group already exists, get its ARN
@@ -821,15 +822,9 @@ class ECSManifestManager:
                 "Type": "network" if use_nlb else "application",
                 "IpAddressType": "ipv4",
                 "Tags": [
-                    {
-                        "Key": "Environment",
-                        "Value": "DE-Bench"
-                    },
-                    {
-                        "Key": "Namespace",
-                        "Value": namespace
-                    }
-                ]
+                    {"Key": "Environment", "Value": "DE-Bench"},
+                    {"Key": "Namespace", "Value": namespace},
+                ],
             }
 
             # NLB doesn't use security groups (uses target security groups instead)
@@ -848,7 +843,9 @@ class ECSManifestManager:
                 # Load balancer already exists, get its ARN
                 lb_response = self.elbv2_client.describe_load_balancers(Names=[lb_name])
                 load_balancer_arn = lb_response["LoadBalancers"][0]["LoadBalancerArn"]
-                print(f"Using existing {'NLB' if use_nlb else 'ALB'}: {load_balancer_arn}")
+                print(
+                    f"Using existing {'NLB' if use_nlb else 'ALB'}: {load_balancer_arn}"
+                )
             else:
                 raise Exception(f"Failed to create load balancer: {e}")
 
@@ -859,11 +856,8 @@ class ECSManifestManager:
                 "Protocol": "TCP" if use_nlb else "HTTP",
                 "Port": 8080,  # Forward port 8080 to port 8080
                 "DefaultActions": [
-                    {
-                        "Type": "forward",
-                        "TargetGroupArn": target_group_arn
-                    }
-                ]
+                    {"Type": "forward", "TargetGroupArn": target_group_arn}
+                ],
             }
 
             self.elbv2_client.create_listener(**listener_config)
@@ -884,7 +878,9 @@ class ECSManifestManager:
         except ClientError as e:
             raise Exception(f"Failed to get VPC ID: {e}")
 
-    def _wait_for_load_balancer_active(self, load_balancer_arn: str, timeout: int = 300):
+    def _wait_for_load_balancer_active(
+        self, load_balancer_arn: str, timeout: int = 300
+    ):
         """Wait for load balancer to become active"""
         start_time = time.time()
 
@@ -898,7 +894,9 @@ class ECSManifestManager:
                 print(f"Load balancer state: {state}")
 
                 if state == "active":
-                    print(f"Load balancer is active after {int(time.time() - start_time)} seconds")
+                    print(
+                        f"Load balancer is active after {int(time.time() - start_time)} seconds"
+                    )
                     return
 
                 time.sleep(10)
@@ -914,7 +912,7 @@ class ECSManifestManager:
         container_image: str,
         use_service: bool = True,
         enable_load_balancer: bool = True,
-        use_nlb: bool = True
+        use_nlb: bool = True,
     ) -> Dict[str, Any]:
         """
         Complete deployment workflow: register task, create/update service or run task
@@ -938,7 +936,9 @@ class ECSManifestManager:
         if use_service:
             # Create load balancer if requested
             if enable_load_balancer:
-                lb_arn, tg_arn = self.create_load_balancer_and_target_group(namespace, use_nlb=use_nlb)
+                lb_arn, tg_arn = self.create_load_balancer_and_target_group(
+                    namespace, use_nlb=use_nlb
+                )
                 result["load_balancer_arn"] = lb_arn
                 result["target_group_arn"] = tg_arn
             else:
@@ -949,7 +949,7 @@ class ECSManifestManager:
                 namespace,
                 task_def_arn,
                 enable_load_balancer=enable_load_balancer,
-                target_group_arn=tg_arn
+                target_group_arn=tg_arn,
             )
             result["service"] = service
 
@@ -959,7 +959,9 @@ class ECSManifestManager:
                 result["dns_name"] = dns_name
                 # NLB uses port 8080, ALB uses port 80
                 port = 8080 if use_nlb else 80
-                result["base_url"] = f"http://{dns_name}:{port}" if use_nlb else f"http://{dns_name}"
+                result["base_url"] = (
+                    f"http://{dns_name}:{port}" if use_nlb else f"http://{dns_name}"
+                )
                 result["port"] = port
         else:
             # Run standalone task
@@ -994,7 +996,9 @@ class ECSManifestManager:
 
         return None
 
-    def get_task_public_ip(self, task_arn: str, max_attempts: int = 60) -> Optional[str]:
+    def get_task_public_ip(
+        self, task_arn: str, max_attempts: int = 60
+    ) -> Optional[str]:
         """
         Get the public IP of a running task
 
@@ -1005,8 +1009,7 @@ class ECSManifestManager:
         for attempt in range(max_attempts):
             try:
                 response = self.ecs_client.describe_tasks(
-                    cluster=self.cluster_name,
-                    tasks=[task_arn]
+                    cluster=self.cluster_name, tasks=[task_arn]
                 )
 
                 if not response["tasks"]:
@@ -1023,12 +1026,16 @@ class ECSManifestManager:
                                 eni_id = detail["value"]
 
                                 # Get public IP from ENI
-                                eni_response = self.ec2_client.describe_network_interfaces(
-                                    NetworkInterfaceIds=[eni_id]
+                                eni_response = (
+                                    self.ec2_client.describe_network_interfaces(
+                                        NetworkInterfaceIds=[eni_id]
+                                    )
                                 )
 
                                 if eni_response["NetworkInterfaces"]:
-                                    association = eni_response["NetworkInterfaces"][0].get("Association", {})
+                                    association = eni_response["NetworkInterfaces"][
+                                        0
+                                    ].get("Association", {})
                                     public_ip = association.get("PublicIp")
 
                                     if public_ip:
@@ -1037,7 +1044,9 @@ class ECSManifestManager:
 
                 # Print progress every 10 attempts
                 if (attempt + 1) % 10 == 0:
-                    print(f"Waiting for task public IP... (attempt {attempt + 1}/{max_attempts})")
+                    print(
+                        f"Waiting for task public IP... (attempt {attempt + 1}/{max_attempts})"
+                    )
 
                 time.sleep(5)
             except ClientError as e:
@@ -1063,8 +1072,7 @@ class ECSManifestManager:
         service_name = f"{namespace}-service"
         try:
             response = self.ecs_client.describe_services(
-                cluster=self.cluster_name,
-                services=[service_name]
+                cluster=self.cluster_name, services=[service_name]
             )
 
             if response["services"] and response["services"][0]["status"] == "ACTIVE":
@@ -1072,7 +1080,7 @@ class ECSManifestManager:
                 tasks_response = self.ecs_client.list_tasks(
                     cluster=self.cluster_name,
                     serviceName=service_name,
-                    desiredStatus="RUNNING"
+                    desiredStatus="RUNNING",
                 )
 
                 if tasks_response["taskArns"]:
@@ -1092,10 +1100,13 @@ class ECSManifestManager:
         :param int port: The port to connect to (default is 80 for ALB, 8080 for direct)
         :return: True if healthy, False otherwise
         """
-        import requests
 
         # Use /login for Airflow health check (exists and doesn't require auth)
-        url = f"http://{endpoint}:{port}/login" if port != 80 else f"http://{endpoint}/login"
+        url = (
+            f"http://{endpoint}:{port}/login"
+            if port != 80
+            else f"http://{endpoint}/login"
+        )
 
         try:
             response = requests.get(url, timeout=10, allow_redirects=True)
@@ -1104,7 +1115,9 @@ class ECSManifestManager:
                 print(f"Service is healthy at {url} (status: {response.status_code})")
                 return True
             else:
-                print(f"Health check failed with status code {response.status_code} at {url}")
+                print(
+                    f"Health check failed with status code {response.status_code} at {url}"
+                )
                 return False
         except requests.RequestException as e:
             print(f"Error connecting to service at {url}: {e}")
@@ -1122,17 +1135,13 @@ class ECSManifestManager:
         try:
             # First, scale service to 0
             self.ecs_client.update_service(
-                cluster=self.cluster_name,
-                service=service_name,
-                desiredCount=0
+                cluster=self.cluster_name, service=service_name, desiredCount=0
             )
             print(f"Scaled service {service_name} to 0 tasks")
 
             # Then delete the service
             self.ecs_client.delete_service(
-                cluster=self.cluster_name,
-                service=service_name,
-                force=True
+                cluster=self.cluster_name, service=service_name, force=True
             )
             print(f"Deleted service: {service_name}")
             return True
@@ -1153,8 +1162,7 @@ class ECSManifestManager:
         try:
             # List all task definitions in the family
             response = self.ecs_client.list_task_definitions(
-                familyPrefix=namespace,
-                status="ACTIVE"
+                familyPrefix=namespace, status="ACTIVE"
             )
 
             task_def_arns = response.get("taskDefinitionArns", [])
@@ -1209,7 +1217,9 @@ class ECSManifestManager:
 
         return False
 
-    def cleanup_deployment(self, namespace: str, cleanup_infrastructure: bool = False) -> bool:
+    def cleanup_deployment(
+        self, namespace: str, cleanup_infrastructure: bool = False
+    ) -> bool:
         """
         Complete cleanup of a deployment
 
@@ -1274,10 +1284,11 @@ class ECSManifestManager:
             try:
                 if self.vpc_id:
                     self.ec2_client.detach_internet_gateway(
-                        InternetGatewayId=self.internet_gateway_id,
-                        VpcId=self.vpc_id
+                        InternetGatewayId=self.internet_gateway_id, VpcId=self.vpc_id
                     )
-                self.ec2_client.delete_internet_gateway(InternetGatewayId=self.internet_gateway_id)
+                self.ec2_client.delete_internet_gateway(
+                    InternetGatewayId=self.internet_gateway_id
+                )
                 print(f"Deleted internet gateway: {self.internet_gateway_id}")
             except ClientError as e:
                 print(f"Error deleting internet gateway: {e}")
@@ -1297,17 +1308,17 @@ class ECSManifestManager:
                 inline_policies = self.iam_client.list_role_policies(RoleName=role_name)
                 for policy_name in inline_policies.get("PolicyNames", []):
                     self.iam_client.delete_role_policy(
-                        RoleName=role_name,
-                        PolicyName=policy_name
+                        RoleName=role_name, PolicyName=policy_name
                     )
                     print(f"Deleted inline policy {policy_name} from role {role_name}")
 
                 # Detach managed policies
-                attached_policies = self.iam_client.list_attached_role_policies(RoleName=role_name)
+                attached_policies = self.iam_client.list_attached_role_policies(
+                    RoleName=role_name
+                )
                 for policy in attached_policies.get("AttachedPolicies", []):
                     self.iam_client.detach_role_policy(
-                        RoleName=role_name,
-                        PolicyArn=policy["PolicyArn"]
+                        RoleName=role_name, PolicyArn=policy["PolicyArn"]
                     )
 
                 # Delete role
@@ -1336,8 +1347,7 @@ class ECSManifestManager:
         try:
             # List tasks with the namespace tag
             response = self.ecs_client.list_tasks(
-                cluster=self.cluster_name,
-                desiredStatus="RUNNING"
+                cluster=self.cluster_name, desiredStatus="RUNNING"
             )
 
             task_arns = response.get("taskArns", [])
@@ -1348,8 +1358,7 @@ class ECSManifestManager:
 
             # Describe tasks to find ones matching our namespace
             tasks_response = self.ecs_client.describe_tasks(
-                cluster=self.cluster_name,
-                tasks=task_arns
+                cluster=self.cluster_name, tasks=task_arns
             )
 
             for task in tasks_response.get("tasks", []):
@@ -1358,9 +1367,7 @@ class ECSManifestManager:
                     if tag["key"] == "Namespace" and tag["value"] == namespace:
                         task_arn = task["taskArn"]
                         self.ecs_client.stop_task(
-                            cluster=self.cluster_name,
-                            task=task_arn,
-                            reason="Cleanup"
+                            cluster=self.cluster_name, task=task_arn, reason="Cleanup"
                         )
                         print(f"Stopped task: {task_arn}")
 
@@ -1400,7 +1407,7 @@ class ECSManifestManager:
         try:
             self.ecr_client.delete_repository(
                 repositoryName=repo_name,
-                force=True  # Delete even if contains images
+                force=True,  # Delete even if contains images
             )
             print(f"✅ Successfully deleted repository {repo_name} from ECR")
             return True
@@ -1423,9 +1430,9 @@ def profile(number_of_instances: int = 10, container: str = None):
     if not container:
         container = os.getenv("DE_BENCH_ECS_IMAGE_NAME")
         if not container:
-            raise ValueError("Container image must be provided or set in DE_BENCH_ECS_IMAGE_NAME")
-
-    import time
+            raise ValueError(
+                "Container image must be provided or set in DE_BENCH_ECS_IMAGE_NAME"
+            )
 
     manager = ECSManifestManager(provider="AWS")
 
@@ -1436,16 +1443,16 @@ def profile(number_of_instances: int = 10, container: str = None):
         namespace = f"profile-namespace-{i}"
         instance_start = time.time()
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Profile Instance {i}/{number_of_instances}: {namespace}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             result = manager.generate_and_deploy(
                 namespace=namespace,
                 container_image=container,
                 use_service=False,  # Use standalone tasks for profiling
-                enable_load_balancer=False
+                enable_load_balancer=False,
             )
 
             instance_time = time.time() - instance_start
@@ -1463,36 +1470,52 @@ def profile(number_of_instances: int = 10, container: str = None):
     total_time = time.time() - total_start
     avg_time = sum(times) / len(times) if times else 0
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("PROFILE SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Total instances: {number_of_instances}")
     print(f"Successful deployments: {len(times)}")
     print(f"Total time: {total_time:.2f}s")
     print(f"Average time per instance: {avg_time:.2f}s")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 def main():
     """CLI entry point"""
-    parser = argparse.ArgumentParser(description="ECS Manifest Manager for Airflow deployments")
+    parser = argparse.ArgumentParser(
+        description="ECS Manifest Manager for Airflow deployments"
+    )
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Deploy command
     deploy_parser = subparsers.add_parser("deploy", help="Deploy Airflow to ECS")
     deploy_parser.add_argument("namespace", help="Unique namespace for deployment")
-    deploy_parser.add_argument("--container", required=True, help="Container image to deploy")
-    deploy_parser.add_argument("--service", action="store_true", help="Create ECS service (vs standalone task)")
-    deploy_parser.add_argument("--load-balancer", action="store_true", help="Enable load balancer")
+    deploy_parser.add_argument(
+        "--container", required=True, help="Container image to deploy"
+    )
+    deploy_parser.add_argument(
+        "--service", action="store_true", help="Create ECS service (vs standalone task)"
+    )
+    deploy_parser.add_argument(
+        "--load-balancer", action="store_true", help="Enable load balancer"
+    )
 
     # Cleanup command
     cleanup_parser = subparsers.add_parser("cleanup", help="Clean up a deployment")
     cleanup_parser.add_argument("namespace", help="Namespace to clean up")
-    cleanup_parser.add_argument("--infrastructure", action="store_true", help="Also cleanup created infrastructure (VPC, subnets, roles, etc.)")
+    cleanup_parser.add_argument(
+        "--infrastructure",
+        action="store_true",
+        help="Also cleanup created infrastructure (VPC, subnets, roles, etc.)",
+    )
 
     # Profile command
-    profile_parser = subparsers.add_parser("profile", help="Profile deployment performance")
-    profile_parser.add_argument("--instances", type=int, default=10, help="Number of instances to deploy")
+    profile_parser = subparsers.add_parser(
+        "profile", help="Profile deployment performance"
+    )
+    profile_parser.add_argument(
+        "--instances", type=int, default=10, help="Number of instances to deploy"
+    )
     profile_parser.add_argument("--container", help="Container image to deploy")
 
     args = parser.parse_args()
@@ -1508,7 +1531,7 @@ def main():
             namespace=args.namespace,
             container_image=args.container,
             use_service=args.service,
-            enable_load_balancer=args.load_balancer
+            enable_load_balancer=args.load_balancer,
         )
         print("\nDeployment completed!")
         print(f"Namespace: {result['namespace']}")
@@ -1517,7 +1540,9 @@ def main():
             print(f"Base URL: {result['base_url']}")
 
     elif args.command == "cleanup":
-        manager.cleanup_deployment(args.namespace, cleanup_infrastructure=args.infrastructure)
+        manager.cleanup_deployment(
+            args.namespace, cleanup_infrastructure=args.infrastructure
+        )
 
     elif args.command == "profile":
         profile(number_of_instances=args.instances, container=args.container)

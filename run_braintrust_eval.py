@@ -27,6 +27,9 @@ from pydantic import BaseModel, validate_call
 import traceback
 from utils import map_func
 
+# Clean up temp directory (preserve existing logic)
+import shutil
+
 # Note: set_up_model_configs and cleanup_model_artifacts are now used inside run_de_bench_task
 
 # Load environment variables
@@ -443,9 +446,6 @@ def cleanup_handler() -> None:
         print("✅ Session spindown completed")
     except Exception as e:
         print(f"❌ Error during session spindown: {e}")
-
-    # Clean up temp directory (preserve existing logic)
-    import shutil
 
     if os.path.exists(".tmp"):
         try:

@@ -14,8 +14,12 @@ load_dotenv()
 
 # Import the base ECS manager
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from Environment.ECS.ManifestManager import ECSManifestManager
+
+import boto3
+import argparse
 
 
 class ECSServiceDiscoveryManager(ECSManifestManager):
@@ -38,16 +42,17 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
 
     def _setup_service_discovery(self):
         """Setup AWS Cloud Map for service discovery"""
-        import boto3
 
         # Get session from parent class credentials
         access_key = os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("ACCESS_KEY_ID_AWS")
-        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv("SECRET_ACCESS_KEY_AWS")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv(
+            "SECRET_ACCESS_KEY_AWS"
+        )
 
         session = boto3.Session(
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name=self.region
+            region_name=self.region,
         )
 
         self.servicediscovery_client = session.client("servicediscovery")
@@ -84,7 +89,9 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
             for ns in response.get("Namespaces", []):
                 if ns["Name"] == self.namespace_name:
                     self.namespace_id = ns["Id"]
-                    print(f"Created Cloud Map namespace: {self.namespace_name} (ID: {self.namespace_id})")
+                    print(
+                        f"Created Cloud Map namespace: {self.namespace_name} (ID: {self.namespace_id})"
+                    )
                     return
 
         except ClientError as e:
@@ -105,7 +112,9 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                 if status == "SUCCESS":
                     return
                 elif status == "FAIL":
-                    raise Exception(f"Operation failed: {response['Operation'].get('ErrorMessage')}")
+                    raise Exception(
+                        f"Operation failed: {response['Operation'].get('ErrorMessage')}"
+                    )
 
                 time.sleep(2)
             except ClientError as e:
@@ -128,14 +137,16 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                         {
                             "Name": "NAMESPACE_ID",
                             "Values": [self.namespace_id],
-                            "Condition": "EQ"
+                            "Condition": "EQ",
                         }
                     ]
                 )
 
                 for svc in services.get("Services", []):
                     if svc["Name"] == namespace:
-                        print(f"Using existing service discovery: {namespace}.{self.namespace_name}")
+                        print(
+                            f"Using existing service discovery: {namespace}.{self.namespace_name}"
+                        )
                         return svc["Id"]
             except Exception:
                 pass
@@ -148,17 +159,10 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                 Description=f"Service discovery for {namespace}",
                 DnsConfig={
                     "NamespaceId": self.namespace_id,
-                    "DnsRecords": [
-                        {
-                            "Type": "A",
-                            "TTL": 60
-                        }
-                    ],
-                    "RoutingPolicy": "MULTIVALUE"
+                    "DnsRecords": [{"Type": "A", "TTL": 60}],
+                    "RoutingPolicy": "MULTIVALUE",
                 },
-                HealthCheckCustomConfig={
-                    "FailureThreshold": 1
-                },
+                HealthCheckCustomConfig={"FailureThreshold": 1},
             )
 
             service_id = response["Service"]["Id"]
@@ -169,10 +173,7 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
             raise Exception(f"Failed to create service discovery: {e}")
 
     def deploy_with_service_discovery(
-        self,
-        namespace: str,
-        container_image: str,
-        desired_count: int = 1
+        self, namespace: str, container_image: str, desired_count: int = 1
     ) -> Dict[str, Any]:
         """
         Deploy ECS service with service discovery (stable DNS, no load balancer)
@@ -194,13 +195,12 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
         # Check if service exists
         try:
             existing_services = self.ecs_client.describe_services(
-                cluster=self.cluster_name,
-                services=[service_name]
+                cluster=self.cluster_name, services=[service_name]
             )
 
             service_exists = (
-                existing_services["services"] and
-                existing_services["services"][0]["status"] != "INACTIVE"
+                existing_services["services"]
+                and existing_services["services"][0]["status"] != "INACTIVE"
             )
         except ClientError:
             service_exists = False
@@ -215,7 +215,7 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                 "awsvpcConfiguration": {
                     "subnets": self.subnet_ids,
                     "securityGroups": self.security_group_ids,
-                    "assignPublicIp": "ENABLED"
+                    "assignPublicIp": "ENABLED",
                 }
             },
             "serviceRegistries": [
@@ -234,7 +234,7 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                     service=service_name,
                     taskDefinition=task_def_arn,
                     desiredCount=desired_count,
-                    networkConfiguration=service_config["networkConfiguration"]
+                    networkConfiguration=service_config["networkConfiguration"],
                 )
             else:
                 # Create new service
@@ -257,7 +257,7 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                 "service_discovery_id": service_discovery_id,
                 "dns_name": dns_name,
                 "endpoint": f"http://{dns_name}:8080",
-                "note": "DNS resolution works from within the VPC. Use public IP for external access."
+                "note": "DNS resolution works from within the VPC. Use public IP for external access.",
             }
 
             # Also get public IP for external access
@@ -273,11 +273,13 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
 
     def _get_account_id(self) -> str:
         """Get AWS account ID"""
-        import boto3
+
         sts = boto3.client("sts")
         return sts.get_caller_identity()["Account"]
 
-    def _get_service_public_ip(self, service_name: str, max_attempts: int = 30) -> Optional[str]:
+    def _get_service_public_ip(
+        self, service_name: str, max_attempts: int = 30
+    ) -> Optional[str]:
         """Get public IP of the first running task in the service"""
         for attempt in range(max_attempts):
             try:
@@ -285,12 +287,14 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                 tasks_response = self.ecs_client.list_tasks(
                     cluster=self.cluster_name,
                     serviceName=service_name,
-                    desiredStatus="RUNNING"
+                    desiredStatus="RUNNING",
                 )
 
                 if not tasks_response.get("taskArns"):
                     if attempt % 5 == 0:
-                        print(f"Waiting for tasks to start... ({attempt}/{max_attempts})")
+                        print(
+                            f"Waiting for tasks to start... ({attempt}/{max_attempts})"
+                        )
                     time.sleep(2)
                     continue
 
@@ -314,7 +318,7 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
                     {
                         "Name": "NAMESPACE_ID",
                         "Values": [self.namespace_id],
-                        "Condition": "EQ"
+                        "Condition": "EQ",
                     }
                 ]
             )
@@ -338,7 +342,9 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
             print(f"Error deleting service discovery: {e}")
             return False
 
-    def cleanup_deployment(self, namespace: str, cleanup_infrastructure: bool = False) -> bool:
+    def cleanup_deployment(
+        self, namespace: str, cleanup_infrastructure: bool = False
+    ) -> bool:
         """
         Complete cleanup including service discovery
 
@@ -373,7 +379,6 @@ class ECSServiceDiscoveryManager(ECSManifestManager):
 
 def main():
     """CLI entry point"""
-    import argparse
 
     parser = argparse.ArgumentParser(
         description="ECS Service Discovery Manager - Fast deployments with stable DNS"
@@ -381,7 +386,9 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Deploy command
-    deploy_parser = subparsers.add_parser("deploy", help="Deploy with service discovery")
+    deploy_parser = subparsers.add_parser(
+        "deploy", help="Deploy with service discovery"
+    )
     deploy_parser.add_argument("namespace", help="Unique namespace for deployment")
     deploy_parser.add_argument("--container", required=True, help="Container image")
     deploy_parser.add_argument("--count", type=int, default=1, help="Number of tasks")
@@ -389,8 +396,9 @@ def main():
     # Cleanup command
     cleanup_parser = subparsers.add_parser("cleanup", help="Clean up deployment")
     cleanup_parser.add_argument("namespace", help="Namespace to clean up")
-    cleanup_parser.add_argument("--infrastructure", action="store_true",
-                               help="Also cleanup infrastructure")
+    cleanup_parser.add_argument(
+        "--infrastructure", action="store_true", help="Also cleanup infrastructure"
+    )
 
     args = parser.parse_args()
 
@@ -404,21 +412,23 @@ def main():
         result = manager.deploy_with_service_discovery(
             namespace=args.namespace,
             container_image=args.container,
-            desired_count=args.count
+            desired_count=args.count,
         )
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("DEPLOYMENT COMPLETE!")
-        print("="*60)
+        print("=" * 60)
         print(f"Namespace: {result['namespace']}")
         print(f"Internal DNS: {result['dns_name']}")
         print(f"Internal Endpoint: {result['endpoint']}")
         if "public_ip" in result:
             print(f"Public IP: {result['public_ip']}")
             print(f"Public Endpoint: {result['public_endpoint']}")
-        print("="*60)
+        print("=" * 60)
 
     elif args.command == "cleanup":
-        manager.cleanup_deployment(args.namespace, cleanup_infrastructure=args.infrastructure)
+        manager.cleanup_deployment(
+            args.namespace, cleanup_infrastructure=args.infrastructure
+        )
 
 
 if __name__ == "__main__":

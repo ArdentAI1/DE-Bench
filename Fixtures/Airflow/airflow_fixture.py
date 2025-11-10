@@ -4,6 +4,7 @@ Handles expensive Airflow deployment operations at the session level.
 """
 
 import os
+import shutil
 import time
 import tempfile
 import uuid
@@ -18,6 +19,7 @@ from Fixtures.Airflow.Airflow_class import AirflowManager
 from braintrust import traced
 
 from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
+from Environment.ECS.ManifestManager import ECSManifestManager
 
 
 class AirflowResourceConfig(TypedDict):
@@ -302,7 +304,6 @@ class AirflowFixture(
         """
         Set up the resource and ensure _resource_data is set.
         """
-        from braintrust import traced
 
         @traced(name=f"{self.get_resource_type()}.test_setup")
         def inner_test_setup(
@@ -598,7 +599,6 @@ class AirflowFixture(
         self, config: AirflowResourceConfig, resource_id: str, creation_start: float
     ) -> AirflowResourceData:
         """Set up Airflow using AWS ECS via ECSManifestManager"""
-        from Environment.ECS.ManifestManager import ECSManifestManager
 
         # Get container image from config or environment
         container_image = config.get("container_image") or os.getenv(
@@ -784,7 +784,6 @@ class AirflowFixture(
         Clean up the resource and ensure proper teardown.
         Handles both successful setup and partial setup failures.
         """
-        from braintrust import traced
 
         @traced(name=f"{self.get_resource_type()}.test_teardown")
         def inner_test_teardown(
@@ -962,8 +961,6 @@ class AirflowFixture(
         # Clean up temporary directory
         test_dir = resource_data.get("test_dir")
         if test_dir and test_dir.exists():
-            import shutil
-
             try:
                 shutil.rmtree(test_dir)
                 print(f"✅ Cleaned up temporary directory: {test_dir}")
@@ -1008,8 +1005,6 @@ class AirflowFixture(
         # Clean up temporary directory
         test_dir = resource_data.get("test_dir")
         if test_dir and test_dir.exists():
-            import shutil
-
             try:
                 shutil.rmtree(test_dir)
                 print(f"✅ Cleaned up temporary directory: {test_dir}")
