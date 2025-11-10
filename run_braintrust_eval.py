@@ -38,14 +38,15 @@ _thread_local = threading.local()
 # Store the original print function
 _original_print = builtins.print
 
+
 def _prefixed_print(*args, **kwargs):
     """Custom print function that adds resource_id prefix if set in thread-local storage."""
-    prefix = getattr(_thread_local, 'resource_id_prefix', None)
+    prefix = getattr(_thread_local, "resource_id_prefix", None)
     if prefix:
         # Convert all args to strings and join them
-        message = ' '.join(str(arg) for arg in args)
+        message = " ".join(str(arg) for arg in args)
         # Only add prefix if the message doesn't already start with a bracket
-        if not message.startswith('['):
+        if not message.startswith("["):
             _original_print(f"[{prefix}]", *args, **kwargs)
         else:
             # Message already has a prefix, just print it
@@ -54,11 +55,12 @@ def _prefixed_print(*args, **kwargs):
         # No prefix set, use original print
         _original_print(*args, **kwargs)
 
+
 @contextmanager
 def resource_id_context(resource_id_prefix: str):
     """Context manager that sets resource_id prefix for all print statements in this thread."""
     # Save the old prefix (if any)
-    old_prefix = getattr(_thread_local, 'resource_id_prefix', None)
+    old_prefix = getattr(_thread_local, "resource_id_prefix", None)
 
     # Set the new prefix
     _thread_local.resource_id_prefix = resource_id_prefix
@@ -71,10 +73,11 @@ def resource_id_context(resource_id_prefix: str):
     finally:
         # Restore the old prefix
         if old_prefix is None:
-            if hasattr(_thread_local, 'resource_id_prefix'):
-                delattr(_thread_local, 'resource_id_prefix')
+            if hasattr(_thread_local, "resource_id_prefix"):
+                delattr(_thread_local, "resource_id_prefix")
         else:
             _thread_local.resource_id_prefix = old_prefix
+
 
 # Global cleanup flag to prevent double cleanup
 cleanup_already_run = False
@@ -116,9 +119,7 @@ def _teardown_test_fixtures(test_name, fixtures, test_resources=None):
         unregister_test_with_fixtures(test_name)
 
     except Exception as e:
-        print(
-            f"⚠️ Error tearing down fixtures: {e}, {traceback.format_exc()}"
-        )
+        print(f"⚠️ Error tearing down fixtures: {e}, {traceback.format_exc()}")
 
 
 def full_model_run(
@@ -269,11 +270,17 @@ def run_de_bench_task(test_input):
                     original_resource_id = fixture.custom_config.get("resource_id", "")
                     if instance_num > 1:
                         # Append instance number to make it unique
-                        fixture.custom_config["resource_id"] = f"{original_resource_id}_inst_{instance_num}"
+                        fixture.custom_config["resource_id"] = (
+                            f"{original_resource_id}_inst_{instance_num}"
+                        )
                         resource_id_prefix = fixture.custom_config["resource_id"]
                     else:
                         # For instance 1, use the original resource_id as prefix
-                        resource_id_prefix = original_resource_id if original_resource_id else instance_id
+                        resource_id_prefix = (
+                            original_resource_id
+                            if original_resource_id
+                            else instance_id
+                        )
 
         # Use the resource_id_context to automatically prefix ALL print statements
         with resource_id_context(resource_id_prefix):
@@ -283,13 +290,22 @@ def run_de_bench_task(test_input):
                 for fixture in test_data["resource_configs"].get("custom_fixtures", []):
                     if hasattr(fixture, "custom_config") and fixture.custom_config:
                         if "resource_id" in fixture.custom_config:
-                            print(f"Updated resource_id: {original_resource_id} → {fixture.custom_config['resource_id']}")
+                            print(
+                                f"Updated resource_id: {original_resource_id} → {fixture.custom_config['resource_id']}"
+                            )
                         if "ecs_namespace" in fixture.custom_config:
-                            print(f"Updated ecs_namespace: {fixture.custom_config['ecs_namespace']}")
+                            print(
+                                f"Updated ecs_namespace: {fixture.custom_config['ecs_namespace']}"
+                            )
                         if "kubernetes_namespace" in fixture.custom_config:
-                            print(f"Updated kubernetes_namespace: {fixture.custom_config['kubernetes_namespace']}")
+                            print(
+                                f"Updated kubernetes_namespace: {fixture.custom_config['kubernetes_namespace']}"
+                            )
 
-            print(f"🚀 Starting self-contained test execution (instance {instance_num})", flush=True)
+            print(
+                f"🚀 Starting self-contained test execution (instance {instance_num})",
+                flush=True,
+            )
             print(f"📋 Setting up resources...", flush=True)
 
             # Set up per-test resources (using shared session data if available)
@@ -300,7 +316,9 @@ def run_de_bench_task(test_input):
 
             # Register test with fixtures for global cleanup tracking
             if fixture_instances:
-                register_test_with_fixtures(test_name, fixture_instances, has_started=True)
+                register_test_with_fixtures(
+                    test_name, fixture_instances, has_started=True
+                )
 
             model_inputs_base = {
                 "test_name": test_name,
@@ -335,14 +353,24 @@ def run_de_bench_task(test_input):
                 )
 
             # 3 & 4. Set up model configs and run model
-            result = full_model_run(**final_full_model_run_args, resource_id_prefix=resource_id_prefix)
+            result = full_model_run(
+                **final_full_model_run_args, resource_id_prefix=resource_id_prefix
+            )
 
             # Note: Tear down doesn't happen here, it happens in the validator because we need to access the fixture instances
             return result
 
     except Exception as e:
         # Try to get resource_id_prefix if it was set
-        prefix = resource_id_prefix if "resource_id_prefix" in locals() else instance_id if "instance_id" in locals() else test_name if "test_name" in locals() else "Unknown"
+        prefix = (
+            resource_id_prefix
+            if "resource_id_prefix" in locals()
+            else instance_id
+            if "instance_id" in locals()
+            else test_name
+            if "test_name" in locals()
+            else "Unknown"
+        )
 
         # Use context for error messages too
         with resource_id_context(prefix):
@@ -802,7 +830,9 @@ def run_multi_test_evaluation(
 
     if num_instances > 1:
         print(f"🔢 Creating {num_instances} parallel instances for each test...")
-        print(f"   Total test instances: {len(test_names)} tests × {num_instances} instances = {len(test_names) * num_instances} total")
+        print(
+            f"   Total test instances: {len(test_names)} tests × {num_instances} instances = {len(test_names) * num_instances} total"
+        )
 
     print(f"🚀 Starting DE-Bench Braintrust evaluation for tests: {test_names}...")
 
@@ -827,7 +857,11 @@ def run_multi_test_evaluation(
             for case in test_data["test_cases"]:
                 for instance_num in range(num_instances):
                     # Generate unique instance identifier
-                    instance_id = f"{test_name}_instance_{instance_num + 1}" if num_instances > 1 else test_name
+                    instance_id = (
+                        f"{test_name}_instance_{instance_num + 1}"
+                        if num_instances > 1
+                        else test_name
+                    )
 
                     all_test_configs.append(
                         {
@@ -839,11 +873,13 @@ def run_multi_test_evaluation(
                     )
 
         # Discover and set up session-level fixtures only
-        session_fixtures = discover_session_fixtures(all_fixtures)
+        session_fixtures, session_configs_map = discover_session_fixtures(all_fixtures)
         if session_fixtures:
             print(f"🌐 Found {len(session_fixtures)} session-level fixture types...")
             active_session_fixtures = session_fixtures
-            active_session_data = setup_session_fixtures(session_fixtures)
+            active_session_data = setup_session_fixtures(
+                session_fixtures, session_configs_map
+            )
             print("✅ Session-level fixtures set up successfully")
         else:
             print("📝 No session-level fixtures required")
@@ -863,7 +899,9 @@ def run_multi_test_evaluation(
                             **config["case"]["input"],
                             "mode": mode,
                             "test_name": config["test_name"],
-                            "instance_id": config.get("instance_id", config["test_name"]),
+                            "instance_id": config.get(
+                                "instance_id", config["test_name"]
+                            ),
                             "instance_num": config.get("instance_num", 1),
                             "session_data": active_session_data,  # Pass session data for per-task resource setup
                             "skip_model_run": skip_model_run,
@@ -871,7 +909,9 @@ def run_multi_test_evaluation(
                         "metadata": {
                             **config["case"]["metadata"],
                             "mode": mode,
-                            "instance_id": config.get("instance_id", config["test_name"]),
+                            "instance_id": config.get(
+                                "instance_id", config["test_name"]
+                            ),
                             "instance_num": config.get("instance_num", 1),
                         },
                     }

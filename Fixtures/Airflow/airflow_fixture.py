@@ -67,6 +67,10 @@ class AirflowSessionData(TypedDict):
     airflow_provider: Optional[str] = (
         "astro"  # Deployment provider: "astro", "aks", or "ecs"
     )
+    # Shared NGINX Ingress Controller fields (for AKS)
+    shared_ingress_ip: Optional[str]  # External IP of shared LoadBalancer
+    shared_ingress_namespace: Optional[str]  # Namespace for NGINX Ingress Controller
+    shared_k8s_manager: Optional[Any]  # Shared KubernetesManifestManager instance
 
 
 class AirflowFixture(
@@ -85,122 +89,208 @@ class AirflowFixture(
         return True
 
     def session_setup(
-        self, session_config: Optional[AirflowResourceConfig] = None
+        self, session_configs: Optional[List[AirflowResourceConfig]] = None
     ) -> AirflowSessionData:
         """
-        Set up shared Airflow session resources:
-        - Astro CLI login
-        - Cache manager initialization
-        - Pre-create hibernated deployment pool
+        Set up shared Airflow session resources based on ALL test configurations.
+
+        This receives ALL fixture configs from ALL tests, allowing it to:
+        - Detect if any test needs AKS → set up shared NGINX Ingress
+        - Detect if any test needs ECS → set up ECS infrastructure
+        - Detect if any test needs Astro → set up Astro login + cache
+
+        Args:
+            session_configs: List of ALL AirflowResourceConfig from ALL tests in the session
         """
         print("🌐 Setting up Airflow session-level resources...")
 
-        # Determine deployment provider from config or environment
-        provider = (
-            session_config.get("airflow_provider")
-            if session_config
-            else os.getenv("DEFAULT_AIRFLOW_PROVIDER", "astro").lower()
+        # Default if no configs provided
+        if not session_configs:
+            session_configs = []
+
+        # Analyze all configs to determine what infrastructure is needed
+        providers_needed = set()
+        for config in session_configs:
+            provider = config.get("airflow_provider", "astro").lower()
+            providers_needed.add(provider)
+
+        print(f"📊 Analyzing {len(session_configs)} test configs...")
+        print(f"   Providers needed across all tests: {providers_needed}")
+
+        # Validate all providers
+        valid_providers = ["astro", "aks", "ecs"]
+        for provider in providers_needed:
+            if provider not in valid_providers:
+                raise ValueError(
+                    f"Invalid airflow_provider '{provider}'. Must be one of: {valid_providers}"
+                )
+
+        # Initialize session data structure
+        session_data = AirflowSessionData(
+            cache_manager=None,
+            astro_logged_in=False,
+            available_deployments=None,
+            airflow_provider=None,  # Will be determined per-test
+            shared_ingress_ip=None,
+            shared_ingress_namespace=None,
+            shared_k8s_manager=None,
         )
 
-        print(f"provider: {provider} from session_config: {session_config}")
+        # Validate environment variables for EACH provider that's needed
+        for provider in providers_needed:
+            if provider == "aks":
+                required_envars = [
+                    "DE_BENCH_AKS_RESOURCE_GROUP",
+                    "DE_BENCH_AKS_CLUSTER_NAME",
+                    "DE_BENCH_AKS_IMAGE_NAME",
+                ]
+            elif provider == "ecs":
+                required_envars = [
+                    "DE_BENCH_ECS_CLUSTER_NAME",
+                    "AWS_REGION",
+                ]
+            else:  # astro
+                required_envars = [
+                    "ASTRO_WORKSPACE_ID",
+                    "AIRFLOW_GITHUB_TOKEN",
+                    "AIRFLOW_REPO",
+                    "ASTRO_CLOUD_PROVIDER",
+                    "ASTRO_REGION",
+                ]
 
-        # Validate provider value
-        valid_providers = ["astro", "aks", "ecs"]
-        if provider not in valid_providers:
-            raise ValueError(
-                f"Invalid AIRFLOW_PROVIDER '{provider}'. Must be one of: {valid_providers}"
+            if missing_envars := [
+                envar for envar in required_envars if not os.getenv(envar)
+            ]:
+                raise ValueError(
+                    f"Missing required environment variables for {provider}: {missing_envars}"
+                )
+
+        # Set up infrastructure for EACH provider that's needed
+        if "aks" in providers_needed:
+            # AKS mode: Deploy shared NGINX Ingress Controller (once per session)
+            print("✅ AKS mode detected - setting up shared NGINX Ingress Controller")
+
+            from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
+
+            # Create shared KubernetesManifestManager
+            k8s_manager = KubernetesManifestManager(provider="AZURE")
+
+            # Deploy shared NGINX Ingress Controller
+            ingress_namespace = "ingress-system"
+            print(
+                f"🚀 Deploying shared NGINX Ingress Controller in namespace: {ingress_namespace}"
             )
 
-        print(f"📦 Airflow provider: {provider}")
+            try:
+                shared_ingress_ip = k8s_manager.setup_shared_ingress_controller(
+                    namespace=ingress_namespace,
+                    wait_for_ready=True,
+                )
 
-        # Determine required environment variables based on provider
-        if provider == "aks":
-            required_envars = [
-                "DE_BENCH_AKS_RESOURCE_GROUP",
-                "DE_BENCH_AKS_CLUSTER_NAME",
-                "DE_BENCH_AKS_IMAGE_NAME",
-            ]
-        elif provider == "ecs":
-            required_envars = [
-                "DE_BENCH_ECS_CLUSTER_NAME",
-                "AWS_REGION",
-            ]
-        else:  # astro
-            required_envars = [
-                "ASTRO_WORKSPACE_ID",
-                "AIRFLOW_GITHUB_TOKEN",
-                "AIRFLOW_REPO",
-                "ASTRO_CLOUD_PROVIDER",
-                "ASTRO_REGION",
-            ]
+                print(
+                    f"✅ Shared NGINX Ingress Controller ready at {shared_ingress_ip}"
+                )
 
-        if missing_envars := [
-            envar for envar in required_envars if not os.getenv(envar)
-        ]:
-            raise ValueError(
-                f"Missing required environment variables: {missing_envars}"
-            )
+                # Store AKS-specific session data
+                session_data["shared_ingress_ip"] = shared_ingress_ip
+                session_data["shared_ingress_namespace"] = ingress_namespace
+                session_data["shared_k8s_manager"] = k8s_manager
 
-        if provider == "aks":
-            # Skip CacheManager initialization for AKS - it's not needed
-            print("✅ AKS mode detected - skipping CacheManager and Astro setup")
-            return AirflowSessionData(
-                cache_manager=None,
-                astro_logged_in=False,
-                available_deployments=None,
-                airflow_provider=provider,
-            )
+            except Exception as e:
+                print(f"❌ Failed to setup shared NGINX Ingress Controller: {e}")
+                # Attempt cleanup
+                try:
+                    k8s_manager.cleanup_shared_ingress_controller(
+                        namespace=ingress_namespace
+                    )
+                except Exception as cleanup_error:
+                    print(f"⚠️ Error during cleanup: {cleanup_error}")
+                raise
 
-        if provider == "ecs":
-            # Skip CacheManager initialization for ECS - it's not needed
-            print("✅ ECS mode detected - skipping CacheManager and Astro setup")
-            return AirflowSessionData(
-                cache_manager=None,
-                astro_logged_in=False,
-                available_deployments=None,
-                airflow_provider=provider,
-            )
+        if "ecs" in providers_needed:
+            # ECS setup (if needed in the future)
+            print("✅ ECS mode detected - ECS session setup placeholder")
 
-        # # switch to the correct workspace
-        # # self._switch_to_correct_workspace()  # COMMENTED OUT - causing concurrent CLI conflicts
+        if "astro" in providers_needed:
+            # Astro setup (currently commented out due to CLI conflicts)
+            print("✅ Astro mode detected - Astro session setup placeholder")
+            # # switch to the correct workspace
+            # # self._switch_to_correct_workspace()  # COMMENTED OUT - causing concurrent CLI conflicts
+            # # make sure ASTRO_API_TOKEN is set
+            # if not os.getenv("ASTRO_API_TOKEN"):
+            #     raise ValueError("ASTRO_API_TOKEN must be set")
+            # # 1. Ensure Astro login
+            # print("🔐 Ensuring Astro CLI login...")
+            # temp_manager = AirflowManager()
+            # temp_manager._ensure_astro_login()
+            # # 2. Initialize cache manager
+            # print("💾 Initializing deployment cache manager...")
+            # from Fixtures.Airflow.airflow_resources import _ensure_cache_manager_initialized
+            # cache_manager = _ensure_cache_manager_initialized()
+            # # 3. Get available deployments
+            # available_deployments = cache_manager.get_all_astronomer_deployments()
+            # print(f"✅ Airflow session setup complete! Found {len(available_deployments)} deployments in cache")
+            # session_data["cache_manager"] = cache_manager
+            # session_data["astro_logged_in"] = True
+            # session_data["available_deployments"] = available_deployments
 
-        # # make sure ASTRO_API_TOKEN is set
-        # if not os.getenv("ASTRO_API_TOKEN"):
-        #     raise ValueError("ASTRO_API_TOKEN must be set")
-
-        # # 1. Ensure Astro login
-        # print("🔐 Ensuring Astro CLI login...")
-        # temp_manager = AirflowManager()
-        # temp_manager._ensure_astro_login()
-
-        # # 2. Initialize cache manager
-        # print("💾 Initializing deployment cache manager...")
-        # from Fixtures.Airflow.airflow_resources import _ensure_cache_manager_initialized
-
-        # cache_manager = _ensure_cache_manager_initialized()
-
-        # # 3. Get available deployments
-        # available_deployments = cache_manager.get_all_astronomer_deployments()
-
-        # print(
-        #     f"✅ Airflow session setup complete! Found {len(available_deployments)} deployments in cache"
-        # )
-
-        # return AirflowSessionData(
-        #     cache_manager=cache_manager,
-        #     astro_logged_in=True,
-        #     available_deployments=available_deployments,
-        #     airflow_provider=provider,
-        # )
+        print("✅ All session-level infrastructure provisioned")
+        return session_data
 
     def session_teardown(
         self, session_data: Optional[AirflowSessionData] = None
     ) -> None:
-        """Clean up session-level Airflow resources"""
+        """
+        Clean up session-level Airflow resources for ALL providers that were set up.
+
+        Note: By default, the shared NGINX Ingress Controller is NOT cleaned up,
+        as it's designed to be a persistent piece of infrastructure that can be
+        reused across multiple test sessions. Set DE_BENCH_CLEANUP_NGINX=true
+        to force cleanup (useful for CI/CD or complete teardown).
+        """
         if not session_data:
             return
 
         print("🧹 Cleaning up Airflow session-level resources...")
+
+        # Check if we need to cleanup shared NGINX Ingress Controller (AKS)
+        cleanup_nginx = os.getenv("DE_BENCH_CLEANUP_NGINX", "false").lower() == "true"
+
+        if session_data.get("shared_k8s_manager"):
+            k8s_manager = session_data.get("shared_k8s_manager")
+            ingress_namespace = session_data.get("shared_ingress_namespace")
+
+            if k8s_manager and ingress_namespace:
+                if cleanup_nginx:
+                    print(
+                        f"🧹 Cleaning up shared NGINX Ingress Controller (AKS) in {ingress_namespace}..."
+                    )
+                    print("   (DE_BENCH_CLEANUP_NGINX=true)")
+                    try:
+                        k8s_manager.cleanup_shared_ingress_controller(
+                            namespace=ingress_namespace
+                        )
+                        print("✅ Shared NGINX Ingress Controller cleaned up")
+                    except Exception as e:
+                        print(
+                            f"⚠️ Error cleaning up shared NGINX Ingress Controller: {e}"
+                        )
+                else:
+                    print(
+                        f"⏭️  Skipping NGINX cleanup - will be reused in future sessions"
+                    )
+                    print(
+                        f"   NGINX Ingress remains at {session_data.get('shared_ingress_ip')}"
+                    )
+                    print("   (Set DE_BENCH_CLEANUP_NGINX=true to force cleanup)")
+
+        # ECS cleanup (if needed in the future)
+        # if session_data.get("ecs_specific_field"):
+        #     print("🧹 Cleaning up ECS resources...")
+
+        # Astro cleanup (if needed in the future)
+        # if session_data.get("cache_manager"):
+        #     print("🧹 Cleaning up Astro resources...")
 
         # The cache manager and deployments will be cleaned up naturally
         # since they're managed by the Astronomer platform
@@ -281,7 +371,7 @@ class AirflowFixture(
         session_data = self.session_data
         if not session_data:
             raise RuntimeError(
-                "Session data not available - session setup may have failed"
+                "[Astro setup] Session data not available - session setup may have failed"
             )
 
         # Ensure we're in Astro mode
@@ -353,8 +443,23 @@ class AirflowFixture(
     def _setup_kubernetes_airflow(
         self, config: AirflowResourceConfig, resource_id: str, creation_start: float
     ) -> AirflowResourceData:
-        """Set up Airflow using Kubernetes via ManifestManager"""
-        from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
+        """Set up Airflow using Kubernetes with shared NGINX Ingress Controller"""
+
+        # Get session-level shared resources
+        session_data = self.session_data
+        if not session_data:
+            raise RuntimeError("Session data not available for AKS deployment")
+
+        shared_ingress_ip = session_data.get("shared_ingress_ip")
+        shared_k8s_manager = session_data.get("shared_k8s_manager")
+
+        if not shared_ingress_ip or not shared_k8s_manager:
+            raise RuntimeError(
+                "Shared NGINX Ingress Controller not initialized. "
+                "Ensure session_setup() ran successfully."
+            )
+
+        print(f"📡 Using shared NGINX Ingress at {shared_ingress_ip}")
 
         # Get container image from config or environment
         container_image = config.get("container_image") or os.getenv(
@@ -373,33 +478,46 @@ class AirflowFixture(
         print(f"🐳 Container image: {container_image}")
         print(f"📦 Kubernetes namespace: {namespace}")
 
-        # Initialize Kubernetes manifest manager
-        k8s_manager = KubernetesManifestManager(provider="AZURE")
+        # Use shared K8s manager from session
+        k8s_manager = shared_k8s_manager
         # Store k8s_manager and namespace immediately for cleanup in case of failure
         self._k8s_manager = k8s_manager
         self._k8s_namespace = namespace
 
         total_start_time = time.time()
-        start_time = time.time()
-        # Deploy Airflow to Kubernetes
-        print(f"🚀 Deploying Airflow to Kubernetes...")
+
         try:
+            # Step 1: Deploy namespace + Airflow Job (creates ClusterIP service automatically)
+            start_time = time.time()
+            print("🚀 Deploying Airflow namespace and workload...")
             k8s_manager.generate_and_apply_manifest(
                 namespace=namespace, container=container_image
             )
-            print(
-                f"🚀 Kubernetes manifest deployment took {time.time() - start_time:.2f}s"
-            )
+            print(f"   ✓ Deployment took {time.time() - start_time:.2f}s")
 
-            # Get the external IP from the LoadBalancer service
+            # Step 2: Create Ingress resource for path-based routing
             start_time = time.time()
-            print(f"🔍 Waiting for external IP from LoadBalancer...")
-            external_ip = k8s_manager.get_service_external_ip(namespace=namespace)
-            print(f"🚀 External IP retrieval took {time.time() - start_time:.2f}s")
-            if not external_ip:
-                raise RuntimeError(
-                    f"Failed to get external IP for namespace {namespace} after deployment"
-                )
+            print("🔗 Creating Ingress resource for path-based routing...")
+            path_prefix = f"/{namespace}"
+            ingress_name = f"{namespace}-ingress"
+            service_name = f"{namespace}-service"
+
+            k8s_manager.create_ingress_resource(
+                namespace=namespace,
+                ingress_name=ingress_name,
+                service_name=service_name,
+                path_prefix=path_prefix,
+                service_port=8080,
+                ingress_class="nginx",
+            )
+            print(f"   ✓ Ingress creation took {time.time() - start_time:.2f}s")
+
+            # Step 3: Construct base URL using shared LoadBalancer IP + path prefix
+            base_url = f"http://{shared_ingress_ip}{path_prefix}"
+            api_url = f"{base_url}/api/v1"
+
+            print(f"📍 Airflow will be accessible at: {base_url}")
+
         except Exception as e:
             # Clean up namespace on failure
             print(f"❌ Error during Kubernetes setup: {e}")
@@ -412,28 +530,12 @@ class AirflowFixture(
                 print(f"⚠️ Error during cleanup: {cleanup_error}")
             raise
 
-        print(f"✅ External IP obtained: {external_ip}")
-
-        # Verify pod health
-        start_time = time.time()
-        print(f"🏥 Verifying Airflow pod health...")
-        if not k8s_manager.verify_pod_health(external_ip=external_ip, port=8080):
-            print(f"⚠️ Pod health check failed, but continuing...")
-        print(f"🚀 Pod health check took {time.time() - start_time:.2f}s")
-        # Construct Airflow URLs using external IP
-        base_url = f"http://{external_ip}:8080"
-        api_url = f"{base_url}/api/v1"
-
         # Create a temporary directory for test artifacts
         test_dir = Path(tempfile.mkdtemp(prefix=f"airflow_k8s_{resource_id}_"))
 
-        # Create resource data
-        # NOTE: airflow_instance should be an AirflowManager or compatible API client
-        # that can interact with the Kubernetes-deployed Airflow instance.
-        # We create an AirflowManager instance pointing to the Kubernetes deployment URL.
+        # Create AirflowManager instance pointing to the AKS deployment
         start_time = time.time()
         try:
-            # Create an AirflowManager instance pointing to the AKS deployment
             airflow_api_client = AirflowManager(
                 host=base_url,
                 api_url=api_url,
@@ -441,24 +543,22 @@ class AirflowFixture(
                 resource_id=resource_id,
                 provider="aks",
             )
-            print(f"✅ Created AirflowManager instance for Kubernetes deployment")
+            print("✅ Created AirflowManager instance for Kubernetes deployment")
 
             # Wait for Airflow to be fully ready
-            print(f"⏳ Waiting for Airflow to be ready...")
+            print("⏳ Waiting for Airflow to be ready...")
             if not airflow_api_client.wait_for_airflow_to_be_ready():
-                print(f"⚠️ Airflow readiness check failed, but continuing...")
+                print("⚠️ Airflow readiness check failed, but continuing...")
             else:
-                print(f"✅ Airflow is ready!")
+                print("✅ Airflow is ready!")
         except Exception as e:
             raise RuntimeError(
                 f"Failed to create AirflowManager instance for Kubernetes deployment: {e}"
             ) from e
-        print(
-            f"🚀 AirflowManager instance creation took {time.time() - start_time:.2f}s"
-        )
-        print(
-            f"🚀 Total Kubernetes Airflow deployment took {time.time() - total_start_time:.2f}s"
-        )
+
+        print(f"🚀 AirflowManager setup took {time.time() - start_time:.2f}s")
+        print(f"🚀 Total deployment took {time.time() - total_start_time:.2f}s")
+
         creation_end = time.time()
         print(
             f"✅ Kubernetes Airflow deployment took {creation_end - creation_start:.2f}s"
@@ -484,7 +584,7 @@ class AirflowFixture(
             test_dir=test_dir,
             k8s_manager=k8s_manager,
             k8s_namespace=namespace,
-            external_ip=external_ip,
+            external_ip=shared_ingress_ip,  # The shared NGINX Ingress Controller IP
         )
 
         # Store the k8s manager for later use
