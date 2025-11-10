@@ -374,6 +374,29 @@ class ECSManifestManager:
                 PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
             )
 
+            # Add inline policy for CloudWatch Logs (includes CreateLogGroup)
+            logs_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "logs:CreateLogGroup",
+                            "logs:CreateLogStream",
+                            "logs:PutLogEvents"
+                        ],
+                        "Resource": "arn:aws:logs:*:*:*"
+                    }
+                ]
+            }
+
+            self.iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName="CloudWatchLogsFullAccess",
+                PolicyDocument=json.dumps(logs_policy)
+            )
+            print(f"Added CloudWatch Logs permissions to role")
+
             # Wait a moment for IAM to propagate
             time.sleep(10)
 
@@ -383,6 +406,32 @@ class ECSManifestManager:
                 role_response = self.iam_client.get_role(RoleName=role_name)
                 self.task_execution_role_arn = role_response["Role"]["Arn"]
                 print(f"Using existing IAM role: {self.task_execution_role_arn}")
+
+                # Ensure the role has CloudWatch Logs permissions
+                try:
+                    logs_policy = {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": [
+                                    "logs:CreateLogGroup",
+                                    "logs:CreateLogStream",
+                                    "logs:PutLogEvents"
+                                ],
+                                "Resource": "arn:aws:logs:*:*:*"
+                            }
+                        ]
+                    }
+
+                    self.iam_client.put_role_policy(
+                        RoleName=role_name,
+                        PolicyName="CloudWatchLogsFullAccess",
+                        PolicyDocument=json.dumps(logs_policy)
+                    )
+                    print(f"Added/updated CloudWatch Logs permissions to existing role")
+                except ClientError as policy_error:
+                    print(f"Warning: Could not add CloudWatch Logs policy to existing role: {policy_error}")
             else:
                 raise Exception(f"Failed to create IAM role: {e}")
 
@@ -682,16 +731,18 @@ class ECSManifestManager:
     def create_load_balancer_and_target_group(
         self,
         namespace: str,
-        vpc_id: Optional[str] = None
+        vpc_id: Optional[str] = None,
+        use_nlb: bool = True
     ) -> tuple[str, str]:
         """
-        Create an Application Load Balancer and Target Group
+        Create a Network Load Balancer (NLB) or Application Load Balancer (ALB) and Target Group
 
         :param str namespace: Unique identifier for this deployment
         :param str vpc_id: VPC ID (will be auto-detected if not provided)
+        :param bool use_nlb: Use NLB instead of ALB (faster, simpler, TCP-based)
         :return: Tuple of (load_balancer_arn, target_group_arn)
         """
-        lb_name = f"{namespace}-lb"[:32]  # ALB names have 32 char limit
+        lb_name = f"{namespace}-lb"[:32]  # LB names have 32 char limit
         tg_name = f"{namespace}-tg"[:32]
 
         # Get VPC ID if not provided
@@ -700,31 +751,58 @@ class ECSManifestManager:
 
         # Create target group
         try:
-            tg_response = self.elbv2_client.create_target_group(
-                Name=tg_name,
-                Protocol="HTTP",
-                Port=8080,
-                VpcId=vpc_id,
-                TargetType="ip",
-                HealthCheckEnabled=True,
-                HealthCheckPath="/health",
-                HealthCheckIntervalSeconds=30,
-                HealthCheckTimeoutSeconds=5,
-                HealthyThresholdCount=2,
-                UnhealthyThresholdCount=3,
-                Tags=[
-                    {
-                        "Key": "Environment",
-                        "Value": "DE-Bench"
-                    },
-                    {
-                        "Key": "Namespace",
-                        "Value": namespace
-                    }
-                ]
-            )
+            if use_nlb:
+                # NLB uses TCP health checks - simpler and faster
+                tg_response = self.elbv2_client.create_target_group(
+                    Name=tg_name,
+                    Protocol="TCP",
+                    Port=8080,
+                    VpcId=vpc_id,
+                    TargetType="ip",
+                    HealthCheckEnabled=True,
+                    HealthCheckProtocol="TCP",  # TCP health check - just checks if port is open
+                    HealthCheckIntervalSeconds=30,
+                    HealthyThresholdCount=2,
+                    UnhealthyThresholdCount=2,
+                    Tags=[
+                        {
+                            "Key": "Environment",
+                            "Value": "DE-Bench"
+                        },
+                        {
+                            "Key": "Namespace",
+                            "Value": namespace
+                        }
+                    ]
+                )
+            else:
+                # ALB uses HTTP health checks with path
+                tg_response = self.elbv2_client.create_target_group(
+                    Name=tg_name,
+                    Protocol="HTTP",
+                    Port=8080,
+                    VpcId=vpc_id,
+                    TargetType="ip",
+                    HealthCheckEnabled=True,
+                    HealthCheckPath="/login",  # Airflow login page exists and doesn't require auth
+                    HealthCheckIntervalSeconds=30,
+                    HealthCheckTimeoutSeconds=10,  # Increased from 5s - Airflow can be slow
+                    HealthyThresholdCount=2,
+                    UnhealthyThresholdCount=3,
+                    Matcher={"HttpCode": "200,302"},  # Allow redirects
+                    Tags=[
+                        {
+                            "Key": "Environment",
+                            "Value": "DE-Bench"
+                        },
+                        {
+                            "Key": "Namespace",
+                            "Value": namespace
+                        }
+                    ]
+                )
             target_group_arn = tg_response["TargetGroups"][0]["TargetGroupArn"]
-            print(f"Created target group: {target_group_arn}")
+            print(f"Created {'NLB' if use_nlb else 'ALB'} target group: {target_group_arn}")
         except ClientError as e:
             if e.response["Error"]["Code"] == "DuplicateTargetGroupName":
                 # Target group already exists, get its ARN
@@ -736,14 +814,13 @@ class ECSManifestManager:
 
         # Create load balancer
         try:
-            lb_response = self.elbv2_client.create_load_balancer(
-                Name=lb_name,
-                Subnets=self.subnet_ids,
-                SecurityGroups=self.security_group_ids,
-                Scheme="internet-facing",
-                Type="application",
-                IpAddressType="ipv4",
-                Tags=[
+            lb_config = {
+                "Name": lb_name,
+                "Subnets": self.subnet_ids,
+                "Scheme": "internet-facing",
+                "Type": "network" if use_nlb else "application",
+                "IpAddressType": "ipv4",
+                "Tags": [
                     {
                         "Key": "Environment",
                         "Value": "DE-Bench"
@@ -753,9 +830,15 @@ class ECSManifestManager:
                         "Value": namespace
                     }
                 ]
-            )
+            }
+
+            # NLB doesn't use security groups (uses target security groups instead)
+            if not use_nlb:
+                lb_config["SecurityGroups"] = self.security_group_ids
+
+            lb_response = self.elbv2_client.create_load_balancer(**lb_config)
             load_balancer_arn = lb_response["LoadBalancers"][0]["LoadBalancerArn"]
-            print(f"Created load balancer: {load_balancer_arn}")
+            print(f"Created {'NLB' if use_nlb else 'ALB'}: {load_balancer_arn}")
 
             # Wait for load balancer to be active
             self._wait_for_load_balancer_active(load_balancer_arn)
@@ -765,24 +848,26 @@ class ECSManifestManager:
                 # Load balancer already exists, get its ARN
                 lb_response = self.elbv2_client.describe_load_balancers(Names=[lb_name])
                 load_balancer_arn = lb_response["LoadBalancers"][0]["LoadBalancerArn"]
-                print(f"Using existing load balancer: {load_balancer_arn}")
+                print(f"Using existing {'NLB' if use_nlb else 'ALB'}: {load_balancer_arn}")
             else:
                 raise Exception(f"Failed to create load balancer: {e}")
 
         # Create listener
         try:
-            self.elbv2_client.create_listener(
-                LoadBalancerArn=load_balancer_arn,
-                Protocol="HTTP",
-                Port=80,
-                DefaultActions=[
+            listener_config = {
+                "LoadBalancerArn": load_balancer_arn,
+                "Protocol": "TCP" if use_nlb else "HTTP",
+                "Port": 8080,  # Forward port 8080 to port 8080
+                "DefaultActions": [
                     {
                         "Type": "forward",
                         "TargetGroupArn": target_group_arn
                     }
                 ]
-            )
-            print("Created listener for load balancer")
+            }
+
+            self.elbv2_client.create_listener(**listener_config)
+            print(f"Created {'TCP' if use_nlb else 'HTTP'} listener on port 8080")
         except ClientError as e:
             if e.response["Error"]["Code"] == "DuplicateListener":
                 print("Listener already exists")
@@ -813,6 +898,7 @@ class ECSManifestManager:
                 print(f"Load balancer state: {state}")
 
                 if state == "active":
+                    print(f"Load balancer is active after {int(time.time() - start_time)} seconds")
                     return
 
                 time.sleep(10)
@@ -827,7 +913,8 @@ class ECSManifestManager:
         namespace: str,
         container_image: str,
         use_service: bool = True,
-        enable_load_balancer: bool = True
+        enable_load_balancer: bool = True,
+        use_nlb: bool = True
     ) -> Dict[str, Any]:
         """
         Complete deployment workflow: register task, create/update service or run task
@@ -836,6 +923,7 @@ class ECSManifestManager:
         :param str container_image: The container image to use
         :param bool use_service: If True, create a service; if False, run a standalone task
         :param bool enable_load_balancer: Whether to create a load balancer (only with service)
+        :param bool use_nlb: Use NLB instead of ALB (faster, simpler, TCP-based)
         :return: Deployment details
         """
         # Register task definition
@@ -844,12 +932,13 @@ class ECSManifestManager:
         result = {
             "namespace": namespace,
             "task_definition_arn": task_def_arn,
+            "use_nlb": use_nlb,
         }
 
         if use_service:
             # Create load balancer if requested
             if enable_load_balancer:
-                lb_arn, tg_arn = self.create_load_balancer_and_target_group(namespace)
+                lb_arn, tg_arn = self.create_load_balancer_and_target_group(namespace, use_nlb=use_nlb)
                 result["load_balancer_arn"] = lb_arn
                 result["target_group_arn"] = tg_arn
             else:
@@ -868,7 +957,10 @@ class ECSManifestManager:
                 # Get load balancer DNS
                 dns_name = self.get_load_balancer_dns(namespace)
                 result["dns_name"] = dns_name
-                result["base_url"] = f"http://{dns_name}"
+                # NLB uses port 8080, ALB uses port 80
+                port = 8080 if use_nlb else 80
+                result["base_url"] = f"http://{dns_name}:{port}" if use_nlb else f"http://{dns_name}"
+                result["port"] = port
         else:
             # Run standalone task
             task = self.run_task(namespace, task_def_arn)
@@ -1002,12 +1094,14 @@ class ECSManifestManager:
         """
         import requests
 
-        url = f"http://{endpoint}:{port}/health" if port != 80 else f"http://{endpoint}/health"
+        # Use /login for Airflow health check (exists and doesn't require auth)
+        url = f"http://{endpoint}:{port}/login" if port != 80 else f"http://{endpoint}/login"
 
         try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                print(f"Service is healthy at {url}")
+            response = requests.get(url, timeout=10, allow_redirects=True)
+            # Accept 200 (OK) or 302 (redirect) as healthy
+            if response.status_code in [200, 302]:
+                print(f"Service is healthy at {url} (status: {response.status_code})")
                 return True
             else:
                 print(f"Health check failed with status code {response.status_code} at {url}")
@@ -1199,7 +1293,16 @@ class ECSManifestManager:
         # Delete IAM roles
         for role_name in self.created_roles:
             try:
-                # Detach managed policies first
+                # Delete inline policies first
+                inline_policies = self.iam_client.list_role_policies(RoleName=role_name)
+                for policy_name in inline_policies.get("PolicyNames", []):
+                    self.iam_client.delete_role_policy(
+                        RoleName=role_name,
+                        PolicyName=policy_name
+                    )
+                    print(f"Deleted inline policy {policy_name} from role {role_name}")
+
+                # Detach managed policies
                 attached_policies = self.iam_client.list_attached_role_policies(RoleName=role_name)
                 for policy in attached_policies.get("AttachedPolicies", []):
                     self.iam_client.detach_role_policy(
