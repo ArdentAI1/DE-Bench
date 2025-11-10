@@ -5,7 +5,10 @@ import time
 import requests
 import argparse
 import re
+import threading
+import builtins
 from typing import Dict, List, Any, Optional, Callable
+from contextlib import contextmanager
 import braintrust
 from dotenv import load_dotenv
 from model.Run_Model import run_model
@@ -29,6 +32,50 @@ from utils import map_func
 # Load environment variables
 load_dotenv(override=True)
 
+# Thread-local storage for resource_id prefix
+_thread_local = threading.local()
+
+# Store the original print function
+_original_print = builtins.print
+
+def _prefixed_print(*args, **kwargs):
+    """Custom print function that adds resource_id prefix if set in thread-local storage."""
+    prefix = getattr(_thread_local, 'resource_id_prefix', None)
+    if prefix:
+        # Convert all args to strings and join them
+        message = ' '.join(str(arg) for arg in args)
+        # Only add prefix if the message doesn't already start with a bracket
+        if not message.startswith('['):
+            _original_print(f"[{prefix}]", *args, **kwargs)
+        else:
+            # Message already has a prefix, just print it
+            _original_print(*args, **kwargs)
+    else:
+        # No prefix set, use original print
+        _original_print(*args, **kwargs)
+
+@contextmanager
+def resource_id_context(resource_id_prefix: str):
+    """Context manager that sets resource_id prefix for all print statements in this thread."""
+    # Save the old prefix (if any)
+    old_prefix = getattr(_thread_local, 'resource_id_prefix', None)
+
+    # Set the new prefix
+    _thread_local.resource_id_prefix = resource_id_prefix
+
+    # Temporarily replace the built-in print with our prefixed version
+    builtins.print = _prefixed_print
+
+    try:
+        yield
+    finally:
+        # Restore the old prefix
+        if old_prefix is None:
+            if hasattr(_thread_local, 'resource_id_prefix'):
+                delattr(_thread_local, 'resource_id_prefix')
+        else:
+            _thread_local.resource_id_prefix = old_prefix
+
 # Global cleanup flag to prevent double cleanup
 cleanup_already_run = False
 active_session_fixtures = []
@@ -38,11 +85,14 @@ active_tests_with_fixtures = []
 
 @traced(name="teardown_test_fixtures")
 def _teardown_test_fixtures(test_name, fixtures, test_resources=None):
-    """Helper function to clean up test resources for a specific task."""
+    """
+    Helper function to clean up test resources for a specific task.
+    Note: Prints are automatically prefixed by resource_id_context.
+    """
     try:
         if fixtures:
             print(
-                f"🧹 Tearing down {len(fixtures)} fixtures for {test_name} (fixtures: {', '.join([f.get_resource_type() for f in fixtures])})"
+                f"🧹 Tearing down {len(fixtures)} fixtures (fixtures: {', '.join([f.get_resource_type() for f in fixtures])})"
             )
 
             for fixture in reversed(fixtures):
@@ -67,7 +117,7 @@ def _teardown_test_fixtures(test_name, fixtures, test_resources=None):
 
     except Exception as e:
         print(
-            f"⚠️ Error tearing down fixtures for {test_name}: {e}, {traceback.format_exc()}"
+            f"⚠️ Error tearing down fixtures: {e}, {traceback.format_exc()}"
         )
 
 
@@ -78,16 +128,18 @@ def full_model_run(
     fixture_instances,
     model_configs,
     task_description,
+    resource_id_prefix=None,
     **kwargs,
 ):
     """
     Step 3 and 4: Set up model configurations if needed and execute the model.
+    Note: Prints are automatically prefixed by resource_id_context.
     """
     config_results = None
     custom_info = {"mode": mode}
 
     if mode == "Ardent" and "supabase_account_resource" in test_resources:
-        print(f"🔧 Setting up model configs for {test_name}...")
+        print(f"🔧 Setting up model configs...")
 
         custom_info.update(
             {
@@ -103,10 +155,10 @@ def full_model_run(
             Configs=model_configs,
             custom_info=custom_info,
         )
-        print(f"✅ Model configs set up for {test_name}")
+        print(f"✅ Model configs set up")
 
     elif mode == "Claude_Code":
-        print(f"🔧 Setting up Kubernetes for Claude Code for {test_name}...")
+        print(f"🔧 Setting up Kubernetes for Claude Code...")
 
         # Set up Kubernetes infrastructure for Claude Code
         config_results = set_up_model_configs(
@@ -118,10 +170,10 @@ def full_model_run(
         if config_results:
             custom_info.update(config_results)
 
-        print(f"✅ Kubernetes setup completed for {test_name}")
+        print(f"✅ Kubernetes setup completed")
 
     elif mode == "OpenAI_Codex":
-        print(f"🔧 Setting up Kubernetes for OpenAI Codex for {test_name}...")
+        print(f"🔧 Setting up Kubernetes for OpenAI Codex...")
 
         # Set up Kubernetes infrastructure for OpenAI Codex
         config_results = set_up_model_configs(
@@ -133,48 +185,48 @@ def full_model_run(
         if config_results:
             custom_info.update(config_results)
 
-        print(f"✅ Kubernetes setup completed for {test_name}")
+        print(f"✅ Kubernetes setup completed")
 
     # 4. Execute the model
     if kwargs.get("skip_model_run"):
         print(
-            f"⚠️ Skipping model run for {test_name} because 'skip_model_run' was set and evaluated to True",
+            f"⚠️ Skipping model run because 'skip_model_run' was set and evaluated to True",
             flush=True,
         )
         model_result = None
     else:
-        print(f"🤖 Running model for {test_name}...", flush=True)
+        print(f"🤖 Running model...", flush=True)
         model_result = run_model(
             container=None,
             task=task_description,
             configs=model_configs,
             extra_information=custom_info,
         )
-        print(f"✅ Model execution completed for {test_name}", flush=True)
+        print(f"✅ Model execution completed", flush=True)
 
     # Clean up model artifacts first (but keep test resources for validation)
     if config_results:
         if mode == "Ardent" and "supabase_account_resource" in test_resources:
-            print(f"🧹 Cleaning up model artifacts for {test_name}...")
+            print(f"🧹 Cleaning up model artifacts...")
             cleanup_model_artifacts(
                 Configs=model_configs,
                 custom_info=custom_info,
             )
-            print(f"✅ Model artifacts cleaned up for {test_name}")
+            print(f"✅ Model artifacts cleaned up")
         elif mode == "Claude_Code":
-            print(f"🧹 Cleaning up Kubernetes resources for {test_name}...")
+            print(f"🧹 Cleaning up Kubernetes resources...")
             cleanup_model_artifacts(
                 Configs=model_configs,
                 custom_info=custom_info,
             )
-            print(f"✅ Kubernetes resources cleaned up for {test_name}")
+            print(f"✅ Kubernetes resources cleaned up")
         elif mode == "OpenAI_Codex":
-            print(f"🧹 Cleaning up Kubernetes resources for {test_name}...")
+            print(f"🧹 Cleaning up Kubernetes resources...")
             cleanup_model_artifacts(
                 Configs=model_configs,
                 custom_info=custom_info,
             )
-            print(f"✅ Kubernetes resources cleaned up for {test_name}")
+            print(f"✅ Kubernetes resources cleaned up")
 
     return {
         "result": model_result,
@@ -196,72 +248,110 @@ def run_de_bench_task(test_input):
         task_description = test_input["task"]
         mode = test_input.get("mode", "Ardent")
         test_name = test_input.get("test_name", "Unknown")
+        instance_id = test_input.get("instance_id", test_name)
+        instance_num = test_input.get("instance_num", 1)
         session_data = test_input.get("session_data", {})
-
-        print(f"🚀 Starting self-contained test execution: {test_name}", flush=True)
 
         test_resources = {}
         fixture_instances = []
 
+        # Will be set after modifying fixture configs
+        resource_id_prefix = instance_id
+
         # 1. Extract test configuration and set up per-test resources
-        print(f"📋 Setting up resources for {test_name}...", flush=True)
         test_data = extract_test_configuration(test_name)
 
-        # Set up per-test resources (using shared session data if available)
-        test_resources, fixture_instances = setup_test_resources(
-            test_data["resource_configs"], session_data=session_data
-        )
-        print(f"✅ Resources set up for {test_name}", flush=True)
+        # Modify fixture configs to use instance_id for unique resource identifiers
+        if "custom_fixtures" in test_data["resource_configs"]:
+            for fixture in test_data["resource_configs"]["custom_fixtures"]:
+                if hasattr(fixture, "custom_config") and fixture.custom_config:
+                    # Update resource_id to include instance identifier
+                    original_resource_id = fixture.custom_config.get("resource_id", "")
+                    if instance_num > 1:
+                        # Append instance number to make it unique
+                        fixture.custom_config["resource_id"] = f"{original_resource_id}_inst_{instance_num}"
+                        resource_id_prefix = fixture.custom_config["resource_id"]
+                    else:
+                        # For instance 1, use the original resource_id as prefix
+                        resource_id_prefix = original_resource_id if original_resource_id else instance_id
 
-        # Register test with fixtures for global cleanup tracking
-        if fixture_instances:
-            register_test_with_fixtures(test_name, fixture_instances, has_started=True)
+        # Use the resource_id_context to automatically prefix ALL print statements
+        with resource_id_context(resource_id_prefix):
+            # Now all print statements in this context will be automatically prefixed
+            if instance_num > 1:
+                # Log the resource modifications
+                for fixture in test_data["resource_configs"].get("custom_fixtures", []):
+                    if hasattr(fixture, "custom_config") and fixture.custom_config:
+                        if "resource_id" in fixture.custom_config:
+                            print(f"Updated resource_id: {original_resource_id} → {fixture.custom_config['resource_id']}")
+                        if "ecs_namespace" in fixture.custom_config:
+                            print(f"Updated ecs_namespace: {fixture.custom_config['ecs_namespace']}")
+                        if "kubernetes_namespace" in fixture.custom_config:
+                            print(f"Updated kubernetes_namespace: {fixture.custom_config['kubernetes_namespace']}")
 
-        model_inputs_base = {
-            "test_name": test_name,
-            "mode": mode,
-            "test_resources": test_resources,
-            "fixture_instances": fixture_instances,
-            "task_description": task_description,
-            "skip_model_run": test_input.get("skip_model_run", False),
-        }
+            print(f"🚀 Starting self-contained test execution (instance {instance_num})", flush=True)
+            print(f"📋 Setting up resources...", flush=True)
 
-        # 3. Modify inputs if needed
-        create_model_inputs_func = test_data["resource_configs"].get(
-            "create_model_inputs_func"
-        )
-        if create_model_inputs_func:
-            final_full_model_run_args = create_model_inputs_func(
-                model_inputs_base, fixture_instances
+            # Set up per-test resources (using shared session data if available)
+            test_resources, fixture_instances = setup_test_resources(
+                test_data["resource_configs"], session_data=session_data
             )
-        else:
-            raise ValueError(
-                f"❌ Test {test_name} is missing create_model_inputs_func function"
-            )
+            print(f"✅ Resources set up", flush=True)
 
-        # Validate that model_configs and task_description are in the final_full_model_run_args
-        if "model_configs" not in final_full_model_run_args:
-            raise ValueError(
-                f"❌ Test {test_name} did not return model_configs from create_model_inputs_func"
-            )
-        if "task_description" not in final_full_model_run_args:
-            raise ValueError(
-                f"❌ Test {test_name} did not return task_description from create_model_inputs_func"
-            )
+            # Register test with fixtures for global cleanup tracking
+            if fixture_instances:
+                register_test_with_fixtures(test_name, fixture_instances, has_started=True)
 
-        # 3 & 4. Set up model configs and run model
-        result = full_model_run(**final_full_model_run_args)
+            model_inputs_base = {
+                "test_name": test_name,
+                "mode": mode,
+                "test_resources": test_resources,
+                "fixture_instances": fixture_instances,
+                "task_description": task_description,
+                "skip_model_run": test_input.get("skip_model_run", False),
+            }
 
-        # Note: Tear down doesn't happen here, it happens in the validator because we need to access the fixture instances
-        return result
+            # 3. Modify inputs if needed
+            create_model_inputs_func = test_data["resource_configs"].get(
+                "create_model_inputs_func"
+            )
+            if create_model_inputs_func:
+                final_full_model_run_args = create_model_inputs_func(
+                    model_inputs_base, fixture_instances
+                )
+            else:
+                raise ValueError(
+                    f"❌ Test {test_name} is missing create_model_inputs_func function"
+                )
+
+            # Validate that model_configs and task_description are in the final_full_model_run_args
+            if "model_configs" not in final_full_model_run_args:
+                raise ValueError(
+                    f"❌ Test {test_name} did not return model_configs from create_model_inputs_func"
+                )
+            if "task_description" not in final_full_model_run_args:
+                raise ValueError(
+                    f"❌ Test {test_name} did not return task_description from create_model_inputs_func"
+                )
+
+            # 3 & 4. Set up model configs and run model
+            result = full_model_run(**final_full_model_run_args, resource_id_prefix=resource_id_prefix)
+
+            # Note: Tear down doesn't happen here, it happens in the validator because we need to access the fixture instances
+            return result
 
     except Exception as e:
-        print(f"❌ Error in test execution for {test_name}: {e}", flush=True)
-        print(f"   Traceback: {traceback.format_exc()}", flush=True)
+        # Try to get resource_id_prefix if it was set
+        prefix = resource_id_prefix if "resource_id_prefix" in locals() else instance_id if "instance_id" in locals() else test_name if "test_name" in locals() else "Unknown"
 
-        # Tear down test fixtures on error
-        if fixture_instances:
-            _teardown_test_fixtures(test_name, fixture_instances, test_resources)
+        # Use context for error messages too
+        with resource_id_context(prefix):
+            print(f"❌ Error in test execution: {e}", flush=True)
+            print(f"   Traceback: {traceback.format_exc()}", flush=True)
+
+            # Tear down test fixtures on error
+            if fixture_instances:
+                _teardown_test_fixtures(test_name, fixture_instances, test_resources)
 
         # Return a failure result instead of raising to prevent terminating other tests
         return {
@@ -271,10 +361,10 @@ def run_de_bench_task(test_input):
                 "traceback": traceback.format_exc(),
             },
             "fixtures": fixture_instances if "fixture_instances" in locals() else [],
-            "test_name": test_name,
+            "test_name": test_name if "test_name" in locals() else "Unknown",
             "test_resources": test_resources if "test_resources" in locals() else {},
             "model_configs": {},
-            "custom_info": {"mode": mode},
+            "custom_info": {"mode": mode if "mode" in locals() else "Unknown"},
             "execution_error": True,
         }
 
@@ -609,8 +699,10 @@ Examples:
   python run_braintrust_eval.py --filter ".*Hello.*"     # Run only Hello World tests
   python run_braintrust_eval.py --filter "MongoDB.*" "MySQL.*" Ardent  # MongoDB & MySQL in Ardent mode
   python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" OpenAI_Codex  # Single test with Codex
-  python run_braintrust_eval.py --num-trials 3 Ardent    # Run all tests 3 times in Ardent mode
+  python run_braintrust_eval.py --num-trials 3 Ardent    # Run all tests 3 times (Braintrust trials)
   python run_braintrust_eval.py -n 5 --filter ".*Hello.*" Claude_Code  # Run Hello tests 5 times with Claude
+  python run_braintrust_eval.py --num-instances 10 --filter ".*Hello.*" Ardent  # Create 10 parallel instances
+  python run_braintrust_eval.py -i 5 --filter ".*Hello.*" Ardent  # Create 5 parallel instances with unique IDs
   python run_braintrust_eval.py --full-concurrency Ardent  # Run all tests with max concurrency = number of tests
         """,
     )
@@ -647,7 +739,15 @@ Examples:
         "-n",
         type=int,
         default=1,
-        help="Number of trials to run for each test (default: 1)",
+        help="Number of trials to run for each test (default: 1). Braintrust will run each test this many times.",
+    )
+
+    parser.add_argument(
+        "--num-instances",
+        "-i",
+        type=int,
+        default=1,
+        help="Number of parallel instances to create for each test (default: 1). Each instance gets unique identifiers and isolated resources.",
     )
 
     parser.add_argument(
@@ -666,6 +766,7 @@ def run_multi_test_evaluation(
     verbose: bool = False,
     skip_model_run: bool = False,
     trial_count: int = 1,
+    num_instances: int = 1,
     full_concurrency: bool = False,
 ) -> Dict[str, Any]:
     """Run multiple tests as Braintrust evaluation for specified modes"""
@@ -693,10 +794,15 @@ def run_multi_test_evaluation(
     if verbose:
         print(f"🔍 All valid tests discovered: {all_valid_tests}")
         print(f"🔍 Tests to run (after filtering): {test_names}")
+        print(f"🔍 Number of instances per test: {num_instances}")
 
     if not test_names:
         print("❌ No tests found matching the filter criteria")
         return {}
+
+    if num_instances > 1:
+        print(f"🔢 Creating {num_instances} parallel instances for each test...")
+        print(f"   Total test instances: {len(test_names)} tests × {num_instances} instances = {len(test_names) * num_instances} total")
 
     print(f"🚀 Starting DE-Bench Braintrust evaluation for tests: {test_names}...")
 
@@ -717,13 +823,20 @@ def run_multi_test_evaluation(
                 all_fixtures.extend(test_data["resource_configs"]["custom_fixtures"])
 
             # Store base test configs (resources will be managed per-task now)
+            # Create num_instances copies of each test case with unique identifiers
             for case in test_data["test_cases"]:
-                all_test_configs.append(
-                    {
-                        "test_name": test_name,
-                        "case": case,
-                    }
-                )
+                for instance_num in range(num_instances):
+                    # Generate unique instance identifier
+                    instance_id = f"{test_name}_instance_{instance_num + 1}" if num_instances > 1 else test_name
+
+                    all_test_configs.append(
+                        {
+                            "test_name": test_name,
+                            "instance_id": instance_id,
+                            "instance_num": instance_num + 1,
+                            "case": case,
+                        }
+                    )
 
         # Discover and set up session-level fixtures only
         session_fixtures = discover_session_fixtures(all_fixtures)
@@ -750,10 +863,17 @@ def run_multi_test_evaluation(
                             **config["case"]["input"],
                             "mode": mode,
                             "test_name": config["test_name"],
+                            "instance_id": config.get("instance_id", config["test_name"]),
+                            "instance_num": config.get("instance_num", 1),
                             "session_data": active_session_data,  # Pass session data for per-task resource setup
                             "skip_model_run": skip_model_run,
                         },
-                        "metadata": {**config["case"]["metadata"], "mode": mode},
+                        "metadata": {
+                            **config["case"]["metadata"],
+                            "mode": mode,
+                            "instance_id": config.get("instance_id", config["test_name"]),
+                            "instance_num": config.get("instance_num", 1),
+                        },
                     }
                     mode_samples.append(sample)
 
@@ -981,6 +1101,7 @@ if __name__ == "__main__":
             verbose=args.verbose,
             skip_model_run=args.skip_model_run,
             trial_count=args.num_trials,
+            num_instances=args.num_instances,
             full_concurrency=args.full_concurrency,
         )
 
