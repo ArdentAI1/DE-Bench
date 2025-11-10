@@ -138,7 +138,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     # Airflow orchestration
     custom_airflow_config = {
         "resource_id": resource_id,
-        "airflow_provider": "ecs",  # Use ECS deployment
+        "airflow_provider": "aks",  # Use ECS deployment
         "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }

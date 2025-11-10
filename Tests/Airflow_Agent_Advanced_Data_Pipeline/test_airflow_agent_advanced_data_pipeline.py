@@ -35,7 +35,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     # Initialize Airflow fixture with test-specific configuration
     custom_airflow_config = {
         "resource_id": BRANCH_NAME,
-        "airflow_provider": "ecs",  # Use ECS deployment
+        "airflow_provider": "aks",  # Use ECS deployment
         "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": BRANCH_NAME.replace("_", "-"),
     }

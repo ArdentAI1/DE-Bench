@@ -34,7 +34,7 @@ def get_fixtures() -> List[DEBenchFixture]:
     resource_id = f"usgs_earthquake_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
-        "airflow_provider": "ecs",  # Use ECS deployment
+        "airflow_provider": "aks",  # Use ECS deployment
         "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
         "kubernetes_namespace": resource_id.replace("_", "-"),
     }
