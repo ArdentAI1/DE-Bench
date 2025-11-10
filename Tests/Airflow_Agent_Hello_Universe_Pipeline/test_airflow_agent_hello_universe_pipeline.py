@@ -25,17 +25,23 @@ def get_fixtures() -> List[DEBenchFixture]:
     """
     Provides custom DEBenchFixture instances for Braintrust evaluation.
     This Airflow test validates that AI can create and execute a Hello Universe DAG pipeline.
+
+    Supports three deployment modes:
+    - Astro (default): Set USE_ASTRO_AIRFLOW=true
+    - Kubernetes (AKS): Set USE_KUBERNETES_AIRFLOW=true
+    - ECS: Set USE_ECS_AIRFLOW=true
     """
     from Fixtures.Airflow.airflow_fixture import AirflowFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Initialize Airflow fixture with Kubernetes deployment
+    # Initialize Airflow fixture with appropriate deployment mode
     resource_id = f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}"
     custom_airflow_config = {
         "resource_id": resource_id,
-        "use_kubernetes": True,  # Enable Kubernetes deployment
-        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
-        "kubernetes_namespace": resource_id.replace("_", "-"),
+        "use_ecs": True,
+        "container_image": os.getenv("DE_BENCH_ECS_IMAGE_NAME"),
+        "ecs_namespace": resource_id.replace("_", "-"),
+        "enable_load_balancer": os.getenv("ECS_ENABLE_LOAD_BALANCER", "true").lower() == "true",
     }
 
     # Initialize GitHub fixture for PR and branch management
@@ -305,18 +311,31 @@ def validate_test(model_result, fixtures=None):
                 }
             )
         
-        if airflow_resource_data.get("k8s_namespace", None) is None:
-            build_info = {
-                "deploymentId": airflow_resource_data["deployment_id"],
-                "deploymentName": airflow_resource_data["deployment_name"],
-                "secretSuffix": airflow_resource_data["secret_suffix"],
-            }
-        else:
+        # Determine build_info based on deployment mode
+        if airflow_resource_data.get("k8s_namespace", None) is not None:
+            # Kubernetes (AKS) deployment
             build_info = {
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),
                 "acrRepository": airflow_resource_data["deployment_id"],
                 "k8sNamespace": airflow_resource_data["k8s_namespace"],
                 "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[:50],
+            }
+        elif airflow_resource_data.get("ecs_namespace", None) is not None:
+            ecr_registry = os.getenv("AWS_ECR_BASE") or os.getenv("AWS_ACCOUNT_ID", "").strip() + ".dkr.ecr." + os.getenv("AWS_REGION", "us-east-1") + ".amazonaws.com",
+            # ECS deployment
+            build_info = {
+                "ecrRegistry": ecr_registry,
+                "ecrRepository": airflow_resource_data["deployment_id"],
+                "ecsCluster": os.getenv("DE_BENCH_ECS_CLUSTER_NAME"),
+                "ecsNamespace": airflow_resource_data["ecs_namespace"],
+                "ecsServiceName": airflow_resource_data["ecs_namespace"] + "-service",
+            }
+        else:
+            # Astro deployment
+            build_info = {
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             }
 
         # PR creation and merge
