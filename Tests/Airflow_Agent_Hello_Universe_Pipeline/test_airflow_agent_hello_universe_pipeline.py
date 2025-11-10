@@ -321,7 +321,7 @@ def validate_test(model_result, fixtures=None):
                 "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[:50],
             }
         elif airflow_resource_data.get("ecs_namespace", None) is not None:
-            ecr_registry = os.getenv("AWS_ECR_BASE") or os.getenv("AWS_ACCOUNT_ID", "").strip() + ".dkr.ecr." + os.getenv("AWS_REGION", "us-east-1") + ".amazonaws.com",
+            ecr_registry = os.getenv("AWS_ECR_BASE") or os.getenv("AWS_ACCOUNT_ID", "").strip() + ".dkr.ecr." + os.getenv("AWS_REGION", "us-east-1") + ".amazonaws.com"
             # ECS deployment
             build_info = {
                 "ecrRegistry": ecr_registry,
