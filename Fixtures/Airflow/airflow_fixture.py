@@ -17,6 +17,8 @@ from Fixtures.Airflow.Airflow_class import AirflowManager
 
 from braintrust import traced
 
+from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
+
 
 class AirflowResourceConfig(TypedDict):
     resource_id: str
@@ -169,8 +171,6 @@ class AirflowFixture(
         if "aks" in providers_needed:
             # AKS mode: Deploy shared NGINX Ingress Controller (once per session)
             print("✅ AKS mode detected - setting up shared NGINX Ingress Controller")
-
-            from Environment.Kubernetes.ManifestManager import KubernetesManifestManager
 
             # Create shared KubernetesManifestManager
             k8s_manager = KubernetesManifestManager(provider="AZURE")
