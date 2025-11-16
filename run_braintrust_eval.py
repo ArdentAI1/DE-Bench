@@ -122,6 +122,175 @@ def _teardown_test_fixtures(test_name, fixtures, test_resources=None):
         print(f"⚠️ Error tearing down fixtures: {e}, {traceback.format_exc()}")
 
 
+def print_infrastructure_credentials(test_resources, model_configs, fixture_instances):
+    """
+    Print infrastructure connection details for manual testing.
+    
+    Args:
+        test_resources: Dictionary of resource data from fixtures
+        model_configs: Dictionary of model configuration/credentials
+        fixture_instances: List of fixture instances
+    """
+    print("\n" + "="*80)
+    print("🏗️  INFRASTRUCTURE SETUP COMPLETE")
+    print("="*80)
+    
+    print("\n📋 Connection Details:\n")
+    
+    # Print Airflow details if present
+    if "airflow_resource" in test_resources:
+        airflow_data = test_resources["airflow_resource"]
+        print("🌬️  AIRFLOW:")
+        
+        if "base_url" in airflow_data:
+            print(f"   URL: {airflow_data['base_url']}")
+        if "api_url" in airflow_data:
+            print(f"   API URL: {airflow_data['api_url']}")
+            
+        if "username" in airflow_data:
+            print(f"   Username: {airflow_data['username']}")
+        if "password" in airflow_data:
+            print(f"   Password: {airflow_data['password']}")
+            
+        if "k8s_namespace" in airflow_data:
+            print(f"   Kubernetes Namespace: {airflow_data['k8s_namespace']}")
+        if "deployment_id" in airflow_data:
+            print(f"   Deployment ID: {airflow_data['deployment_id']}")
+        if "external_ip" in airflow_data:
+            print(f"   External IP: {airflow_data['external_ip']}")
+        if "test_dir" in airflow_data:
+            print(f"   Local Test Directory: {airflow_data['test_dir']}")
+            
+        print()
+    
+    # Print GitHub details if present
+    if "github_resource" in test_resources:
+        github_data = test_resources["github_resource"]
+        print("🐙 GITHUB:")
+        if "repo_url" in github_data:
+            print(f"   Repository: {github_data['repo_url']}")
+        if "branch_name" in github_data:
+            print(f"   Branch: {github_data['branch_name']}")
+        if "access_token" in github_data:
+            print(f"   Access Token: {github_data['access_token']}")
+        if "pr_url" in github_data:
+            print(f"   Pull Request: {github_data['pr_url']}")
+        print()
+    
+    # Print PostgreSQL details if present
+    if "postgres_resource" in test_resources:
+        postgres_data = test_resources["postgres_resource"]
+        print("🐘 POSTGRESQL:")
+        if "hostname" in postgres_data:
+            print(f"   Host: {postgres_data['hostname']}")
+        if "port" in postgres_data:
+            print(f"   Port: {postgres_data['port']}")
+        if "database" in postgres_data:
+            print(f"   Database: {postgres_data['database']}")
+        if "username" in postgres_data:
+            print(f"   Username: {postgres_data['username']}")
+        if "password" in postgres_data:
+            print(f"   Password: {postgres_data['password']}")
+        print()
+    
+    # Print MySQL details if present
+    if "mysql_resource" in test_resources:
+        mysql_data = test_resources["mysql_resource"]
+        print("🐬 MYSQL:")
+        if "hostname" in mysql_data:
+            print(f"   Host: {mysql_data['hostname']}")
+        if "port" in mysql_data:
+            print(f"   Port: {mysql_data['port']}")
+        if "database" in mysql_data:
+            print(f"   Database: {mysql_data['database']}")
+        if "username" in mysql_data:
+            print(f"   Username: {mysql_data['username']}")
+        if "password" in mysql_data:
+            print(f"   Password: {mysql_data['password']}")
+        print()
+    
+    # Print MongoDB details if present
+    if "mongodb_resource" in test_resources:
+        mongodb_data = test_resources["mongodb_resource"]
+        print("🍃 MONGODB:")
+        if "connection_string" in mongodb_data:
+            print(f"   Connection String: {mongodb_data['connection_string']}")
+        if "database" in mongodb_data:
+            print(f"   Database: {mongodb_data['database']}")
+        if "collection" in mongodb_data:
+            print(f"   Collection: {mongodb_data['collection']}")
+        print()
+    
+    # Print Snowflake details if present
+    if "snowflake_resource" in test_resources:
+        snowflake_data = test_resources["snowflake_resource"]
+        print("❄️  SNOWFLAKE:")
+        if "account" in snowflake_data:
+            print(f"   Account: {snowflake_data['account']}")
+        if "database" in snowflake_data:
+            print(f"   Database: {snowflake_data['database']}")
+        if "schema" in snowflake_data:
+            print(f"   Schema: {snowflake_data['schema']}")
+        if "warehouse" in snowflake_data:
+            print(f"   Warehouse: {snowflake_data['warehouse']}")
+        if "username" in snowflake_data:
+            print(f"   Username: {snowflake_data['username']}")
+        print()
+    
+    # Print Supabase details if present
+    if "supabase_resource" in test_resources:
+        supabase_data = test_resources["supabase_resource"]
+        print("⚡ SUPABASE:")
+        if "project_url" in supabase_data:
+            print(f"   Project URL: {supabase_data['project_url']}")
+        if "api_key" in supabase_data:
+            print(f"   API Key: {supabase_data['api_key']}")
+        if "database" in supabase_data:
+            print(f"   Database: {supabase_data['database']}")
+        print()
+    
+    # Print Supabase Account details if present (for Ardent mode)
+    if "supabase_account_resource" in test_resources:
+        account_data = test_resources["supabase_account_resource"]
+        print("🔐 SUPABASE ACCOUNT (Ardent):")
+        if "userID" in account_data:
+            print(f"   User ID: {account_data['userID']}")
+        if "publicKey" in account_data:
+            print(f"   Public Key: {account_data['publicKey']}")
+        if "secretKey" in account_data:
+            print(f"   Secret Key: {account_data['secretKey']}")
+        if "org_id" in account_data:
+            print(f"   Org ID: {account_data['org_id']}")
+        print()
+    
+    # Print Airflow paths from model_configs if present
+    if model_configs:
+        airflow_paths = {k: v for k, v in model_configs.items() 
+                        if 'AIRFLOW' in k and 'PATH' in k}
+        if airflow_paths:
+            print("📁 AIRFLOW PATHS:")
+            for key, value in airflow_paths.items():
+                print(f"   {key}: {value}")
+            print()
+    
+    # Print any additional model configs
+    if model_configs:
+        print("🔧 ADDITIONAL CONFIGURATIONS:")
+        for key, value in model_configs.items():
+            # Skip printing sensitive keys, paths (already shown), or very long values
+            if key.lower() in ['password', 'secret', 'token', 'key']:
+                continue
+            if 'PATH' in key and 'AIRFLOW' in key:
+                continue  # Already shown in paths section
+            if isinstance(value, (str, int, float, bool)) and len(str(value)) < 100:
+                print(f"   {key}: {value}")
+        print()
+    
+    print("="*80)
+    print("💡 TIP: Use these credentials to manually test the infrastructure")
+    print("="*80 + "\n")
+
+
 def full_model_run(
     test_name,
     mode,
@@ -138,6 +307,25 @@ def full_model_run(
     """
     config_results = None
     custom_info = {"mode": mode}
+
+    # Check for infrastructure-only mode (manual testing)
+    if kwargs.get("infrastructure_only"):
+        print_infrastructure_credentials(test_resources, model_configs, fixture_instances)
+        print("⏸️  Infrastructure is ready for manual testing.")
+        print("   Press Enter when done to clean up and exit...")
+        try:
+            input()
+        except (KeyboardInterrupt, EOFError):
+            print("\n🛑 Cleanup initiated...")
+        
+        return {
+            "result": {"status": "infrastructure_only", "message": "Infrastructure-only mode - no agent execution"},
+            "fixtures": fixture_instances,
+            "test_name": test_name,
+            "test_resources": test_resources,
+            "model_configs": model_configs,
+            "custom_info": custom_info,
+        }
 
     if mode == "Ardent" and "supabase_account_resource" in test_resources:
         print(f"🔧 Setting up model configs...")
@@ -327,6 +515,7 @@ def run_de_bench_task(test_input):
                 "fixture_instances": fixture_instances,
                 "task_description": task_description,
                 "skip_model_run": test_input.get("skip_model_run", False),
+                "infrastructure_only": test_input.get("infrastructure_only", False),
             }
 
             # 3. Modify inputs if needed
@@ -763,6 +952,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--infrastructure-only",
+        action="store_true",
+        help="Set up infrastructure only (no agent execution). Displays credentials and waits for manual testing before cleanup.",
+    )
+
+    parser.add_argument(
         "--num-trials",
         "-n",
         type=int,
@@ -793,6 +988,7 @@ def run_multi_test_evaluation(
     all_valid_tests: Optional[List[str]] = None,
     verbose: bool = False,
     skip_model_run: bool = False,
+    infrastructure_only: bool = False,
     trial_count: int = 1,
     num_instances: int = 1,
     full_concurrency: bool = False,
@@ -905,6 +1101,7 @@ def run_multi_test_evaluation(
                             "instance_num": config.get("instance_num", 1),
                             "session_data": active_session_data,  # Pass session data for per-task resource setup
                             "skip_model_run": skip_model_run,
+                            "infrastructure_only": infrastructure_only,
                         },
                         "metadata": {
                             **config["case"]["metadata"],
@@ -971,6 +1168,25 @@ def run_multi_test_evaluation(
                         model_result = (
                             output.get("result") if isinstance(output, dict) else output
                         )
+                        
+                        # Check if this was an infrastructure-only run (manual testing mode)
+                        if isinstance(model_result, dict) and model_result.get("status") == "infrastructure_only":
+                            print(f"ℹ️  Infrastructure-only mode - skipping validation for {test_name}", flush=True)
+                            return {
+                                "name": "validator",
+                                "score": 1.0,  # Mark as success since infra was set up
+                                "metadata": {
+                                    "message": "Infrastructure-only mode - no validation performed",
+                                    "test_steps": [
+                                        {
+                                            "name": "Infrastructure Setup",
+                                            "status": "success",
+                                            "Result_Message": "✅ Infrastructure set up for manual testing"
+                                        }
+                                    ],
+                                },
+                            }
+                        
                         fixtures_data = (
                             output.get("fixtures", {})
                             if isinstance(output, dict)
@@ -1140,6 +1356,7 @@ if __name__ == "__main__":
             all_valid_tests=all_tests,
             verbose=args.verbose,
             skip_model_run=args.skip_model_run,
+            infrastructure_only=args.infrastructure_only,
             trial_count=args.num_trials,
             num_instances=args.num_instances,
             full_concurrency=args.full_concurrency,
