@@ -92,6 +92,10 @@ _AIRFLOW_WWW_USER_USERNAME="airflow"
 _AIRFLOW_WWW_USER_PASSWORD="airflow"
 AIRFLOW__CORE__LOAD_EXAMPLES=false
 
+# Airflow Provider Selection (Optional)
+# Options: "modal" (default), "aks", "ecs", "astro"
+AIRFLOW_PROVIDER="modal"
+
 # Databricks Configuration
 DATABRICKS_HOST="YOUR_DATABRICKS_HOST"
 DATABRICKS_TOKEN="YOUR_DATABRICKS_TOKEN"
@@ -246,6 +250,9 @@ uv run python run_braintrust_eval.py --filter "MongoDB.*" "MySQL.*" Ardent
 uv run python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" Claude_Code
 uv run python run_braintrust_eval.py --filter "MongoDB_Agent_Add_Record" OpenAI_Codex
 
+# Test infrastructure only (skip model execution)
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" --skip-model-run Ardent
+
 ```
 
 ### Available Modes:
@@ -268,7 +275,63 @@ uv run python run_braintrust_eval.py --filter "MongoDB.*" Ardent
 
 ```
 
-### 6. Service Configuration
+### 6. Airflow Provider Configuration
+
+Airflow tests support multiple deployment providers for flexibility and performance:
+
+#### Available Providers:
+- **Modal** (Default) - Serverless deployment, fastest performance (~55s ready time)
+- **AKS** - Azure Kubernetes Service 
+- **ECS** - AWS ECS Fargate
+- **Astro** - Astronomer Cloud
+
+#### Using Modal (Recommended):
+Modal is the default provider and offers the fastest deployment times:
+
+```bash
+# Modal is used by default (no configuration needed)
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+
+# Or explicitly set Modal
+export AIRFLOW_PROVIDER=modal
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+```
+
+**Modal Setup:**
+1. Install Modal CLI: `pip install modal`
+2. Authenticate: `modal token new`
+3. Create GCP secret for private registry access:
+   ```bash
+   modal secret create gcp-registry-secret \
+     SERVICE_ACCOUNT_JSON="$(cat gcp.json)"
+   ```
+4. Tests will automatically use Modal for Airflow deployments
+
+**Modal Benefits:**
+- ⚡ **Fast deployment**: ~1.5s infrastructure + ~54s Airflow init
+- 💰 **Cost-effective**: Only pay when running tests
+- 🔄 **Auto-scaling**: Automatic resource management
+- 🧹 **Auto-cleanup**: Resources automatically torn down after tests
+
+#### Using Other Providers:
+
+```bash
+# Use Azure Kubernetes Service
+export AIRFLOW_PROVIDER=aks
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+
+# Use AWS ECS Fargate
+export AIRFLOW_PROVIDER=ecs
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+
+# Use Astronomer Cloud
+export AIRFLOW_PROVIDER=astro
+uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
+```
+
+**Note**: AKS and ECS require additional cloud infrastructure setup. See provider-specific documentation for details.
+
+### 7. Service Configuration
 
 Configure your tools and permissions:
 
@@ -304,7 +367,9 @@ Snowflake:
 **Service-Specific Requirements**:
 - **DE-Bench Database**: Local Supabase instance must be running (`npx supabase start`)
 - **MongoDB**: Must have permissions to create and drop collections and databases
-- **Airflow**: Must be set up with git sync enabled to your repository
+- **Airflow**: 
+  - **Modal** (Default): Requires Modal CLI authentication (`modal token new`) and GCP secret setup
+  - **AKS/ECS/Astro**: Must be set up with git sync enabled to your repository
 - **MySQL**: Check credentials regularly (AWS RDS defaults rotate weekly)
 - **PostgreSQL**: Must have the default `postgres` database available
 - **Tigerbeetle**: Must be set up with VOPR for testing (if used)
