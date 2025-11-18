@@ -27,18 +27,53 @@ def get_fixtures() -> List[DEBenchFixture]:
     """
     Provides custom DEBenchFixture instances for Braintrust evaluation.
     This Airflow test validates that AI can create an advanced data engineering pipeline DAG.
+    
+    Supports four deployment providers:
+    - "modal": Modal serverless (default for this test)
+    - "astro": Astronomer Cloud
+    - "aks": Azure Kubernetes Service
+    - "ecs": AWS ECS Fargate
+    
+    Provider can be overridden via AIRFLOW_PROVIDER environment variable.
     """
     from Fixtures.Airflow.airflow_fixture import AirflowFixture
     from Fixtures.PostgreSQL.postgres_resources import PostgreSQLFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Initialize Airflow fixture with test-specific configuration
-    custom_airflow_config = {
-        "resource_id": BRANCH_NAME,
-        "airflow_provider": "aks",  # Use ECS deployment
-        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
-        "kubernetes_namespace": BRANCH_NAME.replace("_", "-"),
-    }
+    # Initialize Airflow fixture with configurable deployment provider
+    provider = os.getenv("AIRFLOW_PROVIDER", "modal")  # Default to Modal
+    
+    # Provider-specific configurations
+    if provider == "modal":
+        custom_airflow_config = {
+            "resource_id": BRANCH_NAME,
+            "airflow_provider": "modal",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+        }
+    elif provider == "aks":
+        custom_airflow_config = {
+            "resource_id": BRANCH_NAME,
+            "airflow_provider": "aks",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "kubernetes_namespace": BRANCH_NAME.replace("_", "-"),
+        }
+    elif provider == "ecs":
+        custom_airflow_config = {
+            "resource_id": BRANCH_NAME,
+            "airflow_provider": "ecs",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "ecs_namespace": BRANCH_NAME.replace("_", "-"),
+        }
+    elif provider == "astro":
+        custom_airflow_config = {
+            "resource_id": BRANCH_NAME,
+            "airflow_provider": "astro",
+        }
+    else:
+        raise ValueError(
+            f"Unknown AIRFLOW_PROVIDER: {provider}. "
+            f"Supported: modal, aks, ecs, astro"
+        )
 
     # Initialize PostgreSQL fixture for the advanced pipeline data
     custom_postgres_config = {

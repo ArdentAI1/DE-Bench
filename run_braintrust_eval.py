@@ -139,63 +139,67 @@ def full_model_run(
     config_results = None
     custom_info = {"mode": mode}
 
-    if mode == "Ardent" and "supabase_account_resource" in test_resources:
-        print(f"🔧 Setting up model configs...")
-
-        custom_info.update(
-            {
-                "publicKey": test_resources["supabase_account_resource"]["publicKey"],
-                "secretKey": test_resources["supabase_account_resource"]["secretKey"],
-                "org_id": test_resources["supabase_account_resource"].get(
-                    "org_id"
-                ),  # V2 API requires org_id
-            }
-        )
-
-        config_results = set_up_model_configs(
-            Configs=model_configs,
-            custom_info=custom_info,
-        )
-        print(f"✅ Model configs set up")
-
-    elif mode == "Claude_Code":
-        print(f"🔧 Setting up Kubernetes for Claude Code...")
-
-        # Set up Kubernetes infrastructure for Claude Code
-        config_results = set_up_model_configs(
-            Configs=model_configs,
-            custom_info=custom_info,
-        )
-
-        # Add the Kubernetes objects to custom_info for the model
-        if config_results:
-            custom_info.update(config_results)
-
-        print(f"✅ Kubernetes setup completed")
-
-    elif mode == "OpenAI_Codex":
-        print(f"🔧 Setting up Kubernetes for OpenAI Codex...")
-
-        # Set up Kubernetes infrastructure for OpenAI Codex
-        config_results = set_up_model_configs(
-            Configs=model_configs,
-            custom_info=custom_info,
-        )
-
-        # Add the Kubernetes objects to custom_info for the model
-        if config_results:
-            custom_info.update(config_results)
-
-        print(f"✅ Kubernetes setup completed")
-
-    # 4. Execute the model
+    # 4. Execute the model (check skip_model_run FIRST to avoid unnecessary config setup)
     if kwargs.get("skip_model_run"):
         print(
             f"⚠️ Skipping model run because 'skip_model_run' was set and evaluated to True",
             flush=True,
         )
         model_result = None
+        config_results = None
     else:
+        # Only set up configs if we're actually running the model
+        if mode == "Ardent" and "supabase_account_resource" in test_resources:
+            print(f"🔧 Setting up model configs...")
+
+            custom_info.update(
+                {
+                    "publicKey": test_resources["supabase_account_resource"]["publicKey"],
+                    "secretKey": test_resources["supabase_account_resource"]["secretKey"],
+                    "org_id": test_resources["supabase_account_resource"].get(
+                        "org_id"
+                    ),  # V2 API requires org_id
+                }
+            )
+
+            config_results = set_up_model_configs(
+                Configs=model_configs,
+                custom_info=custom_info,
+            )
+            print(f"✅ Model configs set up")
+
+        elif mode == "Claude_Code":
+            print(f"🔧 Setting up Kubernetes for Claude Code...")
+
+            # Set up Kubernetes infrastructure for Claude Code
+            config_results = set_up_model_configs(
+                Configs=model_configs,
+                custom_info=custom_info,
+            )
+
+            # Add the Kubernetes objects to custom_info for the model
+            if config_results:
+                custom_info.update(config_results)
+
+            print(f"✅ Kubernetes setup completed")
+
+        elif mode == "OpenAI_Codex":
+            print(f"🔧 Setting up Kubernetes for OpenAI Codex...")
+
+            # Set up Kubernetes infrastructure for OpenAI Codex
+            config_results = set_up_model_configs(
+                Configs=model_configs,
+                custom_info=custom_info,
+            )
+
+            # Add the Kubernetes objects to custom_info for the model
+            if config_results:
+                custom_info.update(config_results)
+
+            print(f"✅ Kubernetes setup completed")
+        else:
+            config_results = None
+
         print(f"🤖 Running model...", flush=True)
         model_result = run_model(
             container=None,

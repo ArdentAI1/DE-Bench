@@ -30,14 +30,40 @@ def get_fixtures() -> List[DEBenchFixture]:
     from Fixtures.PostgreSQL.postgres_resources import PostgreSQLFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Initialize Airflow fixture with test-specific configuration
+    # Initialize Airflow fixture with configurable deployment provider
     resource_id = f"usgs_earthquake_test_{test_timestamp}_{test_uuid}"
-    custom_airflow_config = {
-        "resource_id": resource_id,
-        "airflow_provider": "aks",  # Use ECS deployment
-        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
-        "kubernetes_namespace": resource_id.replace("_", "-"),
-    }
+    provider = os.getenv("AIRFLOW_PROVIDER", "modal")  # Default to Modal
+    
+    if provider == "modal":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "modal",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+        }
+    elif provider == "aks":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "aks",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "kubernetes_namespace": resource_id.replace("_", "-"),
+        }
+    elif provider == "ecs":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "ecs",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "ecs_namespace": resource_id.replace("_", "-"),
+        }
+    elif provider == "astro":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "astro",
+        }
+    else:
+        raise ValueError(
+            f"Unknown AIRFLOW_PROVIDER: {provider}. "
+            f"Supported: modal, aks, ecs, astro"
+        )
 
     # Initialize PostgreSQL fixture for earthquake data
     custom_postgres_config = {

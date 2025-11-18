@@ -26,34 +26,52 @@ def get_fixtures() -> List[DEBenchFixture]:
     Provides custom DEBenchFixture instances for Braintrust evaluation.
     This Airflow test validates that AI can create and execute a Hello Universe DAG pipeline.
 
-    Supports three deployment providers (set via DEFAULT_AIRFLOW_PROVIDER):
-    - "astro" (default): Astronomer Cloud
+    Supports four deployment providers:
+    - "modal": Modal serverless (default for this test)
+    - "astro": Astronomer Cloud
     - "aks": Azure Kubernetes Service
     - "ecs": AWS ECS Fargate
+    
+    Provider can be overridden via AIRFLOW_PROVIDER environment variable.
     """
     from Fixtures.Airflow.airflow_fixture import AirflowFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Get provider from environment or default to "astro"
-    provider = "aks"
-
-    # Initialize Airflow fixture with appropriate deployment provider
+    # Initialize Airflow fixture with configurable deployment provider
     resource_id = f"hello_universe_pipeline_test_{test_timestamp}_{test_uuid}"
-    custom_airflow_config = {
-        "resource_id": resource_id,
-        "airflow_provider": provider,
-        "container_image": os.getenv("DE_BENCH_ECS_IMAGE_NAME")
-        if provider == "ecs"
-        else os.getenv("DE_BENCH_AKS_IMAGE_NAME"),
-        "ecs_namespace": resource_id.replace("_", "-") if provider == "ecs" else None,
-        "kubernetes_namespace": resource_id.replace("_", "-")[:63]
-        if provider == "aks"
-        else None,
-        "enable_load_balancer": os.getenv("ECS_ENABLE_LOAD_BALANCER", "true").lower()
-        == "true"
-        if provider == "ecs"
-        else None,
-    }
+    provider = os.getenv("AIRFLOW_PROVIDER", "modal")  # Default to Modal
+    
+    # Provider-specific configurations
+    if provider == "modal":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "modal",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+        }
+    elif provider == "aks":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "aks",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "kubernetes_namespace": resource_id.replace("_", "-"),
+        }
+    elif provider == "ecs":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "ecs",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "ecs_namespace": resource_id.replace("_", "-"),
+        }
+    elif provider == "astro":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "astro",
+        }
+    else:
+        raise ValueError(
+            f"Unknown AIRFLOW_PROVIDER: {provider}. "
+            f"Supported: modal, aks, ecs, astro"
+        )
 
     # Initialize GitHub fixture for PR and branch management
     custom_github_config = {

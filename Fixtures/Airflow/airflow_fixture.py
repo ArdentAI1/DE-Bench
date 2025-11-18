@@ -120,7 +120,7 @@ class AirflowFixture(
         print(f"   Providers needed across all tests: {providers_needed}")
 
         # Validate all providers
-        valid_providers = ["astro", "aks", "ecs"]
+        valid_providers = ["astro", "aks", "ecs", "modal"]
         for provider in providers_needed:
             if provider not in valid_providers:
                 raise ValueError(
@@ -335,7 +335,7 @@ class AirflowFixture(
         provider = config.get("airflow_provider", "astro").lower()
 
         # Validate provider value
-        valid_providers = ["astro", "aks", "ecs"]
+        valid_providers = ["astro", "aks", "ecs", "modal"]
         if provider not in valid_providers:
             raise ValueError(
                 f"Invalid airflow_provider '{provider}'. Must be one of: {valid_providers}"
@@ -355,6 +355,9 @@ class AirflowFixture(
             elif provider == "ecs":
                 # ECS deployment path
                 return self._setup_ecs_airflow(config, resource_id, creation_start)
+            elif provider == "modal":
+                # Modal deployment path
+                return self._setup_modal_airflow(config, resource_id, creation_start)
             else:  # astro
                 # Astro deployment path
                 return self._setup_astro_airflow(config, resource_id, creation_start)
@@ -362,6 +365,132 @@ class AirflowFixture(
         except Exception as e:
             print(f"❌ Failed to setup Airflow resource {resource_id}: {e}")
             raise
+
+    def _setup_modal_airflow(
+        self, config: AirflowResourceConfig, resource_id: str, creation_start: float
+    ) -> AirflowResourceData:
+        """Set up Airflow using Modal serverless platform"""
+        import modal
+        import subprocess
+        import socket
+        
+        # Get container image from config (required)
+        container_image = config.get("container_image")
+        if not container_image:
+            raise ValueError(
+                f"No container_image specified for Modal deployment of {resource_id}. "
+                f"Add 'container_image' to your custom_airflow_config."
+            )
+        
+        # Generate unique app name (Modal naming: alphanumeric + hyphens, max 50 chars)
+        app_name = f"airflow-{resource_id}"[:50].replace("_", "-").lower()
+        
+        print(f"🐳 Container image: {container_image}")
+        print(f"📦 Modal app name: {app_name}")
+        
+        # Create Modal app
+        app = modal.App(app_name)
+        
+        # Reference GAR image with Modal runtime dependencies
+        gar_image = (
+            modal.Image.from_gcp_artifact_registry(
+                container_image,
+                secret=modal.Secret.from_name("gcp-registry-secret")
+            )
+            .pip_install("grpclib")  # Modal's runtime dependency
+            .entrypoint([])  # Clear entrypoint for Modal control
+        )
+        
+        # Define web server function
+        @app.function(
+            image=gar_image,
+            cpu=1.0,
+            memory="4Gi",
+            min_containers=1,
+            max_containers=1,
+            serialized=True,
+            name="web",
+        )
+        @modal.web_server(port=8080, startup_timeout=180)
+        def web():
+            import subprocess
+            import socket
+            import time
+            
+            print("🚀 Starting Airflow standalone...")
+            subprocess.Popen(["/airflow_init.sh"])
+            
+            # Wait for port 8080 to be listening
+            print("⏳ Waiting for Airflow to bind to port 8080...")
+            for i in range(90):
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    result = sock.connect_ex(('127.0.0.1', 8080))
+                    sock.close()
+                    if result == 0:
+                        print(f"✅ Airflow ready! (took {i}s)")
+                        return
+                except:
+                    pass
+                time.sleep(1)
+            print("⚠️ Timeout waiting for Airflow, but continuing...")
+        
+        # Deploy the app
+        deploy_start = time.time()
+        print(f"🚀 Deploying Modal app: {app_name}")
+        
+        app.deploy()
+        
+        deploy_time = time.time() - deploy_start
+        print(f"✅ Modal app deployed in {deploy_time:.2f}s")
+        
+        # Construct base URL (using ardent workspace)
+        base_url = f"https://ardent--{app_name}-web.modal.run"
+        print(f"🌐 Airflow URL: {base_url}")
+        
+        # Create AirflowManager instance
+        airflow_instance = AirflowManager(
+            host=base_url,
+            api_url=f"{base_url}/api/v1",
+            api_token="",  # Modal uses basic auth, not token
+            resource_id=resource_id,
+            provider="modal"
+        )
+        
+        # Wait for Airflow to be ready
+        print("⏳ Waiting for Airflow API to be ready...")
+        if not airflow_instance.wait_for_airflow_to_be_ready():
+            raise Exception(f"Modal Airflow instance {app_name} failed to become ready")
+        
+        ready_time = time.time() - creation_start
+        print(f"✅ Airflow ready in {ready_time:.2f}s (deploy: {deploy_time:.2f}s, init: {ready_time-deploy_time:.2f}s)")
+        
+        # Return standard resource data structure
+        return AirflowResourceData(
+            resource_id=resource_id,
+            type="airflow_resource",
+            creation_time=creation_start,
+            creation_duration=ready_time,
+            description=f"Modal Airflow instance for {resource_id}",
+            status="active",
+            deployment_id=app_name,
+            deployment_name=app_name,
+            secret_suffix="",  # Not applicable for Modal
+            base_url=base_url,
+            api_url=f"{base_url}/api/v1",
+            api_token="",  # Modal uses basic auth, not token
+            api_headers=airflow_instance.api_headers,
+            username="admin",
+            password="admin",
+            airflow_instance=airflow_instance,
+            test_dir=None,  # Not applicable for Modal
+            k8s_manager=None,
+            k8s_namespace=None,
+            external_ip=None,
+            modal_app_name=app_name,  # For teardown
+            provider="modal",
+            container_image=container_image,
+        )
 
     def _setup_astro_airflow(
         self, config: AirflowResourceConfig, resource_id: str, creation_start: float
@@ -913,6 +1042,9 @@ class AirflowFixture(
                     )
             if resource_data:
                 self._cleanup_ecs_airflow(resource_data)
+        # Check if this is a Modal deployment
+        elif resource_data and resource_data.get("provider") == "modal":
+            self._cleanup_modal_airflow(resource_data)
         # Otherwise, use the AirflowManager cleanup
         elif hasattr(self, "_airflow_manager") and self._airflow_manager:
             test_dir = resource_data.get("test_dir") if resource_data else None
@@ -1015,6 +1147,40 @@ class AirflowFixture(
                 print(f"✅ Cleaned up temporary directory: {test_dir}")
             except Exception as e:
                 print(f"⚠️ Error cleaning up temporary directory: {e}")
+
+    def _cleanup_modal_airflow(self, resource_data: AirflowResourceData) -> None:
+        """Clean up Modal Airflow deployment"""
+        import subprocess
+        
+        resource_id = resource_data["resource_id"]
+        modal_app_name = resource_data.get("modal_app_name")
+        
+        if not modal_app_name:
+            print(f"⚠️ No Modal app name found for {resource_id}, skipping Modal cleanup")
+            return
+        
+        print(f"🧹 Stopping Modal app: {modal_app_name}")
+        
+        try:
+            # Stop the app using Modal CLI (no SDK method exists)
+            result = subprocess.run(
+                ["modal", "app", "stop", modal_app_name],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                print(f"✅ Modal app {modal_app_name} stopped successfully")
+            else:
+                print(f"⚠️ Modal app stop returned code {result.returncode}")
+                if result.stderr:
+                    print(f"   stderr: {result.stderr[:200]}")
+        except subprocess.TimeoutExpired:
+            print(f"⚠️ Timeout stopping Modal app {modal_app_name}")
+        except Exception as e:
+            print(f"⚠️ Error stopping Modal app: {e}")
 
     @classmethod
     def get_resource_type(cls) -> str:

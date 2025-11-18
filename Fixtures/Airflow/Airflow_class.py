@@ -910,7 +910,8 @@ class AirflowManager:
                 preview = "<no-body>"
             print(f"{label}: {resp.status_code} {preview}")
 
-        retries = 10
+        # Modal can have slow cold boots, give it more retries
+        retries = 20 if self.provider == "modal" else 10
         while retries > 0:
             print(f"Checking Airflow readiness... {retries} retries left")
 
@@ -973,7 +974,8 @@ class AirflowManager:
                 print(f"Request error during readiness: {e}")
 
             retries -= 1
-            time.sleep(30)
+            # Modal is fast - poll every 5s. Other providers need conservative 30s
+            time.sleep(5 if self.provider == "modal" else 30)
 
         print("Airflow webserver is NOT ready after retries")
         return False
