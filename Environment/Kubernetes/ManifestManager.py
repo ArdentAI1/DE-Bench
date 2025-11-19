@@ -217,6 +217,13 @@ spec:
         env:
         - name: IS_SANDBOX
           value: "1"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "3Gi"
 
 ---
 apiVersion: v1

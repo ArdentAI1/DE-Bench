@@ -29,14 +29,40 @@ def get_fixtures() -> List[DEBenchFixture]:
     from Fixtures.PostgreSQL.postgres_resources import PostgreSQLFixture
     from Fixtures.GitHub.github_fixture import GitHubFixture
 
-    # Initialize fixtures
+    # Initialize fixtures with configurable deployment provider
     resource_id = f"airflow_sensor_branch_test_{test_timestamp}_{test_uuid}"
-    custom_airflow_config = {
-        "resource_id": resource_id,
-        "airflow_provider": "aks",  # Use ECS deployment
-        "container_image": os.getenv("AIRFLOW_CONTAINER_IMAGE"),
-        "kubernetes_namespace": resource_id.replace("_", "-"),
-    }
+    provider = os.getenv("AIRFLOW_PROVIDER", "modal")  # Default to Modal
+    
+    if provider == "modal":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "modal",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+        }
+    elif provider == "aks":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "aks",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "kubernetes_namespace": resource_id.replace("_", "-"),
+        }
+    elif provider == "ecs":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "ecs",
+            "container_image": "us-central1-docker.pkg.dev/ardent-de-bench/de-bench/airflow2-session-auth:base",
+            "ecs_namespace": resource_id.replace("_", "-"),
+        }
+    elif provider == "astro":
+        custom_airflow_config = {
+            "resource_id": resource_id,
+            "airflow_provider": "astro",
+        }
+    else:
+        raise ValueError(
+            f"Unknown AIRFLOW_PROVIDER: {provider}. "
+            f"Supported: modal, aks, ecs, astro"
+        )
 
     custom_postgres_config = {
         "resource_id": f"sensor_db_{test_timestamp}_{test_uuid}",
@@ -299,13 +325,22 @@ def validate_test(model_result, fixtures=None):
                 }
             )
 
-        if airflow_resource_data.get("k8s_namespace", None) is None:
+        # Determine build_info based on deployment mode
+        provider = airflow_resource_data.get("provider")
+        
+        if provider == "modal":
+            # Modal serverless deployment
             build_info = {
-                "deploymentId": airflow_resource_data["deployment_id"],
-                "deploymentName": airflow_resource_data["deployment_name"],
-                "secretSuffix": airflow_resource_data["secret_suffix"],
+                "provider": "modal",
+                "modalAppName": airflow_resource_data.get("modal_app_name"),
+                "garRegistry": "us-central1-docker.pkg.dev",
+                "garProject": "ardent-de-bench",
+                "garRepository": "de-bench",
+                "baseImage": airflow_resource_data.get("container_image"),
+                "modalWorkspace": os.getenv("MODAL_WORKSPACE", "ardent"),
             }
-        else:
+        elif airflow_resource_data.get("k8s_namespace", None) is not None:
+            # Kubernetes (AKS) deployment
             build_info = {
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),
                 "acrRepository": airflow_resource_data["deployment_id"],
@@ -313,6 +348,29 @@ def validate_test(model_result, fixtures=None):
                 "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
                     :50
                 ],
+            }
+        elif airflow_resource_data.get("ecs_namespace", None) is not None:
+            ecr_registry = (
+                os.getenv("AWS_ECR_BASE")
+                or os.getenv("AWS_ACCOUNT_ID", "").strip()
+                + ".dkr.ecr."
+                + os.getenv("AWS_REGION", "us-east-1")
+                + ".amazonaws.com"
+            )
+            # ECS deployment
+            build_info = {
+                "ecrRegistry": ecr_registry,
+                "ecrRepository": airflow_resource_data["deployment_id"],
+                "ecsCluster": os.getenv("DE_BENCH_ECS_CLUSTER_NAME"),
+                "ecsNamespace": airflow_resource_data["ecs_namespace"],
+                "ecsServiceName": airflow_resource_data["ecs_namespace"] + "-service",
+            }
+        else:
+            # Astro deployment
+            build_info = {
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             }
 
         # PR creation and merge
