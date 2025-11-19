@@ -163,9 +163,20 @@ Below are custom variables for your specific setup. We set up the Ardent configs
 
 <pre><code>
 # Ardent AI Configuration (Example Custom Setup)
-ARDENT_PUBLIC_KEY="YOUR_ARDENT_PUBLIC_KEY"
-ARDENT_SECRET_KEY="YOUR_ARDENT_SECRET_KEY"
+
+# Option 1: Use environment API key directly (simpler setup)
+ARDENT_API_KEY="YOUR_ARDENT_API_KEY"  # Single bearer token (e.g., sk-ard_test_xxxxx)
 ARDENT_BASE_URL="http://localhost:8000"
+
+# Option 2: Use Supabase to create dynamic test users/API keys (advanced)
+# If both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set, 
+# tests will create temporary users and API keys automatically.
+# SUPABASE_URL="https://your-project.supabase.co"
+# SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+
+# Note: For Ardent mode, you must provide EITHER:
+#   - ARDENT_API_KEY (direct API key), OR
+#   - SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (dynamic user creation)
 </code></pre>
 
 3. Edit the Run_Model.py file to edit the wrapper and import in your model. You must make sure MODEL_PATH is the same path for your model import. Plug in your model to the wrapper function in Run_Model
