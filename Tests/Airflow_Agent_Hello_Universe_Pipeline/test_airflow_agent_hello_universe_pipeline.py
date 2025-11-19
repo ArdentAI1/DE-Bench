@@ -341,7 +341,20 @@ def validate_test(model_result, fixtures=None):
             )
 
         # Determine build_info based on deployment mode
-        if airflow_resource_data.get("k8s_namespace", None) is not None:
+        provider = airflow_resource_data.get("provider")
+        
+        if provider == "modal":
+            # Modal serverless deployment
+            build_info = {
+                "provider": "modal",
+                "modalAppName": airflow_resource_data.get("modal_app_name"),
+                "garRegistry": "us-central1-docker.pkg.dev",
+                "garProject": "ardent-de-bench",
+                "garRepository": "de-bench",
+                "baseImage": airflow_resource_data.get("container_image"),
+                "modalWorkspace": os.getenv("MODAL_WORKSPACE", "ardent"),
+            }
+        elif airflow_resource_data.get("k8s_namespace", None) is not None:
             # Kubernetes (AKS) deployment
             build_info = {
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),

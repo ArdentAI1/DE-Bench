@@ -373,6 +373,7 @@ class AirflowFixture(
         import modal
         import subprocess
         import socket
+        import os
         
         # Get container image from config (required)
         container_image = config.get("container_image")
@@ -444,8 +445,9 @@ class AirflowFixture(
         deploy_time = time.time() - deploy_start
         print(f"✅ Modal app deployed in {deploy_time:.2f}s")
         
-        # Construct base URL (using ardent workspace)
-        base_url = f"https://ardent--{app_name}-web.modal.run"
+        # Construct base URL (using workspace from env var)
+        workspace = os.getenv("MODAL_WORKSPACE", "ardent")
+        base_url = f"https://{workspace}--{app_name}-web.modal.run"
         print(f"🌐 Airflow URL: {base_url}")
         
         # Create AirflowManager instance

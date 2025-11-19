@@ -96,6 +96,10 @@ AIRFLOW__CORE__LOAD_EXAMPLES=false
 # Options: "modal" (default), "aks", "ecs", "astro"
 AIRFLOW_PROVIDER="modal"
 
+# Modal Configuration (if using Modal for Airflow)
+# Note: Also requires one-time: modal token set --token-id <ID> --token-secret <SECRET>
+MODAL_WORKSPACE="ardent"  # Your Modal workspace name
+
 # Databricks Configuration
 DATABRICKS_HOST="YOUR_DATABRICKS_HOST"
 DATABRICKS_TOKEN="YOUR_DATABRICKS_TOKEN"
@@ -298,14 +302,34 @@ uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" Ardent
 ```
 
 **Modal Setup:**
-1. Install Modal CLI: `pip install modal`
-2. Authenticate: `modal token new`
-3. Create GCP secret for private registry access:
+
+**Get your tokens from:** https://modal.com/settings → Tokens → Create new token
+
+1. **Authenticate Modal CLI** (one-time setup per machine):
+   ```bash
+   # Install dependencies (Modal CLI included)
+   uv sync
+   
+   # Authenticate with Modal
+   modal token set \
+     --token-id "ak-xxxxx" \
+     --token-secret "as-xxxxx"
+   ```
+
+2. **Set environment variables** (add to your shell profile or `.env`):
+   ```bash
+   export MODAL_WORKSPACE="ardent"  # Your Modal workspace name (check: modal profile list)
+   ```
+
+3. **Create GCP secret** for private registry access (one-time setup):
    ```bash
    modal secret create gcp-registry-secret \
      SERVICE_ACCOUNT_JSON="$(cat gcp.json)"
    ```
+
 4. Tests will automatically use Modal for Airflow deployments
+
+**Note:** Modal CLI stores authentication in `~/.modal/config`. The `modal token set` command only needs to be run once per machine.
 
 **Modal Benefits:**
 - ⚡ **Fast deployment**: ~1.5s infrastructure + ~54s Airflow init
@@ -368,7 +392,7 @@ Snowflake:
 - **DE-Bench Database**: Local Supabase instance must be running (`npx supabase start`)
 - **MongoDB**: Must have permissions to create and drop collections and databases
 - **Airflow**: 
-  - **Modal** (Default): Requires Modal CLI authentication (`modal token new`) and GCP secret setup
+  - **Modal** (Default): Requires one-time CLI authentication (`modal token set`), `MODAL_WORKSPACE` env var, and GCP secret setup
   - **AKS/ECS/Astro**: Must be set up with git sync enabled to your repository
 - **MySQL**: Check credentials regularly (AWS RDS defaults rotate weekly)
 - **PostgreSQL**: Must have the default `postgres` database available

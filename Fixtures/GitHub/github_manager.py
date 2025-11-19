@@ -100,7 +100,7 @@ class GitHubManager:
             print(f"State file {state_archive_path.absolute()} is not a zip file, it is a {state_archive_path.suffix} file!")
             return
         # make a directory for the state file, using the branch name
-        state_file_dir = os.path.join(self.branch_name, "state_file")
+        state_file_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Airflow", "tmp_github_states", self.branch_name, "state_file")
         os.makedirs(state_file_dir, exist_ok=True)
         # unpack the zip and push it to the new branch
         with zipfile.ZipFile(state_archive_path.absolute(), "r") as zip_ref:

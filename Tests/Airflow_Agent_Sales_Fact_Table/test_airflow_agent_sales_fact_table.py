@@ -395,13 +395,22 @@ def validate_test(model_result, fixtures=None):
             test_steps[1]["Result_Message"] = f"❌ Error checking git branch: {str(e)}"
             return {"score": 0.0, "metadata": {"test_steps": test_steps}}
 
-        if airflow_resource_data.get("k8s_namespace", None) is None:
+        # Determine build_info based on deployment mode
+        provider = airflow_resource_data.get("provider")
+        
+        if provider == "modal":
+            # Modal serverless deployment
             build_info = {
-                "deploymentId": airflow_resource_data["deployment_id"],
-                "deploymentName": airflow_resource_data["deployment_name"],
-                "secretSuffix": airflow_resource_data["secret_suffix"],
+                "provider": "modal",
+                "modalAppName": airflow_resource_data.get("modal_app_name"),
+                "garRegistry": "us-central1-docker.pkg.dev",
+                "garProject": "ardent-de-bench",
+                "garRepository": "de-bench",
+                "baseImage": airflow_resource_data.get("container_image"),
+                "modalWorkspace": os.getenv("MODAL_WORKSPACE", "ardent"),
             }
-        else:
+        elif airflow_resource_data.get("k8s_namespace", None) is not None:
+            # Kubernetes (AKS) deployment
             build_info = {
                 "acrRegistry": os.getenv("AZURE_ACR_NAME"),
                 "acrRepository": airflow_resource_data["deployment_id"],
@@ -409,6 +418,29 @@ def validate_test(model_result, fixtures=None):
                 "k8sJobName": airflow_resource_data["resource_id"].replace("_", "-")[
                     :50
                 ],
+            }
+        elif airflow_resource_data.get("ecs_namespace", None) is not None:
+            ecr_registry = (
+                os.getenv("AWS_ECR_BASE")
+                or os.getenv("AWS_ACCOUNT_ID", "").strip()
+                + ".dkr.ecr."
+                + os.getenv("AWS_REGION", "us-east-1")
+                + ".amazonaws.com"
+            )
+            # ECS deployment
+            build_info = {
+                "ecrRegistry": ecr_registry,
+                "ecrRepository": airflow_resource_data["deployment_id"],
+                "ecsCluster": os.getenv("DE_BENCH_ECS_CLUSTER_NAME"),
+                "ecsNamespace": airflow_resource_data["ecs_namespace"],
+                "ecsServiceName": airflow_resource_data["ecs_namespace"] + "-service",
+            }
+        else:
+            # Astro deployment
+            build_info = {
+                "deploymentId": airflow_resource_data["deployment_id"],
+                "deploymentName": airflow_resource_data["deployment_name"],
+                "secretSuffix": airflow_resource_data["secret_suffix"],
             }
 
         # Step 3: Check if PR was created and merge it

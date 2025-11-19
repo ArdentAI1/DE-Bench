@@ -318,6 +318,135 @@ def run_de_bench_task(test_input):
             )
             print(f"✅ Resources set up", flush=True)
 
+            # Pause for infrastructure inspection if requested
+            if test_input.get("infrastructure_only"):
+                # Build model inputs to show what the agent would see
+                create_model_inputs_func = test_data["resource_configs"].get(
+                    "create_model_inputs_func"
+                )
+                if create_model_inputs_func:
+                    model_inputs_base = {
+                        "test_name": test_name,
+                        "mode": mode,
+                        "test_resources": test_resources,
+                        "fixture_instances": fixture_instances,
+                        "task_description": task_description,
+                        "skip_model_run": test_input.get("skip_model_run", False),
+                    }
+                    final_model_inputs = create_model_inputs_func(
+                        model_inputs_base, fixture_instances
+                    )
+                    
+                    # Build custom_info (what would be passed to agent)
+                    custom_info = {"mode": mode}
+                    if mode == "Ardent" and "supabase_account_resource" in test_resources:
+                        custom_info.update({
+                            "publicKey": test_resources["supabase_account_resource"]["publicKey"],
+                            "secretKey": test_resources["supabase_account_resource"]["secretKey"],
+                            "org_id": test_resources["supabase_account_resource"].get("org_id"),
+                        })
+                    
+                    # Print all infrastructure details
+                    print("\n" + "="*70)
+                    print("📦 INFRASTRUCTURE DETAILS (What the agent would see)")
+                    print("="*70)
+                    
+                    # Define resource-specific field whitelists
+                    AIRFLOW_KEEP = {"base_url", "api_url", "username", "password", "provider", "modal_app_name"}
+                    GITHUB_KEEP = {"branch_name", "access_token", "repo_url"}
+                    POSTGRES_KEEP = {"host", "port", "user", "password"}
+                    MYSQL_KEEP = {"host", "port", "user", "password"}
+                    MONGO_KEEP = {"connection_string"}
+                    SNOWFLAKE_KEEP = {"account", "user", "password", "warehouse", "role", "database", "schema"}
+                    
+                    print("\n🔧 TEST RESOURCES:")
+                    for resource_name, resource_data in test_resources.items():
+                        if not isinstance(resource_data, dict):
+                            continue
+                        
+                        # Skip supabase entirely
+                        if "supabase" in resource_name.lower():
+                            continue
+                        
+                        print(f"\n  📋 {resource_name}:")
+                        
+                        # Airflow resource
+                        if "airflow" in resource_name.lower():
+                            for key in AIRFLOW_KEEP:
+                                if key in resource_data and resource_data[key]:
+                                    print(f"     {key}: {resource_data[key]}")
+                        
+                        # GitHub resource
+                        elif "github" in resource_name.lower():
+                            for key in GITHUB_KEEP:
+                                if key in resource_data:
+                                    print(f"     {key}: {resource_data[key]}")
+                        
+                        # PostgreSQL resource
+                        elif "postgres" in resource_name.lower():
+                            if "connection_params" in resource_data:
+                                for key in POSTGRES_KEEP:
+                                    if key in resource_data["connection_params"]:
+                                        print(f"     {key}: {resource_data['connection_params'][key]}")
+                            if "created_resources" in resource_data:
+                                databases = [db.get("name") for db in resource_data["created_resources"] if db.get("type") == "database"]
+                                if databases:
+                                    print(f"     databases: {', '.join(databases)}")
+                        
+                        # MySQL resource
+                        elif "mysql" in resource_name.lower():
+                            # MySQL stores connection details differently, try both approaches
+                            for key in MYSQL_KEEP:
+                                if key in resource_data:
+                                    print(f"     {key}: {resource_data[key]}")
+                            if "created_resources" in resource_data:
+                                databases = [db.get("name") for db in resource_data["created_resources"] if db.get("type") == "database"]
+                                if databases:
+                                    print(f"     databases: {', '.join(databases)}")
+                        
+                        # MongoDB resource
+                        elif "mongo" in resource_name.lower():
+                            for key in MONGO_KEEP:
+                                if key in resource_data:
+                                    print(f"     {key}: {resource_data[key]}")
+                            if "created_resources" in resource_data:
+                                collections = [f"{r.get('db')}.{r.get('collection')}" for r in resource_data["created_resources"]]
+                                if collections:
+                                    print(f"     collections: {', '.join(collections)}")
+                        
+                        # Snowflake resource
+                        elif "snowflake" in resource_name.lower():
+                            for key in SNOWFLAKE_KEEP:
+                                if key in resource_data:
+                                    print(f"     {key}: {resource_data[key]}")
+                            if "created_resources" in resource_data:
+                                for res in resource_data["created_resources"]:
+                                    if res.get("tables"):
+                                        print(f"     tables: {', '.join(res['tables'])}")
+                    
+                    print("\n🎯 MODEL CONFIGS:")
+                    if "model_configs" in final_model_inputs:
+                        for key, value in final_model_inputs["model_configs"].items():
+                            print(f"   {key}: {value}")
+                    
+                    print("\n📝 CUSTOM INFO (Agent context):")
+                    for key, value in custom_info.items():
+                        print(f"   {key}: {value}")
+                    
+                    print("\n📖 TASK DESCRIPTION:")
+                    print(f"   {final_model_inputs.get('task_description', task_description)}")
+                    
+                    print("\n" + "="*70)
+                
+                input("\n⏸️  Press Enter to tear down infrastructure...\n")
+                
+                # Return early to skip model run and go straight to teardown
+                return {
+                    "status": "infrastructure_only",
+                    "message": "Infrastructure inspected, skipping model run",
+                    "resources": test_resources,
+                }
+
             # Register test with fixtures for global cleanup tracking
             if fixture_instances:
                 register_test_with_fixtures(
@@ -767,6 +896,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--infrastructure-only",
+        action="store_true",
+        help="Set up infrastructure and pause for inspection before teardown",
+    )
+
+    parser.add_argument(
         "--num-trials",
         "-n",
         type=int,
@@ -797,6 +932,7 @@ def run_multi_test_evaluation(
     all_valid_tests: Optional[List[str]] = None,
     verbose: bool = False,
     skip_model_run: bool = False,
+    infrastructure_only: bool = False,
     trial_count: int = 1,
     num_instances: int = 1,
     full_concurrency: bool = False,
@@ -909,6 +1045,7 @@ def run_multi_test_evaluation(
                             "instance_num": config.get("instance_num", 1),
                             "session_data": active_session_data,  # Pass session data for per-task resource setup
                             "skip_model_run": skip_model_run,
+                            "infrastructure_only": infrastructure_only,
                         },
                         "metadata": {
                             **config["case"]["metadata"],
@@ -1144,6 +1281,7 @@ if __name__ == "__main__":
             all_valid_tests=all_tests,
             verbose=args.verbose,
             skip_model_run=args.skip_model_run,
+            infrastructure_only=args.infrastructure_only,
             trial_count=args.num_trials,
             num_instances=args.num_instances,
             full_concurrency=args.full_concurrency,
