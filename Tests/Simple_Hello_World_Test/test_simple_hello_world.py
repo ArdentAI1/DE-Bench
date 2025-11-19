@@ -1,4 +1,6 @@
 # Braintrust-only Simple Hello World test - no pytest dependencies
+import uuid
+from Fixtures.PostgreSQL.postgres_resources import PostgreSQLFixture
 from model.Run_Model import run_model
 from model.Configure_Model import set_up_model_configs, cleanup_model_artifacts
 import os
@@ -6,6 +8,8 @@ import importlib
 import time
 from typing import List, Dict, Any
 from Fixtures.base_fixture import DEBenchFixture
+from Fixtures.PostgreSQL.postgres_resources import PostgreSQLFixture
+
 
 # Dynamic config loading
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,12 +24,19 @@ def get_fixtures() -> List[DEBenchFixture]:
     This simple test doesn't need complex resources, so we use a basic MongoDB fixture
     just to provide the standard interface (mainly for Supabase account in Ardent mode).
     """
-    from Fixtures.MongoDB.mongo_resources import MongoDBFixture
-
-    # Use default MongoDB fixture config since this test doesn't actually use MongoDB
-    # This just ensures we have a consistent fixture interface
-    mongo_fixture = MongoDBFixture()  # Uses default config
-    return [mongo_fixture]
+    resource_id = f"simple_hello_world_test_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    # Initialize PostgreSQL fixture for user data with stored procedures
+    custom_postgres_config = {
+        "resource_id": resource_id,
+        "databases": [
+            {
+                "name": f"user_data_{int(time.time())}",
+                "sql_file": "schema.sql",
+            }
+        ],
+    }
+    postgres_fixture = PostgreSQLFixture(custom_config=custom_postgres_config)
+    return [postgres_fixture]
 
 
 def create_model_inputs(
@@ -105,16 +116,16 @@ def validate_test(model_result, fixtures=None):
     text_validation_passed = False
     if "hello world" in response_text.lower():
         test_steps[0]["status"] = "passed"
-        test_steps[0][
-            "Result_Message"
-        ] = f"✅ Successfully found 'hello world' in text response"
+        test_steps[0]["Result_Message"] = (
+            f"✅ Successfully found 'hello world' in text response"
+        )
         text_validation_passed = True
         print("✅ Text response validation: PASSED", flush=True)
     else:
         test_steps[0]["status"] = "failed"
-        test_steps[0][
-            "Result_Message"
-        ] = f"❌ Did not find 'hello world' in text response"
+        test_steps[0]["Result_Message"] = (
+            f"❌ Did not find 'hello world' in text response"
+        )
         print("❌ Text response validation: FAILED", flush=True)
 
     # VALIDATION 2: Check for Python script that returns 'hello world'
@@ -165,9 +176,9 @@ def validate_test(model_result, fixtures=None):
             # Check if the result is 'hello world'
             if result and isinstance(result, str) and "hello world" in result.lower():
                 test_steps[1]["status"] = "passed"
-                test_steps[1][
-                    "Result_Message"
-                ] = f"✅ Python script successfully returned 'hello world': {result}"
+                test_steps[1]["Result_Message"] = (
+                    f"✅ Python script successfully returned 'hello world': {result}"
+                )
                 script_validation_passed = True
                 print("✅ Python script validation: PASSED", flush=True)
             else:
@@ -177,18 +188,18 @@ def validate_test(model_result, fixtures=None):
                     and "hello world" in extracted_code.lower()
                 ):
                     test_steps[1]["status"] = "passed"
-                    test_steps[1][
-                        "Result_Message"
-                    ] = f"✅ Python script contains valid return statement with 'hello world'"
+                    test_steps[1]["Result_Message"] = (
+                        f"✅ Python script contains valid return statement with 'hello world'"
+                    )
                     script_validation_passed = True
                     print(
                         "✅ Python script validation: PASSED (contains return statement, flush=True)"
                     )
                 else:
                     test_steps[1]["status"] = "failed"
-                    test_steps[1][
-                        "Result_Message"
-                    ] = f"❌ Python script did not return 'hello world', got: {result}"
+                    test_steps[1]["Result_Message"] = (
+                        f"❌ Python script did not return 'hello world', got: {result}"
+                    )
                     print(
                         f"❌ Python script validation: FAILED - returned {result}",
                         flush=True,

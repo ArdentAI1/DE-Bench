@@ -155,15 +155,15 @@ wheels = [
 
 [[package]]
 name = "ardent-sdk"
-version = "0.6.0"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "python-dotenv" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/1c/9390167b1fae8d226d9a719967bcac8a6d2d87b77a8c12789b731c425d87/ardent_sdk-0.6.0.tar.gz", hash = "sha256:eefaaabace23d644dffd5d236c704ef9f2f97b2d7283bb338408c14623a9128a", size = 8622, upload-time = "2025-10-28T22:11:52.831Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/a8/274362345386f622705948cefad479bcf60eda64985e571faf69da49a7b3/ardent_sdk-0.8.0.tar.gz", hash = "sha256:8fc994ebeb6970a88609036dbb0ce6e47dcbaffa67e22f8c2e344b45bcc1b1d8", size = 8416, upload-time = "2025-11-19T22:06:29.705Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/6c/3ffa1ee522fc7e3043b9fb1d2ae351389eb2ca33f5f6658be427f8e40b5c/ardent_sdk-0.6.0-py3-none-any.whl", hash = "sha256:90a304d995e5d45994098f4c09dd8890992818bf6317e1671df4ecc9cec8b59d", size = 8328, upload-time = "2025-10-28T22:11:52.13Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/15/683014ae284e9be18110bf5bb978bea9990ab4045ef221e163ddb9f33b66/ardent_sdk-0.8.0-py3-none-any.whl", hash = "sha256:b11e0d6fd13a0ed57dba646fe9ac3fb99f4a5e573664bff4e7bc48cee3cdf8f1", size = 8242, upload-time = "2025-11-19T22:06:28.564Z" },
 ]
 
 [[package]]
@@ -762,7 +762,7 @@ dependencies = [
 requires-dist = [
     { name = "annotated-types", specifier = "==0.7.0" },
     { name = "anyio", specifier = "==4.8.0" },
-    { name = "ardent-sdk", specifier = "==0.6.0" },
+    { name = "ardent-sdk", specifier = "==0.8.0" },
     { name = "asn1crypto", specifier = "==1.5.1" },
     { name = "attrs", specifier = "==25.1.0" },
     { name = "azure-common", specifier = "==1.1.28" },

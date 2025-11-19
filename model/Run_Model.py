@@ -33,13 +33,11 @@ def run_model(container, task, configs, extra_information={}):
     # create the ardent client with the specific creds then we go!
     if mode == "Ardent":
         Ardent_Client = ArdentClient(
-            public_key=extra_information["publicKey"],
-            secret_key=extra_information["secretKey"],
+            api_key=extra_information["api_key"],
             base_url=os.getenv("ARDENT_BASE_URL"),
         )
 
         result = Ardent_Client.create_and_execute_job(
-            org_id=extra_information.get("org_id"),
             message=task,
             header_overrides={
                 "X-Braintrust-Exported-Parent-Span": current_span().export(),

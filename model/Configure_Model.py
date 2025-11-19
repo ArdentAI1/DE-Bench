@@ -42,8 +42,7 @@ def set_up_model_configs(Configs, custom_info=None):
             )
 
         Ardent_Client = ArdentClient(
-            public_key=custom_info["publicKey"],
-            secret_key=custom_info["secretKey"],
+            api_key=custom_info["api_key"],
             base_url=os.getenv("ARDENT_BASE_URL"),
         )
 
@@ -390,8 +389,7 @@ def cleanup_model_artifacts(Configs, custom_info=None):
 
     if mode == "Ardent":
         Ardent_Client = ArdentClient(
-            public_key=custom_info["publicKey"],
-            secret_key=custom_info["secretKey"],
+            api_key=custom_info["api_key"],
             base_url=os.getenv("ARDENT_BASE_URL"),
         )
 

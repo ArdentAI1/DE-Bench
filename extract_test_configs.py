@@ -57,8 +57,7 @@ class ResourceData(TypedDict):
 
 class SupabaseAccountResource(TypedDict):
     userID: str
-    publicKey: NotRequired[str]
-    secretKey: NotRequired[str]
+    api_key: NotRequired[str]
     jwt_token: NotRequired[str]
 
 
@@ -343,8 +342,52 @@ def setup_test_resources_from_fixtures(
 
 @traced(name="setup_supabase_account_resource")
 def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountResource:
-    """Set up Supabase account resource"""
+    """
+    Set up Supabase account resource.
+
+    If Supabase is configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set),
+    creates a dynamic test user and API key.
+
+    Otherwise, uses ARDENT_API_KEY from environment (must be set for Ardent mode).
+    """
     print(f"Setting up Supabase account resource for mode: {mode}")
+
+    # Check if Supabase is configured
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    has_supabase = bool(supabase_url and supabase_service_key)
+
+    # If Supabase is NOT configured, use environment ARDENT_API_KEY
+    if not has_supabase:
+        print(
+            "⚠️  Supabase not configured (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing)"
+        )
+
+        if mode == "Ardent":
+            ardent_api_key = os.getenv("ARDENT_API_KEY")
+            if not ardent_api_key:
+                raise ValueError(
+                    "❌ ARDENT_API_KEY environment variable is required when Supabase is not configured.\n"
+                    "   Please set ARDENT_API_KEY in your .env file.\n"
+                    "   You can generate an API key from your Ardent instance dashboard:\n"
+                    "   1. Go to your Ardent instance\n"
+                    "   2. Navigate to Settings > API Keys\n"
+                    "   3. Create a new API key with required scopes\n"
+                    "   4. Copy the key (shown only once!) and add to .env:\n"
+                    "      ARDENT_API_KEY=sk-ard_test_xxxxx"
+                )
+
+            print(f"✅ Using ARDENT_API_KEY from environment")
+            return {
+                "userID": "env-user",  # Placeholder
+                "api_key": ardent_api_key,
+            }
+        else:
+            # Non-Ardent modes don't need API keys
+            return {"userID": "non-ardent-user"}
+
+    # Supabase IS configured - create dynamic test user and API key
+    print("✅ Supabase configured - creating dynamic test user and API key")
 
     # Create unique email for this test to avoid conflicts
     test_id = str(uuid.uuid4())[:8]
@@ -425,17 +468,8 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
             f"{os.getenv('ARDENT_BASE_URL')}/v1/orgs/{org_id}/api-keys",
             json={
                 "name": f"DE-Bench Test Key {test_id}",
-                "scopes": [
-                    "jobs.create",
-                    "jobs.read",
-                    "jobs.update",
-                    "jobs.delete",
-                    "connectors.create",
-                    "connectors.read",
-                    "connectors.update",
-                    "connectors.delete",
-                ],
-                "expires_days": None,  # Never expire
+                "role_id": "role_org_owner",  # Use org owner role
+                "scopes": [],  # Use all role permissions
             },
             headers={
                 "Authorization": f"Bearer {jwt_token}",
@@ -450,10 +484,11 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
             )
 
         token_data = token_creation_response.json()
-        response["publicKey"] = token_data["public_key"]  # V2 uses public_key
-        response["secretKey"] = token_data["secret_key"]  # V2 uses secret_key
+        response["api_key"] = token_data[
+            "api_key"
+        ]  # V2 returns single api_key (bearer token)
         response["api_key_id"] = token_data["api_key_id"]  # Store for cleanup
-        response["org_id"] = org_id  # Store org_id for job creation
+        response["org_id"] = org_id  # Store org_id for reference
 
     print(f"Supabase account resource created successfully for user: {user_id}")
     return response
@@ -495,9 +530,19 @@ def setup_test_resources(
 def cleanup_supabase_account_resource(
     supabase_resource_data: SupabaseAccountResource,
 ) -> None:
-    """Clean up Supabase account resource"""
+    """
+    Clean up Supabase account resource.
+
+    If using environment ARDENT_API_KEY (userID is "env-user"), no cleanup needed.
+    Otherwise, delete dynamically created API keys and test user.
+    """
     try:
         user_id = supabase_resource_data["userID"]
+
+        # If using environment ARDENT_API_KEY, no cleanup needed
+        if user_id == "env-user":
+            print("✅ Using environment ARDENT_API_KEY - no cleanup needed")
+            return
 
         # Delete API keys if they exist (V2 API)
         if (
@@ -527,7 +572,7 @@ def cleanup_supabase_account_resource(
                         timeout=10,
                     )
 
-        # Always delete the user
+        # Always delete the user (unless it's the env placeholder)
         supabase_client.auth.admin.delete_user(user_id)
         print(f"Supabase account resource for user {user_id} cleaned up successfully")
 
