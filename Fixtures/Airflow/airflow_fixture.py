@@ -7,9 +7,13 @@ import os
 import time
 import tempfile
 import uuid
+import subprocess
+import socket
 from typing import Dict, Any, Optional, List
 from typing_extensions import TypedDict
 from pathlib import Path
+
+import modal
 
 from Fixtures.base_fixture import DEBenchFixture
 from Fixtures.Databricks.cache_manager import CacheManager
@@ -370,11 +374,6 @@ class AirflowFixture(
         self, config: AirflowResourceConfig, resource_id: str, creation_start: float
     ) -> AirflowResourceData:
         """Set up Airflow using Modal serverless platform"""
-        import modal
-        import subprocess
-        import socket
-        import os
-        
         # Get container image from config (required)
         container_image = config.get("container_image")
         if not container_image:
@@ -1152,8 +1151,6 @@ class AirflowFixture(
 
     def _cleanup_modal_airflow(self, resource_data: AirflowResourceData) -> None:
         """Clean up Modal Airflow deployment"""
-        import subprocess
-        
         resource_id = resource_data["resource_id"]
         modal_app_name = resource_data.get("modal_app_name")
         
