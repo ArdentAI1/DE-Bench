@@ -1,12 +1,7 @@
 import os
-import uuid
-import json
-from ardent import ArdentClient, ArdentError
+from ardent import ArdentClient
 
 from dotenv import load_dotenv
-from Environment.Kubernetes.Kubernetes import Kubernetes
-from kubernetes import client as k8s_client_sdk
-from Environment.File_Share.File_Share import create_file_share
 from braintrust import current_span
 from braintrust import traced
 
@@ -286,95 +281,11 @@ def set_up_model_configs(Configs, custom_info=None):
                     else:
                         results[service] = service_result
     elif mode == "Claude_Code":
-        # set up the kubernetes job
-
-        print("Setting up Kubernetes job for Claude Code")
-        test_id = str(uuid.uuid4())
-        session_id = test_id.replace("-", "")
-        file_share_name, deps_share_name = create_file_share(session_id)
-
-        # K8s job and command
-        job_name = f"job-{session_id[:20]}".lower()
-
-        # Kubernetes client
-        job_k8s = Kubernetes(test_id=test_id)
-
-        if not job_k8s:
-            raise Exception("Kubernetes client not found")
-
-        azure_client = job_k8s.cloud_provider_client
-        api_instance = job_k8s.get_k8s_client(azure_client)
-
-        # Create job with mounted Azure File Share
-        job_k8s.create_job_in_namespace_with_volume_mount(
-            api_instance=api_instance,
-            shareName=file_share_name,
-            jobID=job_name,
-            mode=mode,
-        )
-
-        # Wait for pod and run commands
-        pod_name = job_k8s.wait_for_pod_to_be_avialable_and_get_name(
-            api_instance, job_name
-        )
-
-        # First command: Install Node.js and Claude Code
-        install_command = "curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs && npm install -g @anthropic-ai/claude-code && claude --version"
-        install_output = job_k8s.run_terminal_command_in_pod(pod_name, install_command)
-
-        # Second command: Check environment variables
-        env_command = 'env | grep -E "(AWS_|CLAUDE_)" | sort'
-        env_output = job_k8s.run_terminal_command_in_pod(pod_name, env_command)
-
-        results = {
-            "pod_name": pod_name,
-            "kubernetes_object": job_k8s,
-            "k8s_job_name": job_name,
-            "test_id": test_id,
-        }
+        print("Configuring Modal runner for Claude Code")
+        results = {"mode": mode}
     elif mode == "OpenAI_Codex":
-        # set up the kubernetes job for OpenAI Codex
-
-        print("Setting up Kubernetes job for OpenAI Codex")
-        test_id = str(uuid.uuid4())
-        session_id = test_id.replace("-", "")
-        file_share_name, deps_share_name = create_file_share(session_id)
-
-        # K8s job and command
-        job_name = f"job-{session_id[:20]}".lower()
-
-        # Kubernetes client
-        job_k8s = Kubernetes(test_id=test_id)
-
-        if not job_k8s:
-            raise Exception("Kubernetes client not found")
-
-        azure_client = job_k8s.cloud_provider_client
-        api_instance = job_k8s.get_k8s_client(azure_client)
-
-        # Create job with mounted Azure File Share
-        job_k8s.create_job_in_namespace_with_volume_mount(
-            api_instance=api_instance,
-            shareName=file_share_name,
-            jobID=job_name,
-            mode="OpenAI_Codex",
-        )
-
-        # Wait for pod and run commands
-        pod_name = job_k8s.wait_for_pod_to_be_avialable_and_get_name(
-            api_instance, job_name
-        )
-
-        # Install Node.js and OpenAI Codex
-        install_command = "curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs && npm install -g @openai/codex@0.29.0"
-        install_output = job_k8s.run_terminal_command_in_pod(pod_name, install_command)
-
-        results = {
-            "pod_name": pod_name,
-            "kubernetes_object": job_k8s,
-            "k8s_job_name": job_name,
-            "test_id": test_id,
-        }
+        print("Configuring Modal runner for OpenAI Codex")
+        results = {"mode": mode}
     return results
 
 
@@ -404,51 +315,9 @@ def cleanup_model_artifacts(Configs, custom_info=None):
         if "job_id" in custom_info:
             Ardent_Client.delete_job(job_id=custom_info["job_id"])
 
-    elif mode == "Claude_Code":
-        print("Cleaning up Kubernetes job for Claude Code")
-        print(custom_info)
-        # Cleanup Kubernetes job for Claude Code
-        if "k8s_job_name" in custom_info and "test_id" in custom_info:
-            try:
-                job_k8s = Kubernetes(test_id=custom_info["test_id"])
-                azure_client = job_k8s.cloud_provider_client
-                api_instance = job_k8s.get_k8s_client(azure_client)
-
-                api_instance.delete_namespaced_job(
-                    name=custom_info["k8s_job_name"],
-                    namespace="default",
-                    body=k8s_client_sdk.V1DeleteOptions(
-                        propagation_policy="Foreground"
-                    ),
-                )
-                print(f"Deleted Kubernetes job: {custom_info['k8s_job_name']}")
-            except k8s_client_sdk.ApiException as e:
-                print(f"Exception when deleting Kubernetes job: {e}")
-            except Exception as e:
-                print(f"Error during Kubernetes cleanup: {e}")
-
-    elif mode == "OpenAI_Codex":
-        print("Cleaning up Kubernetes job for OpenAI Codex")
-        print(custom_info)
-        # Cleanup Kubernetes job for OpenAI Codex
-        if "k8s_job_name" in custom_info and "test_id" in custom_info:
-            try:
-                job_k8s = Kubernetes(test_id=custom_info["test_id"])
-                azure_client = job_k8s.cloud_provider_client
-                api_instance = job_k8s.get_k8s_client(azure_client)
-
-                api_instance.delete_namespaced_job(
-                    name=custom_info["k8s_job_name"],
-                    namespace="default",
-                    body=k8s_client_sdk.V1DeleteOptions(
-                        propagation_policy="Foreground"
-                    ),
-                )
-                print(f"Deleted Kubernetes job: {custom_info['k8s_job_name']}")
-            except k8s_client_sdk.ApiException as e:
-                print(f"Exception when deleting Kubernetes job: {e}")
-            except Exception as e:
-                print(f"Error during Kubernetes cleanup: {e}")
+    elif mode in {"Claude_Code", "OpenAI_Codex"}:
+        # No cleanup required when running via Modal
+        print(f"No cleanup required for {mode} resources")
 
 
 # Create an alias for backwards compatibility

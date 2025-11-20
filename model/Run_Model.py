@@ -2,16 +2,15 @@
 import os
 import sys
 from dotenv import load_dotenv
-import uuid
 import braintrust
 from braintrust import current_span
 
 load_dotenv()
 
 
-from ardent import ArdentClient, ArdentError
-from Environment.Kubernetes.Kubernetes import Kubernetes
-from Environment.File_Share.File_Share import create_file_share
+
+from ardent import ArdentClient
+from Environment.Modal.modal_runner import run_modal_task
 
 # import your AI model into this file
 
@@ -45,56 +44,32 @@ def run_model(container, task, configs, extra_information={}):
         )
 
     if mode == "Claude_Code":
-        # Claude Code via Kubernetes (synchronous)
-        print("Using Claude Code")
+        print("Using Claude Code via Modal")
 
-        # Prepare identifiers and resources (fully local, no backend IDs)
+        prompt = (
+            f"Task: {task}\n\nAvailable configurations: {configs}\n\n"
+            "Please complete this task using the provided configurations."
+        )
 
-        job_k8s = extra_information.get("kubernetes_object")
-        pod_name = extra_information.get("pod_name")
-
-        # Third command: Run Claude Code with actual task and configs
-        # Escape quotes in task and configs for shell command
-        escaped_task = task.replace('"', '\\"').replace("'", "\\'")
-        escaped_configs = str(configs).replace('"', '\\"').replace("'", "\\'")
-
-        claude_prompt = f"Task: {escaped_task}\\n\\nAvailable configurations: {escaped_configs}\\n\\nPlease complete this task using the provided configurations."
-        claude_command = f'claude -p "{claude_prompt}" --allowedTools all --dangerously-skip-permissions'
-        print("This is the calude command")
-        print(claude_command)
-        claude_output = job_k8s.run_terminal_command_in_pod(pod_name, claude_command)
+        modal_result = run_modal_task(command=prompt, mode="Claude_Code")
 
         result = {
-            "status": "pass",
-            "pod_name": pod_name,
-            "claude_output": claude_output,
+            "status": modal_result["status"]
         }
         print(result)
 
     if mode == "OpenAI_Codex":
-        # OpenAI Codex via Kubernetes (synchronous)
-        print("Using OpenAI Codex")
+        print("Using OpenAI Codex via Modal")
 
-        # Prepare identifiers and resources (fully local, no backend IDs)
+        prompt = (
+            f"Task: {task}\n\nAvailable configurations: {configs}\n\n"
+            "Please complete this task using the provided configurations."
+        )
 
-        job_k8s = extra_information.get("kubernetes_object")
-        pod_name = extra_information.get("pod_name")
-
-        # Run OpenAI Codex with actual task and configs
-        # Escape quotes in task and configs for shell command
-        escaped_task = task.replace('"', '\\"').replace("'", "\\'")
-        escaped_configs = str(configs).replace('"', '\\"').replace("'", "\\'")
-
-        codex_prompt = f"Task: {escaped_task}\\n\\nAvailable configurations: {escaped_configs}\\n\\nPlease complete this task using the provided configurations."
-        codex_command = f'codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "{codex_prompt}"'
-        print("This is the codex command")
-        print(codex_command)
-        codex_output = job_k8s.run_terminal_command_in_pod(pod_name, codex_command)
+        modal_result = run_modal_task(command=prompt, mode="OpenAI_Codex")
 
         result = {
-            "status": "pass",
-            "pod_name": pod_name,
-            "codex_output": codex_output,
+            "status": modal_result["status"]
         }
         print(result)
 

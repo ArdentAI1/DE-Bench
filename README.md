@@ -272,8 +272,8 @@ uv run python run_braintrust_eval.py --filter "Airflow_Agent.*" --skip-model-run
 
 ### Available Modes:
 - **Ardent** (Default) - Uses Ardent AI's backend service
-- **Claude_Code** - Uses Claude Code via AWS Bedrock in Kubernetes containers
-- **OpenAI_Codex** - Uses OpenAI Codex via OpenAI API in Kubernetes containers
+- **Claude_Code** - Runs Claude Code via Modal using your AWS Bedrock credentials
+- **OpenAI_Codex** - Runs OpenAI Codex via Modal using your OpenAI API key
 
 ### Filter Examples:
 ```bash
@@ -410,8 +410,8 @@ Snowflake:
 - **Tigerbeetle**: Must be set up with VOPR for testing (if used)
 
 **AI Mode Requirements**:
-- **Claude_Code**: Requires AWS Bedrock access and Azure Kubernetes Service setup
-- **OpenAI_Codex**: Requires valid OpenAI API key and Azure Kubernetes Service setup
+- **Claude_Code**: Requires AWS Bedrock credentials (`AWS_ACCESS_KEY_ID_CLAUDE`, `AWS_SECRET_ACCESS_KEY_CLAUDE`, etc.) and access to Modal
+- **OpenAI_Codex**: Requires a valid `OPENAI_API_KEY` and access to Modal
 
 ## 🔍 **Test Discovery & Debugging**
 
