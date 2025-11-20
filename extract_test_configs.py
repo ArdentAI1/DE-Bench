@@ -496,7 +496,7 @@ def setup_supabase_account_resource(mode: str = "Ardent") -> SupabaseAccountReso
 
 @traced(name="setup_test_resources")
 def setup_test_resources(
-    resource_configs: Dict[str, Any], session_data: Dict[str, Any] = None
+    resource_configs: Dict[str, Any], session_data: Dict[str, Any] = None, mode: str = "Ardent"
 ) -> Tuple[Dict[str, Any], List[Any]]:
     """Generic setup for all test resources using DEBenchFixture instances"""
     resources = {}
@@ -507,8 +507,9 @@ def setup_test_resources(
     if "custom_fixtures" in resource_configs and resource_configs["custom_fixtures"]:
         custom_fixtures = resource_configs["custom_fixtures"]
 
-        # Set up Supabase account if needed (always needed for Ardent mode)
-        resources["supabase_account_resource"] = setup_supabase_account_resource()
+        # Set up Supabase account only for Ardent mode
+        if mode == "Ardent":
+            resources["supabase_account_resource"] = setup_supabase_account_resource(mode)
 
         # Set up custom fixtures with session data
         fixture_resources, fixture_instances = setup_test_resources_from_fixtures(

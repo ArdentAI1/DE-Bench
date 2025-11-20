@@ -86,5 +86,8 @@ codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "{co
     with app.run():
         result = run_task.remote()
     
-    return result
+    return {
+        "status": result["status"],
+        "app_name": app_name
+    }
 

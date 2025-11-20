@@ -52,6 +52,9 @@ def run_model(container, task, configs, extra_information={}):
         )
 
         modal_result = run_modal_task(command=prompt, mode="Claude_Code")
+        
+        # Store app_name for cleanup
+        extra_information["modal_app_name"] = modal_result.get("app_name")
 
         result = {
             "status": modal_result["status"]
@@ -67,6 +70,9 @@ def run_model(container, task, configs, extra_information={}):
         )
 
         modal_result = run_modal_task(command=prompt, mode="OpenAI_Codex")
+        
+        # Store app_name for cleanup
+        extra_information["modal_app_name"] = modal_result.get("app_name")
 
         result = {
             "status": modal_result["status"]
