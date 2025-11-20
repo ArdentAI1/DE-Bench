@@ -310,7 +310,7 @@ def run_de_bench_task(test_input):
 
             # Set up per-test resources (using shared session data if available)
             test_resources, fixture_instances = setup_test_resources(
-                test_data["resource_configs"], session_data=session_data
+                test_data["resource_configs"], session_data=session_data, mode=mode
             )
             print(f"✅ Resources set up", flush=True)
 

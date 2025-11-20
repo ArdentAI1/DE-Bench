@@ -1,4 +1,5 @@
 import os
+import subprocess
 from ardent import ArdentClient
 
 from dotenv import load_dotenv
@@ -316,8 +317,24 @@ def cleanup_model_artifacts(Configs, custom_info=None):
             Ardent_Client.delete_job(job_id=custom_info["job_id"])
 
     elif mode in {"Claude_Code", "OpenAI_Codex"}:
-        # No cleanup required when running via Modal
-        print(f"No cleanup required for {mode} resources")
+        # Clean up Modal app
+        app_name = custom_info.get("modal_app_name")
+        if app_name:
+            try:
+                print(f"🧹 Stopping Modal app: {app_name}")
+                subprocess.run(
+                    ["modal", "app", "stop", app_name],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                print(f"✅ Modal app {app_name} stopped successfully")
+            except subprocess.CalledProcessError as e:
+                print(f"⚠️ Error stopping Modal app {app_name}: {e.stderr}")
+            except Exception as e:
+                print(f"⚠️ Error stopping Modal app: {e}")
+        else:
+            print(f"⚠️ No Modal app name found for cleanup")
 
 
 # Create an alias for backwards compatibility
