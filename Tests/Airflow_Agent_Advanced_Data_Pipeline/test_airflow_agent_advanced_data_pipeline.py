@@ -479,7 +479,7 @@ def validate_test(model_result, fixtures=None):
         print(f"🔍 Waiting for GitHub action to complete...", flush=True)
         try:
             action_status = github_manager.check_if_action_is_complete(
-                PR_NAME=PR_NAME, return_details=True
+                pr_title=PR_NAME, return_details=True
             )
 
             if not action_status["completed"]:
