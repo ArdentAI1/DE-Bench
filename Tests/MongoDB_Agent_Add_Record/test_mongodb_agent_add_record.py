@@ -4,6 +4,7 @@ from model.Configure_Model import set_up_model_configs, cleanup_model_artifacts
 import os
 import importlib
 import time
+import uuid
 from typing import List, Dict, Any
 from Configs.MongoConfig import syncMongoClient
 from Fixtures.base_fixture import DEBenchFixture
@@ -16,32 +17,30 @@ parent_dir_name = os.path.basename(current_dir)
 module_path = f"Tests.{parent_dir_name}.Test_Configs"
 Test_Configs = importlib.import_module(module_path)
 
+# Generate unique identifiers for parallel execution
+test_timestamp = int(time.time())
+test_uuid = uuid.uuid4().hex[:8]
+
 
 def get_fixtures() -> List[DEBenchFixture]:
     """
     Provides custom DEBenchFixture instances for Braintrust evaluation.
     This is the main entry point for the Braintrust system.
+    
+    NOW LOADS DATA FROM S3 BSON (like Snowflake tests)
     """
     from Fixtures.MongoDB.mongo_resources import MongoDBFixture
 
-    # Initialize MongoDB fixture with custom configuration
+    # Initialize MongoDB fixture with S3 config
+    # Note: database name comes from BSON dump, not from config (unlike Snowflake)
     custom_mongo_config = {
-        "resource_id": "mongodb_agent_add_record_test",
-        "databases": [
-            {
-                "name": "agent_test_database",
-                "collections": [
-                    {
-                        "name": "agent_test_collection",
-                        "data": [
-                            {"name": "Alice", "age": 25, "role": "tester"},
-                            {"name": "Bob", "age": 30, "role": "developer"},
-                        ],
-                    },
-                    {"name": "backup_collection", "data": []},
-                ],
-            }
-        ],
+        "resource_id": f"mongodb_add_record_{test_timestamp}_{test_uuid}",
+        "s3_config": {
+            "bucket_url": "s3://de-bench/",
+            "s3_key": "Mongodb_Seeds/mongodb_add_record_test.bson.gz",
+            "aws_key_id": "env:AWS_ACCESS_KEY",
+            "aws_secret_key": "env:AWS_SECRET_KEY",
+        },
     }
 
     mongo_fixture = MongoDBFixture(custom_config=custom_mongo_config)
@@ -84,7 +83,7 @@ def validate_test(model_result, fixtures=None):
             "name": "MongoDB Record Addition",
             "description": "Verify that AI agent added 'John Doe' record to MongoDB",
             "status": "running",
-            "Result_Message": "Checking if 'John Doe' record was added to agent_test_collection...",
+            "Result_Message": "Checking if 'John Doe' record was added to MongoDB collection...",
         }
     ]
 
@@ -99,13 +98,19 @@ def validate_test(model_result, fixtures=None):
             )
 
         if mongo_fixture:
-            # Use fixture's helper method for consistent connection
-            db = mongo_fixture.get_database("agent_test_database")
+            # Get the database that was created (from S3 restore)
+            resource_data = getattr(mongo_fixture, "_resource_data", None)
+            if not resource_data:
+                raise Exception("MongoDB resource data not available")
+            
+            db_name = resource_data["database"]  # The BENCH_DB_xxx name
+            db = mongo_fixture.get_database(db_name)
         else:
             # Fallback to direct connection if no fixtures provided
             db = syncMongoClient["agent_test_database"]
 
-        collection = db["agent_test_collection"]
+        # The collection name from the BSON dump
+        collection = db["users"]  # BSON dump uses "users" as collection name
         record = collection.find_one({"name": "John Doe", "age": 30})
 
         if record is not None:
@@ -126,7 +131,7 @@ def validate_test(model_result, fixtures=None):
         else:
             test_steps[0]["status"] = "failed"
             test_steps[0]["Result_Message"] = (
-                "❌ John Doe record was not found in agent_test_collection. "
+                "❌ John Doe record was not found in MongoDB collection. "
                 "AI agent may not have executed the MongoDB insertion correctly."
             )
 
