@@ -2,6 +2,8 @@ import pytest
 import json
 import time
 import os
+import subprocess
+import uuid
 from typing import Dict, List, Any, Optional
 from typing_extensions import TypedDict
 from Configs.MongoConfig import syncMongoClient
@@ -9,7 +11,14 @@ from pymongo.errors import CollectionInvalid
 from Fixtures.base_fixture import DEBenchFixture
 
 
-# Type definitions for MongoDB resources
+# Type definitions for MongoDB resources (matching Snowflake pattern)
+class MongoS3Config(TypedDict, total=False):
+    bucket_url: str
+    s3_key: str
+    aws_key_id: str
+    aws_secret_key: str
+
+
 class MongoCollectionConfig(TypedDict):
     name: str
     data: List[Dict[str, Any]]
@@ -22,7 +31,9 @@ class MongoDatabaseConfig(TypedDict):
 
 class MongoResourceConfig(TypedDict):
     resource_id: str
-    databases: List[MongoDatabaseConfig]
+    database: Optional[str]  # Only used for inline data (not needed for S3 - DB name comes from BSON dump)
+    s3_config: Optional[MongoS3Config]  # S3 config for BSON dumps
+    databases: Optional[List[MongoDatabaseConfig]]  # Legacy support
 
 
 class MongoResourceData(TypedDict):
@@ -32,13 +43,37 @@ class MongoResourceData(TypedDict):
     creation_duration: float
     description: str
     status: str
+    database: str  # Like Snowflake
     created_resources: List[Dict[str, str]]
 
 
 class MongoDBFixture(
     DEBenchFixture[MongoResourceConfig, MongoResourceData, Dict[str, Any]]
 ):
-    """MongoDB fixture implementation following the DEBenchFixture interface"""
+    """
+    MongoDB fixture implementation using DEBenchFixture pattern.
+
+    Features:
+    - Database creation with unique naming
+    - S3 integration for BSON data loading (like Snowflake)
+    - Inline data support for simple tests
+    - Automatic cleanup of created resources
+    """
+
+    @classmethod
+    def requires_session_setup(cls) -> bool:
+        """MongoDB doesn't require session-level setup"""
+        return False
+
+    def session_setup(
+        self, session_config: Optional[MongoResourceConfig] = None
+    ) -> Dict[str, Any]:
+        """No session setup needed for MongoDB"""
+        return {}
+
+    def session_teardown(self, session_data: Optional[Dict[str, Any]] = None) -> None:
+        """No session teardown needed for MongoDB"""
+        pass
 
     def get_client(self):
         """Get the MongoDB client. Useful for validation and testing."""
@@ -51,11 +86,8 @@ class MongoDBFixture(
     def test_setup(
         self, resource_config: Optional[MongoResourceConfig] = None
     ) -> MongoResourceData:
-        """
-        Set up MongoDB resource based on configuration.
-        Template structure: {"resource_id": "id", "databases": [{"name": "db", "collections": [{"name": "col", "data": []}]}]}
-        """
-        # Determine which config to use (priority: resource_config > custom_config > default_config)
+        """Set up MongoDB resource - supports inline data or S3 restore"""
+        # Determine which config to use (matching Snowflake pattern)
         if resource_config is not None:
             config = resource_config
         elif self.custom_config is not None:
@@ -63,75 +95,181 @@ class MongoDBFixture(
         else:
             config = self.get_default_config()
 
-        print(
-            f"Setting up MongoDB resource with config: {config.get('resource_id', 'default')}"
-        )
-        creation_start = time.time()
+        resource_id = config.get("resource_id", f"mongo_resource_{int(time.time())}")
+        print(f"🍃 Setting up MongoDB resource: {resource_id}")
 
-        # Store connection string for later use in create_config_section
+        # Store connection string for later use
         self._connection_string = os.getenv("MONGODB_URI")
 
+        creation_start = time.time()
         created_resources = []
 
-        # Process databases from template
-        if "databases" in config:
-            for db_config in config["databases"]:
-                db_name = db_config["name"]
-                db = syncMongoClient[db_name]
+        try:
+            # NEW: Handle S3 config
+            # Note: For S3/BSON, database name comes from the dump, not config
+            if s3_config := config.get("s3_config"):
+                return self._restore_from_s3(
+                    config, resource_id, creation_start
+                )
 
-                # Process collections in this database
-                if "collections" in db_config:
-                    for collection_config in db_config["collections"]:
-                        collection_name = collection_config["name"]
+            # EXISTING: Handle inline data or legacy databases array
+            # For non-S3 configs, generate database name
+            timestamp = int(time.time())
+            test_uuid = uuid.uuid4().hex[:8]
+            database_name = config.get("database") or f"BENCH_DB_{timestamp}_{test_uuid}"
+            
+            if "databases" in config:
+                # Legacy pattern support
+                for db_config in config["databases"]:
+                    db_name = db_config["name"]
+                    db = syncMongoClient[db_name]
 
-                        # Create collection with error handling
-                        try:
-                            db.create_collection(collection_name)
-                        except CollectionInvalid:
-                            db.drop_collection(collection_name)
-                            db.create_collection(collection_name)
+                    if "collections" in db_config:
+                        for collection_config in db_config["collections"]:
+                            collection_name = collection_config["name"]
 
-                        created_resources.append(
-                            {"db": db_name, "collection": collection_name}
-                        )
+                            # Create collection with error handling
+                            try:
+                                db.create_collection(collection_name)
+                            except CollectionInvalid:
+                                db.drop_collection(collection_name)
+                                db.create_collection(collection_name)
 
-                        # Add data if specified
-                        if "data" in collection_config:
-                            collection = db[collection_name]
-                            for record in collection_config["data"]:
-                                collection.insert_one(record)
+                            created_resources.append(
+                                {"db": db_name, "collection": collection_name}
+                            )
+
+                            # Add data if specified
+                            if "data" in collection_config and collection_config["data"]:
+                                collection = db[collection_name]
+                                data = collection_config["data"]
+
+                                # Use insert_many for better performance
+                                if len(data) > 100:
+                                    print(f"   Bulk inserting {len(data)} documents...")
+                                    collection.insert_many(data, ordered=False)
+                                else:
+                                    for record in data:
+                                        collection.insert_one(record)
+
+                # Use first database name as primary
+                database_name = config["databases"][0]["name"] if config["databases"] else database_name
+
+        except Exception as e:
+            print(f"❌ Failed to create MongoDB resource {resource_id}: {e}")
+            # Clean up on failure
+            self._cleanup_databases(created_resources)
+            raise
 
         creation_end = time.time()
-        print(f"MongoDB resource creation took {creation_end - creation_start:.2f}s")
+        creation_duration = creation_end - creation_start
 
-        resource_id = config.get("resource_id", f"mongo_resource_{int(time.time())}")
+        print(f"MongoDB resource creation took {creation_duration:.2f}s")
 
-        # Create detailed resource data
-        resource_data = {
-            "resource_id": resource_id,
-            "type": "mongodb_resource",
-            "creation_time": time.time(),
-            "creation_duration": creation_end - creation_start,
-            "description": f"A MongoDB resource",
-            "status": "active",
-            "created_resources": created_resources,
-        }
+        resource_data = MongoResourceData(
+            resource_id=resource_id,
+            type="mongodb_resource",
+            creation_time=creation_start,
+            creation_duration=creation_duration,
+            description=f"MongoDB resource for {resource_id}",
+            status="active",
+            database=database_name,
+            created_resources=created_resources,
+        )
 
-        print(f"MongoDB resource {resource_id} created successfully")
+        # Store for later access during validation
+        self._resource_data = resource_data
+
+        print(f"✅ MongoDB resource {resource_id} ready! ({creation_duration:.2f}s)")
         return resource_data
 
-    def test_teardown(self, resource_data: MongoResourceData) -> None:
-        """Clean up MongoDB resource"""
-        resource_id = resource_data.get("resource_id", "unknown")
+    def _restore_from_s3(
+        self,
+        config: MongoResourceConfig,
+        resource_id: str,
+        creation_start: float,
+    ) -> MongoResourceData:
+        """Restore MongoDB from S3 BSON dump"""
+        s3_config = config["s3_config"]
+        
+        aws_key_id = s3_config.get("aws_key_id", "")
+        if aws_key_id.startswith("env:"):
+            aws_key_id = os.getenv(aws_key_id[4:])
+        
+        aws_secret_key = s3_config.get("aws_secret_key", "")
+        if aws_secret_key.startswith("env:"):
+            aws_secret_key = os.getenv(aws_secret_key[4:])
+        
+        bucket = s3_config.get("bucket_url", "").replace("s3://", "").rstrip("/")
+        s3_key = s3_config.get("s3_key", "")
+        s3_path = f"s3://{bucket}/{s3_key}"
+        
+        print(f"📦 Restoring MongoDB from {s3_path}")
+        
+        # Build environment with AWS credentials
+        env = os.environ.copy()
+        if aws_key_id:
+            env["AWS_ACCESS_KEY_ID"] = aws_key_id
+        if aws_secret_key:
+            env["AWS_SECRET_ACCESS_KEY"] = aws_secret_key
+        
+        # Generate unique database name (MongoDB Atlas 38-byte limit)
+        base_name = s3_key.split('/')[-1].replace('.bson.gz', '').replace('.bson', '')
+        source_db = f"temp_seed_{base_name}"
+        target_db = f"test_{base_name[:23]}_{uuid.uuid4().hex[:8]}"  # test_ + 23 chars + _ + 8 chars = 37
+        
+        print(f"   Mapping: {source_db} → {target_db}")
+        
+        # Restore BSON with namespace mapping
+        cmd = f'aws s3 cp {s3_path} - | mongorestore --uri="{self._connection_string}" --nsFrom="{source_db}.*" --nsTo="{target_db}.*" --archive --gzip --stopOnError'
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env)
+        
+        if result.returncode != 0:
+            raise Exception(f"S3 restore failed: {result.stderr}")
+        
+        print(f"✅ Restored to database: {target_db}")
+        
+        # Get created collections
+        db = syncMongoClient[target_db]
+        created_resources = [{"db": target_db, "collection": c} for c in db.list_collection_names()]
 
-        # Clean up created resources in reverse order
-        created_resources = resource_data.get("created_resources", [])
-        for resource in reversed(created_resources):
-            db = syncMongoClient[resource["db"]]
-            print(
-                f"   🗑️ Dropping collection {resource['collection']} from database {resource['db']}"
-            )
-            db.drop_collection(resource["collection"])
+        return MongoResourceData(
+            resource_id=resource_id,
+            type="mongodb_resource",
+            creation_time=creation_start,
+            creation_duration=time.time() - creation_start,
+            description=f"MongoDB resource restored from S3",
+            status="active",
+            database=target_db,
+            created_resources=created_resources,
+        )
+
+    def _cleanup_databases(self, created_resources: List[Dict[str, str]]) -> None:
+        """Clean up created databases"""
+        databases_to_drop = set()
+        for resource in created_resources:
+            databases_to_drop.add(resource["db"])
+
+        for db_name in databases_to_drop:
+            print(f"🗑️ Dropping database {db_name}")
+            syncMongoClient.drop_database(db_name)
+
+    def test_teardown(self, resource_data: MongoResourceData) -> None:
+        """Clean up MongoDB resource - drops entire database (matching Snowflake)"""
+        resource_id = resource_data.get("resource_id", "unknown")
+        database_name = resource_data.get("database")
+
+        print(f"🧹 Cleaning up MongoDB resource: {resource_id}")
+
+        try:
+            if database_name:
+                print(f"🗑️ Dropping database {database_name}")
+                syncMongoClient.drop_database(database_name)
+
+            print(f"✅ MongoDB resource {resource_id} cleaned up successfully")
+
+        except Exception as e:
+            print(f"❌ Error cleaning up MongoDB resource {resource_id}: {e}")
 
     @classmethod
     def get_resource_type(cls) -> str:
@@ -140,16 +278,16 @@ class MongoDBFixture(
 
     @classmethod
     def get_default_config(cls) -> MongoResourceConfig:
-        """Return a default MongoDB configuration"""
-        return {
-            "resource_id": "test_mongo_resource",
-            "databases": [
-                {
-                    "name": "test_database",
-                    "collections": [{"name": "test_collection", "data": []}],
-                }
-            ],
-        }
+        """Return default configuration for MongoDB resources"""
+        timestamp = int(time.time())
+        test_uuid = uuid.uuid4().hex[:8]
+
+        return MongoResourceConfig(
+            resource_id=f"mongodb_test_{timestamp}_{test_uuid}",
+            database=None,  # Auto-generated for inline data; derived from BSON dump for S3
+            s3_config=None,  # Optional: S3 config for BSON dumps
+            databases=None,  # Optional: Legacy inline data
+        )
 
     def create_config_section(self) -> Dict[str, Any]:
         """
@@ -179,7 +317,9 @@ class MongoDBFixture(
         return {
             "mongodb": {
                 "connection_string": self._connection_string,
+                "database": resource_data.get("database"),  # Like Snowflake
                 "databases": list(databases.values()),
+                "created_resources": resource_data.get("created_resources", []),
             }
         }
 
