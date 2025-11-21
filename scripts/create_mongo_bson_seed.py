@@ -52,17 +52,9 @@ def create_bson_seed(json_file: str, output_name: str):
     
     print(f"   Found {len(data)} documents")
     
-    # Temp database and collection names
-    # Extract collection name from output_name if it contains it, otherwise default to last part
+    # Database and collection names
     temp_db = f"temp_seed_{output_name}"
-    # For ad_opportunities, use "ad_opportunities"; for others, derive from name
-    if "ad_opportunities" in output_name:
-        temp_collection = "ad_opportunities"
-    elif "user" in output_name.lower():
-        temp_collection = "users"
-    else:
-        # Use the last meaningful part of the name
-        temp_collection = output_name.split('_')[-1] if '_' in output_name else "data"
+    temp_collection = output_name.split('_')[-1] if '_' in output_name else output_name
     output_file = f"{output_name}.bson.gz"
     
     print(f"\n🍃 Creating MongoDB BSON seed...")

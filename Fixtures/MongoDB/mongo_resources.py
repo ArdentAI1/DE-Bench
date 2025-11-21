@@ -189,122 +189,58 @@ class MongoDBFixture(
         resource_id: str,
         creation_start: float,
     ) -> MongoResourceData:
-        """Restore MongoDB from S3 (following Snowflake pattern)"""
+        """Restore MongoDB from S3 BSON dump"""
         s3_config = config["s3_config"]
-
-        # Resolve environment variable references (matching Snowflake lines 261-267)
+        
         aws_key_id = s3_config.get("aws_key_id", "")
         if aws_key_id.startswith("env:"):
             aws_key_id = os.getenv(aws_key_id[4:])
-
+        
         aws_secret_key = s3_config.get("aws_secret_key", "")
         if aws_secret_key.startswith("env:"):
             aws_secret_key = os.getenv(aws_secret_key[4:])
-
-        bucket_url = s3_config.get("bucket_url", "")
+        
+        bucket = s3_config.get("bucket_url", "").replace("s3://", "").rstrip("/")
         s3_key = s3_config.get("s3_key", "")
-
-        # Parse bucket URL
-        bucket = bucket_url.replace("s3://", "").rstrip("/")
         s3_path = f"s3://{bucket}/{s3_key}"
-
+        
         print(f"📦 Restoring MongoDB from {s3_path}")
-
-        # Set AWS credentials in environment for aws cli
+        
+        # Build environment with AWS credentials
         env = os.environ.copy()
         if aws_key_id:
             env["AWS_ACCESS_KEY_ID"] = aws_key_id
         if aws_secret_key:
             env["AWS_SECRET_ACCESS_KEY"] = aws_secret_key
-
-        # Determine format and use appropriate MongoDB tool
-        if s3_key.endswith(".bson") or s3_key.endswith(".bson.gz"):
-            # Use mongorestore for BSON dumps with namespace mapping for isolation
-            # BSON dumps contain the original database name, we map it to a unique name
-            
-            # Extract base name from s3_key for clarity
-            base_name = s3_key.split('/')[-1].replace('.bson.gz', '').replace('.bson', '')
-            
-            # Source database name (from the dump - always temp_seed_*)
-            # This is what's IN the BSON file
-            source_db = f"temp_seed_{base_name}"
-            
-            # Target database name (unique per test run)
-            # MongoDB Atlas limit: 38 bytes for database names
-            # Use short prefix + test name + uuid
-            test_uuid = uuid.uuid4().hex[:8]
-            
-            # Shorten: test_{name}_{uuid}
-            # If name is too long, truncate it
-            max_name_len = 38 - 6 - 9  # 38 total - "test_" - "_{uuid}"
-            short_name = base_name if len(base_name) <= max_name_len else base_name[:max_name_len]
-            target_db = f"test_{short_name}_{test_uuid}"
-            
-            print(f"   Mapping: {source_db} → {target_db}")
-            
-            # Use mongorestore with proper namespace mapping
-            cmd = f"""
-                aws s3 cp {s3_path} - | \
-                mongorestore --uri="{self._connection_string}" \
-                    --nsFrom='{source_db}.*' \
-                    --nsTo='{target_db}.*' \
-                    --archive \
-                    --gzip \
-                    --stopOnError
-            """
-            
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env)
-
-            if result.returncode != 0:
-                raise Exception(f"S3 restore failed: {result.stderr}")
-
-            # Use the target database name
-            database_name = target_db
-            
-            print(f"✅ Restored to database: {database_name}")
-
-            # Track created resources
-            db = syncMongoClient[database_name]
-            collection_names = db.list_collection_names()
-            created_resources = [
-                {"db": database_name, "collection": coll} for coll in collection_names
-            ]
-            
-        else:
-            # Use mongoimport for JSON/NDJSON
-            cmd = f"""
-                aws s3 cp {s3_path} - | \
-                mongoimport --uri="{self._connection_string}" \
-                    --db={database_name} \
-                    --collection=data \
-                    --type=json
-            """
-            
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env)
-
-            if result.returncode != 0:
-                raise Exception(f"S3 restore failed: {result.stderr}")
-
-            print(f"✅ Restored to database: {database_name}")
-
-            # Track created resources
-            db = syncMongoClient[database_name]
-            collection_names = db.list_collection_names()
-            created_resources = [
-                {"db": database_name, "collection": coll} for coll in collection_names
-            ]
-
-        creation_end = time.time()
-        creation_duration = creation_end - creation_start
+        
+        # Generate unique database name (MongoDB Atlas 38-byte limit)
+        base_name = s3_key.split('/')[-1].replace('.bson.gz', '').replace('.bson', '')
+        source_db = f"temp_seed_{base_name}"
+        target_db = f"test_{base_name[:23]}_{uuid.uuid4().hex[:8]}"  # test_ + 23 chars + _ + 8 chars = 37
+        
+        print(f"   Mapping: {source_db} → {target_db}")
+        
+        # Restore BSON with namespace mapping
+        cmd = f'aws s3 cp {s3_path} - | mongorestore --uri="{self._connection_string}" --nsFrom="{source_db}.*" --nsTo="{target_db}.*" --archive --gzip --stopOnError'
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env)
+        
+        if result.returncode != 0:
+            raise Exception(f"S3 restore failed: {result.stderr}")
+        
+        print(f"✅ Restored to database: {target_db}")
+        
+        # Get created collections
+        db = syncMongoClient[target_db]
+        created_resources = [{"db": target_db, "collection": c} for c in db.list_collection_names()]
 
         return MongoResourceData(
             resource_id=resource_id,
             type="mongodb_resource",
             creation_time=creation_start,
-            creation_duration=creation_duration,
+            creation_duration=time.time() - creation_start,
             description=f"MongoDB resource restored from S3",
             status="active",
-            database=database_name,
+            database=target_db,
             created_resources=created_resources,
         )
 
