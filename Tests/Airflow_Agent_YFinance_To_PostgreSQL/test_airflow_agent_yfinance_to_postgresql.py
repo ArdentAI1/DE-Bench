@@ -125,6 +125,10 @@ def create_model_inputs(
 
     # Start with the original user input from Test_Configs
     task_description = Test_Configs.User_Input
+    
+    # Replace placeholders with actual values
+    task_description = task_description.replace("BRANCH_NAME", branch_name)
+    task_description = task_description.replace("PR_NAME", pr_title)
 
     # Add merge step to user input
     task_description = github_manager.add_merge_step_to_user_input(task_description)

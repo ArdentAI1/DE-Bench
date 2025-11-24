@@ -47,7 +47,7 @@ def get_fixtures() -> List[DEBenchFixture]:
         "resource_id": f"tenant_dw_{test_timestamp}_{test_uuid}",
         "database": f"TENANT_DW_{test_timestamp}_{test_uuid}",
         "schema": f"PUBLIC_{test_timestamp}_{test_uuid}",
-        "sql_file": None,
+        "sql_file": "snowflake_init.sql",  # Create placeholder table so schema is discoverable
     }
 
     # Airflow for dynamic DAGs - configurable deployment provider
@@ -437,7 +437,8 @@ def validate_test(model_result, fixtures=None):
             # CI details are automatically included in action_status["ci_details"]
             if "ci_details" in action_status:
                 print(
-                    f"📋 CI details captured: {len(action_status['ci_details'].get('jobs', []), flush=True)} jobs analyzed"
+                    f"📋 CI details captured: {len(action_status['ci_details'].get('jobs', []))} jobs analyzed",
+                    flush=True
                 )
             # Mark remaining steps as failed
             for step in test_steps:
@@ -452,7 +453,8 @@ def validate_test(model_result, fixtures=None):
             # TESTING: Show CI details even for successful runs
             if "ci_details" in action_status:
                 print(
-                    f"📋 CI details captured for successful run: {len(action_status['ci_details'].get('jobs', []), flush=True)} jobs analyzed"
+                    f"📋 CI details captured for successful run: {len(action_status['ci_details'].get('jobs', []))} jobs analyzed",
+                    flush=True
                 )
 
         if not airflow_instance.wait_for_airflow_to_be_ready():
@@ -589,7 +591,8 @@ def validate_test(model_result, fixtures=None):
 
                 if dag_source.get("source_code"):
                     print(
-                        f"📄 DAG source code captured ({len(dag_source['source_code'])}, flush=True characters)"
+                        f"📄 DAG source code captured ({len(dag_source['source_code'])} characters)",
+                        flush=True
                     )
                     print(
                         f"📄 Source code preview: {dag_source['source_code'][:200]}...",
@@ -602,10 +605,11 @@ def validate_test(model_result, fixtures=None):
                     )
 
                 if import_errors:
-                    print(f"❌ Found {len(import_errors)}, flush=True import errors")
+                    print(f"❌ Found {len(import_errors)} import errors", flush=True)
                     for error in import_errors:
                         print(
-                            f"   - {error.get('filename', 'Unknown')}, flush=True: {error.get('stack_trace', 'No details')}"
+                            f"   - {error.get('filename', 'Unknown')}: {error.get('stack_trace', 'No details')}",
+                            flush=True
                         )
                 else:
                     print("✅ No DAG import errors found", flush=True)
