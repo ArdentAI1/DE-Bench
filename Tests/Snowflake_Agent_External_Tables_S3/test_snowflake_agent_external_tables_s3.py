@@ -31,7 +31,7 @@ def get_fixtures() -> List[DEBenchFixture]:
         "resource_id": f"external_tables_{test_timestamp}_{test_uuid}",
         "database": f"DATA_LAKE_DB_{test_timestamp}_{test_uuid}",
         "schema": f"EXTERNAL_{test_timestamp}_{test_uuid}",
-        "sql_file": None,  # No initial SQL file needed
+        "sql_file": "snowflake_init.sql",  # Create placeholder table so schema is discoverable
     }
 
     snowflake_fixture = SnowflakeFixture(custom_config=custom_snowflake_config)
@@ -135,7 +135,7 @@ def validate_test(model_result, fixtures=None):
         # Connect to Snowflake
         snowflake_conn = snowflake.connector.connect(
             account=os.getenv("SNOWFLAKE_ACCOUNT"),
-            user=os.getenv("SNOWFLAKE_USERNAME"),
+            user=os.getenv("SNOWFLAKE_USER"),
             password=os.getenv("SNOWFLAKE_PASSWORD"),
             database=database_name,
             schema=schema_name,

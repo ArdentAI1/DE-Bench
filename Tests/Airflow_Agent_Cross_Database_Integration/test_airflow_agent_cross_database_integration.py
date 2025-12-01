@@ -131,7 +131,7 @@ def get_fixtures() -> List[DEBenchFixture]:
         "resource_id": f"analytics_dw_{test_timestamp}_{test_uuid}",
         "database": f"ANALYTICS_DW_{test_timestamp}_{test_uuid}",
         "schema": f"UNIFIED_{test_timestamp}_{test_uuid}",
-        "sql_file": None,
+        "sql_file": "snowflake_init.sql",  # Create placeholder table so schema is discoverable
     }
 
     resource_id = f"cross_db_integration_{test_timestamp}_{test_uuid}"
@@ -687,7 +687,7 @@ def validate_test(model_result, fixtures=None):
         # Check Snowflake for results
         snowflake_conn = snowflake.connector.connect(
             account=os.getenv("SNOWFLAKE_ACCOUNT"),
-            user=os.getenv("SNOWFLAKE_USERNAME"),
+            user=os.getenv("SNOWFLAKE_USER"),
             password=os.getenv("SNOWFLAKE_PASSWORD"),
             database=database_name,
             schema=schema_name,

@@ -46,7 +46,7 @@ def get_fixtures() -> List[DEBenchFixture]:
         "resource_id": f"data_vault_target_{test_timestamp}_{test_uuid}",
         "database": f"DATA_VAULT_DB_{test_timestamp}_{test_uuid}",
         "schema": f"RAW_VAULT_{test_timestamp}_{test_uuid}",
-        "sql_file": None,
+        "sql_file": "snowflake_init.sql",  # Create placeholder table so schema is discoverable
     }
 
     # Initialize Airflow fixture
@@ -274,7 +274,7 @@ def validate_test(model_result, fixtures=None):
         # Connect to Snowflake to check Data Vault structures
         snowflake_conn = snowflake.connector.connect(
             account=os.getenv("SNOWFLAKE_ACCOUNT"),
-            user=os.getenv("SNOWFLAKE_USERNAME"),
+            user=os.getenv("SNOWFLAKE_USER"),
             password=os.getenv("SNOWFLAKE_PASSWORD"),
             database=database_name,
             schema=schema_name,

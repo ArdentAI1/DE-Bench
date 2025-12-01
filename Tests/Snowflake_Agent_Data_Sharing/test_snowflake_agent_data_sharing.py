@@ -131,7 +131,7 @@ def validate_test(model_result, fixtures=None):
         # Connect to Snowflake
         snowflake_conn = snowflake.connector.connect(
             account=os.getenv("SNOWFLAKE_ACCOUNT"),
-            user=os.getenv("SNOWFLAKE_USERNAME"),
+            user=os.getenv("SNOWFLAKE_USER"),
             password=os.getenv("SNOWFLAKE_PASSWORD"),
             database=database_name,
             schema=schema_name,
