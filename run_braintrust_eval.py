@@ -477,7 +477,9 @@ def run_de_bench_task(test_input):
                 return {
                     "status": "infrastructure_only",
                     "message": "Infrastructure inspected, skipping model run",
-                    "resources": test_resources,
+                    "fixtures": fixture_instances,
+                    "test_name": test_name,
+                    "test_resources": test_resources,
                 }
 
             # Register test with fixtures for global cleanup tracking
@@ -1160,6 +1162,18 @@ def run_multi_test_evaluation(
                             if isinstance(output, dict)
                             else {}
                         )
+
+                        # Handle infrastructure_only mode - skip validation
+                        if isinstance(output, dict) and output.get("status") == "infrastructure_only":
+                            print(f"⏭️  Skipping validation for infrastructure-only mode", flush=True)
+                            return {
+                                "name": "validator",
+                                "score": 0.0,
+                                "metadata": {
+                                    "test_steps": [],
+                                    "message": "Infrastructure inspected only - no validation performed",
+                                },
+                            }
 
                         # Get and run the validator
                         validator = get_test_validator(test_name)
